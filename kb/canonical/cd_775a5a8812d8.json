@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 623,
+   "doc_path": [
+    "Integration Approach"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_2c5072feff"
+  },
+  {
+   "chars": 583,
+   "doc_path": [
+    "Integration Testing"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_8d403441f4"
+  }
+ ],
+ "doc_id": "cd_775a5a8812d8",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Integration Approach"
+  },
+  {
+   "kind": "paragraph",
+   "text": "For [CLIENT] we inventoried ninety-four interfaces on the\nlegacy platform and retired thirty-one of them as duplicative before design\nbegan. Clinical boundary systems exchanged ADT and charge data over HL7 v2\nfeeds through the existing integration engine; the new ERP consumed FHIR\nR4 resources for practitioner and location synchronization. Every interface\ncarried a contract sheet: source of truth, direction, frequency, error\nqueue owner, and reprocessing procedure. Interface development was\nsequenced by payroll dependency, not by system age. The integration\nworkstream was priced within the program's [FEE] fixed fee."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Integration Testing"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Interface testing ran in three passes for [CLIENT]. Pass\none validated field-level mapping with synthetic messages generated from\nthe contract sheets. Pass two replayed thirty days of production message\ntraffic into the test environment and reconciled outcomes against the\nlegacy system's results, with every mismatch dispositioned by a named\nanalyst. Pass three was a full-volume soak test at twice peak load,\nrunning the error-queue procedures live. Exit required zero unexplained\nmismatches and a signed disposition log. Reference: [REFERENCE_NAME], VP of\nEnterprise Applications."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "775a5a8812d83423f032694d2131a0929df9ea81f3c21a07fda61a7ba04618d5"
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/annotated-draft.schema.json",
+  "title": "AnnotatedDraft",
+  "description": "The validation stage's artifact of record (P8, B34(11)): every claim rendered with tier + verification status, every finding with its disposition — the answer to review fatigue (T8). Data-only at P8; the P9 review UI renders it. Written ONLY at completion (B34(13): a partial verdict set must never dishonestly unblock packaging — the deliberate inverse of the draft envelope's prepass skeleton). Prose is NOT duplicated here: drafts/draft.json remains the prose of record, and every field is code-assembled from whitelist-gated wires — nothing model-written lands unverified.",
+  "type": "object",
+  "required": ["pursuit_id", "draft_sha256", "plan_sha256", "revision_n", "validated_at", "packaging", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "draft_sha256": { "type": "string", "description": "sha256 of drafts/draft.json as validated — a revised draft voids the annotation by mismatch, not by convention (the T6 binding pattern, one link down the chain)." },
+    "plan_sha256": { "type": "string", "description": "Echoed from the draft envelope: the Gate-2 plan this chain descends from." },
+    "revision_n": { "type": "integer", "minimum": 0, "description": "Echoed from the draft envelope revision this annotation describes." },
+    "validated_at": { "type": "string", "description": "The injected ISO datetime the staleness clock ran against (B34(6)) — no wall-clock; byte-determinism holds." },
+    "packaging": {
+      "type": "object",
+      "description": "Code-derived packaging state (never model-written): the Q2 control's summary. blocked = any Tier-1 claim in a blocking status remains unwaived.",
+      "required": ["blocked", "tier1_blocks", "waived"],
+      "additionalProperties": false,
+      "properties": {
+        "blocked": { "type": "boolean" },
+        "tier1_blocks": { "type": "integer", "minimum": 0 },
+        "waived": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ranked_fixes": {
+      "type": "array",
+      "description": "Buyer Red-Team output, ADVISORY (B34(9)): no gate consumes it, no acceptance clause names it. Ranks re-derived by code from wire order.",
+      "items": {
+        "type": "object",
+        "required": ["rank", "section_id", "fix"],
+        "additionalProperties": false,
+        "properties": {
+          "rank": { "type": "integer", "minimum": 1 },
+          "section_id": { "type": "string" },
+          "fix": { "type": "string" }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "description": "One entry per draft-envelope section, in the buyer's order — every section appears, including the ones no check reached (v1 ledger_rows shape: absent-means-absent, a default becomes a claim on screen).",
+      "items": {
+        "type": "object",
+        "required": ["section_id", "section_type", "draft_status"],
+        "additionalProperties": false,
+        "properties": {
+          "section_id": { "type": "string" },
+          "title": { "type": "string" },
+          "section_type": { "type": "string", "description": "Echoed from the draft envelope; run-log validation lines carry the same value on target (13 metrics slice on it)." },
+          "draft_status": { "type": "string", "enum": ["drafted", "pending", "omitted", "skipped_non_prose"], "description": "Echoed from the draft envelope. Only drafted sections carry claims; the others appear so their absence from auditing is visible, not silent." },
+          "claims": {
+            "type": "array",
+            "description": "Extracted claims with audit outcomes — the per-claim receipts behind the section-grain run-log validation records (B34(3)).",
+            "items": {
+              "type": "object",
+              "required": ["claim_id", "text", "text_digest", "tier", "status", "disposition"],
+              "additionalProperties": false,
+              "properties": {
+                "claim_id": { "type": "string", "description": "Code-assigned (c_<section>_<nn>), never model-claimed." },
+                "slot_id": { "type": "string", "description": "Path A: which answer the claim came from." },
+                "text": { "type": "string", "description": "Verbatim from the delivered prose — extraction is code-gated to containment (B34(5)); a claim not present in the prose was dropped-and-reported, never annotated." },
+                "text_digest": { "type": "string", "description": "Matches claim_text_digest on the run-log claim_audit line for the deciding claim." },
+                "tier": { "type": "integer", "enum": [1, 2, 3] },
+                "status": { "type": "string", "enum": ["supported", "overstated", "unsupported", "misattributed", "stale", "unverifiable", "waived", "not_audited"], "description": "Audit outcome. Verdicts are the enum, never confidence scores (B34(2)); waived preserves the original verdict in reasons. not_audited = Tier-2/3 (tiered, recorded, never verified — verification is Tier-1's)." },
+                "fact_sheet_ref": { "type": "string", "description": "kb_id of the Fact Sheet card the claim was verified against (or failed to find). Whitelisted against the catalog by code." },
+                "reasons": { "type": "array", "items": { "type": "string" }, "description": "The verifier's reasons, quoting the deciding words; on waiver, the original verdict is preserved here." },
+                "disposition": { "type": "string", "enum": ["pass", "flag", "block", "waived"], "description": "Code-derived from status by the B34(2) mapping — mirrors the run-log validation.result vocabulary. requires-review is derived, never model-self-reported." },
+                "waived_by": { "type": "string" },
+                "waiver_reason": { "type": "string" }
+              }
+            }
+          },
+          "findings": {
+            "type": "array",
+            "description": "All checks' findings for this section, deduped by finding_id (B34(12)). A finding's message carries its reason — a boolean that cannot say why is a defect.",
+            "items": {
+              "type": "object",
+              "required": ["finding_id", "check", "rule", "disposition", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "finding_id": { "type": "string", "description": "Deterministic: {check}:{rule}:{section_id}[:{slot_id}] — waivers and acknowledgements key on it." },
+                "check": { "type": "string", "enum": ["claim_audit", "coverage", "consistency", "red_team", "voice_polish"] },
+                "rule": { "type": "string", "description": "One rule, one owning check — the rule→check bijection is test-asserted (no-double-report)." },
+                "disposition": { "type": "string", "enum": ["advisory", "review", "block"], "description": "Only claim_audit findings may carry block (B34(4), enforced at the emit_validation choke point)." },
+                "message": { "type": "string" },
+                "slot_id": { "type": "string" }
+              }
+            }
+          },
+          "red_team": {
+            "type": "object",
+            "description": "ADVISORY per-section score from the Buyer Red-Team (0–10, code-clamped). Recorded honestly — advisory means no gate consumes it, not that the record lies (B34(9)).",
+            "required": ["score"],
+            "additionalProperties": false,
+            "properties": {
+              "score": { "type": "number", "minimum": 0, "maximum": 10 },
+              "weaknesses": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

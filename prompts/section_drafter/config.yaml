@@ -1,0 +1,10 @@
+# Per-agent config: model tier, tool grants (S5 least privilege).
+# The Section Drafter holds no tools: code drives retrieval (B21(4)
+# carried to drafting, B31) — it opens the frozen plan's kb_hits through
+# the traced targeted_open choke point and inlines the bodies as kb_card
+# frames. The v1 RAG ban holds: the plan's selection for this section is
+# the whole fact universe; there is no draft-time search. The placeholder
+# grant named two tools that never existed (B19(9) class) — narrowed,
+# never widened. Mid tier per the architecture roster (Section Drafters).
+tier: mid
+tools: []

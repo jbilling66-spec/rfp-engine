@@ -1,0 +1,15 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "$1,180,000": "FEE",
+    "Meridian Health Partners": "CLIENT"
+  },
+  "ingested_by": "ingestion_agent",
+  "sources": [
+    {
+      "date": "2025-06-02",
+      "source_client": "Meridian Health Partners",
+      "source_pursuit": "pur_meridian_qa_2025"
+    }
+  ]
+}

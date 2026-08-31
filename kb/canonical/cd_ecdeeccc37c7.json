@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 626,
+   "doc_path": [
+    "Training and Change Management"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_a3909b530d"
+  },
+  {
+   "chars": 392,
+   "doc_path": [
+    "Pricing Narrative"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_cb78ef6eeb"
+  }
+ ],
+ "doc_id": "cd_ecdeeccc37c7",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Training and Change Management"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Our change program paired every department with a trained super-user before\nthe first classroom session. Training followed a teach-the-workflow model:\nrole-based curricula built from the client's own configured processes, not\nvendor screenshots, delivered in the two weeks before each go-live wave.\nAdoption was measured, not assumed \u2014 login rates, task completion inside\nthe new system, and help-desk ticket themes were reviewed weekly for six\nweeks after go-live, and departments below threshold received targeted\nrefresher sessions. [CLIENT]'s frontline managers\nco-taught every session, which doubled voluntary attendance."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Pricing Narrative"
+  },
+  {
+   "kind": "paragraph",
+   "text": "We proposed a fixed fee of [FEE] for the optimization phase, structured\nin three milestone payments tied to accepted deliverables rather than\nelapsed time. The fee included a capped contingency pool for scope\ndiscovered during design, drawable only with steering-committee approval \u2014\nunused contingency returned to [CLIENT] at closeout.\nReference: [REFERENCE_NAME], Chief Information Officer."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "ecdeeccc37c79052432b73e9a0e004cbb1765c8b466293333e9347e81283a3d9"
+}

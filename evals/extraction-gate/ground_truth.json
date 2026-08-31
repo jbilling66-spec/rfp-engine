@@ -1,0 +1,110 @@
+{
+  "_comment": "Hand-labeled answer key for the P12 §A2 gate corpus (C4, B51). Grids are the read-back view: merged positions repeat their text. Deliberately duplicated from engine/extraction/corpus.py — the trait tests compare built documents against THIS file, so builder drift reddens instead of re-deriving its own truth. Cell-accuracy scoring (C5) reads only this file.",
+  "complex-tables-twin.docx": {
+    "tables": {
+      "CT-1": {
+        "complexity": "complex",
+        "grid": [
+          ["Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)"],
+          ["Workstream", "Module", "Year 1", "Year 2", "Year 3", "Total"],
+          ["Core Platform", "Finance", "420,000", "380,000", "120,000", "920,000"],
+          ["Core Platform", "Supply Chain", "310,000", "240,000", "90,000", "640,000"],
+          ["People", "Human Capital", "280,000", "210,000", "80,000", "570,000"],
+          ["Delivery", "Integration Services", "150,000", "140,000", "60,000", "350,000"],
+          ["Program Total", "Program Total", "1,160,000", "970,000", "350,000", "2,480,000"]
+        ],
+        "merges": [[[0, 0], [0, 5]], [[2, 0], [3, 0]], [[6, 0], [6, 1]]],
+        "fills": {
+          "1F4E79": [[0, 0], [1, 0], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5]]
+        }
+      },
+      "CT-2": {
+        "complexity": "simple",
+        "grid": [
+          ["Milestone", "Due", "Owner"],
+          ["Discovery complete", "October 2026", "Vendor"],
+          ["Finance go-live", "July 2027", "Joint"],
+          ["Hypercare exit", "October 2027", "Northwind"]
+        ],
+        "merges": [],
+        "fills": {}
+      }
+    }
+  },
+  "response-form-twin.docx": {
+    "tables": {
+      "F-1": {
+        "complexity": "complex",
+        "grid": [
+          ["Complete the blue answer cells only. Gray cells are locked by the Northwind procurement office.", "Complete the blue answer cells only. Gray cells are locked by the Northwind procurement office."],
+          ["Vendor legal name", ""],
+          ["Years delivering ERP implementations", ""],
+          ["Proposed engagement lead", ""],
+          ["Total fixed fee (USD)", ""]
+        ],
+        "merges": [[[0, 0], [0, 1]]],
+        "fills": {
+          "1F4E79": [[0, 0]],
+          "9DC3E6": [[1, 1], [2, 1], [3, 1]],
+          "D9D9D9": [[4, 1]]
+        }
+      }
+    },
+    "comment_anchor": {
+      "text": "Blue cells only. The fee cell is locked pending Attachment B.",
+      "anchored_cell": [1, 1]
+    }
+  },
+  "firm-control-twin.docx": {
+    "hierarchy": [
+      [1, "Northwind Regional Health - ERP Implementation Response"],
+      [1, "1. Executive Summary"],
+      [2, "1.1 Understanding of Objectives"],
+      [2, "1.2 Delivery Approach"],
+      [3, "1.2.1 Phase Plan"],
+      [1, "2. Data Migration Approach"],
+      [2, "2.1 Validation Strategy"]
+    ]
+  },
+  "table-pdf-twin.pdf": {
+    "_comment": "CT-1 rendered as a ruled PDF table — same grid and merges as the DOCX original; the PDF cell-accuracy and fabrication surfaces.",
+    "complexity": "complex",
+    "grid": [
+      ["Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)", "Attachment B - Implementation Pricing (USD)"],
+      ["Workstream", "Module", "Year 1", "Year 2", "Year 3", "Total"],
+      ["Core Platform", "Finance", "420,000", "380,000", "120,000", "920,000"],
+      ["Core Platform", "Supply Chain", "310,000", "240,000", "90,000", "640,000"],
+      ["People", "Human Capital", "280,000", "210,000", "80,000", "570,000"],
+      ["Delivery", "Integration Services", "150,000", "140,000", "60,000", "350,000"],
+      ["Program Total", "Program Total", "1,160,000", "970,000", "350,000", "2,480,000"]
+    ],
+    "merges": [[[0, 0], [0, 5]], [[2, 0], [3, 0]], [[6, 0], [6, 1]]]
+  },
+  "multicolumn-twin.pdf": {
+    "title": "Northwind Regional Health - Conditions of Solicitation",
+    "reading_order": [
+      "RO-01 Condition clause number 1 applies.",
+      "RO-02 Condition clause number 2 applies.",
+      "RO-03 Condition clause number 3 applies.",
+      "RO-04 Condition clause number 4 applies.",
+      "RO-05 Condition clause number 5 applies.",
+      "RO-06 Condition clause number 6 applies.",
+      "RO-07 Condition clause number 7 applies.",
+      "RO-08 Condition clause number 8 applies.",
+      "RO-09 Condition clause number 9 applies.",
+      "RO-10 Condition clause number 10 applies.",
+      "RO-11 Condition clause number 11 applies.",
+      "RO-12 Condition clause number 12 applies."
+    ]
+  },
+  "scanned-twin.pdf": {
+    "pages": 2,
+    "must_contain": [
+      "NORTHWIND REGIONAL HEALTH",
+      "RFP No. NRH-2026-014"
+    ]
+  },
+  "500-page-twin.pdf": {"pages": 500},
+  "truncated-twin.pdf": {"truncated_from": "multicolumn-twin.pdf", "fraction": 0.55},
+  "encrypted-twin.pdf": {"encrypted": true, "source": "multicolumn-twin.pdf"}
+}

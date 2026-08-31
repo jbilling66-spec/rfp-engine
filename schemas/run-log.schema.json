@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/run-log.schema.json",
+  "title": "RunLog",
+  "description": "Append-only execution trace for one engine run (one pursuit, one pipeline execution). Distinct from feedback-event (human signal, feeds the flywheel): the run log is MACHINE signal — what the agents did, what they read, what they spent, what they decided. Written to <pursuit>/runs/<run_id>/run.jsonl as one JSON object per line; this schema describes a single line. A run is reconstructable by replaying the lines in order.",
+  "type": "object",
+  "required": ["run_id", "pursuit_id", "seq", "ts", "record_type"],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": { "type": "string", "description": "Stable ID for this execution. Replays get a fresh run_id and reference the original via replay_of." },
+    "pursuit_id": { "type": "string" },
+    "seq": { "type": "integer", "minimum": 0, "description": "Monotonic sequence within the run. Ordering is by seq, not timestamp — parallel subagents share wall-clock." },
+    "ts": { "type": "string", "format": "date-time" },
+    "record_type": {
+      "type": "string",
+      "enum": ["run_start", "run_end", "stage_start", "stage_end", "agent_call", "tool_call", "kb_retrieval", "gate", "validation", "gap", "artifact", "error", "cost_rollup"],
+      "description": "One line per event. agent_call/tool_call are the token- and cost-bearing records; kb_retrieval is the provenance record that answers 'why did it say this?'."
+    },
+
+    "stage": {
+      "type": "string",
+      "enum": ["intake", "bid_brief", "gate_0", "research_internal", "research_external", "win_themes", "gate_1", "path_a_map", "path_b_outline", "pursuit_plan", "gate_2", "drafting", "validation", "review_loop", "write_back", "ingestion", "flywheel", "assistant"],
+      "description": "Which pipeline stage this record belongs to. Mirrors ARCHITECTURE_V2 pipeline names so the dashboard can group without a lookup table. gate_0 (P15/B70) is the intake-review gate; its in-chain decision logs into the intake stage run and this value carries only the resume-after-stop mini-run. assistant (P14/B63) is the steward-assistant lane, never a pipeline stage — its records live in the support workspace, structurally outside pursuit aggregation."
+    },
+    "agent": { "type": "string", "description": "Agent/subagent name, e.g. intake_analyst, kb_mapper, section_drafter, claim_auditor, buyer_red_team, revision_agent." },
+    "parent_span": { "type": "string", "description": "seq or span id of the enclosing record — gives the trace its tree shape for parallel drafters." },
+    "span_id": { "type": "string" },
+
+    "model": { "type": "string", "description": "Exact model id used (not the tier). Required on agent_call — model routing is a live variable and telemetry is worthless without it." },
+    "model_tier": { "type": "string", "enum": ["frontier", "mid", "fast"] },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "cache_read": { "type": "integer", "minimum": 0 },
+        "cache_write": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cost_usd": { "type": "number", "minimum": 0 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "retries": { "type": "integer", "minimum": 0, "default": 0 },
+
+    "tool": { "type": "string", "description": "tool_call records: tool name (card_search, open_document, web_fetch, write_back…)." },
+    "tool_args_digest": { "type": "string", "description": "Hash or short rendering of arguments. Full args only when sensitivity allows — never raw client text in a log that leaves the pursuit workspace." },
+    "tool_result_digest": { "type": "string", "description": "tool_call records (P14/B63 — the first emitter): digest of the tool's returned payload, same raw-text-never-rides-a-line discipline as tool_args_digest. Absent when the tool refused before producing one." },
+
+    "kb": {
+      "type": "object",
+      "description": "kb_retrieval records — the citation trail. Every drafted section must be traceable to the cards that fed it.",
+      "additionalProperties": false,
+      "properties": {
+        "query": { "type": "string" },
+        "step": { "type": "string", "enum": ["card_search", "targeted_open", "cite", "path_descend"], "description": "cite (B31): one section-scoped line carrying the drafter's surviving cards_cited — the WP9 edit_survival join input. Not a tool invocation; the opens preceding it are. path_descend (P13/C10, WP13 R9): the within-document navigation move — siblings/parent/children of a card via its canonical model, one file read, no catalog scan." },
+        "cards_returned": { "type": "array", "items": { "type": "string" }, "description": "kb_ids surfaced by card search." },
+        "cards_opened": { "type": "array", "items": { "type": "string" }, "description": "kb_ids actually opened — the subset that could have influenced output." },
+        "cards_cited": { "type": "array", "items": { "type": "string" }, "description": "kb_ids the agent claims it used. Feeds edit_survival attribution when the reviewer later edits this text." },
+        "excluded": { "type": "array", "items": { "type": "string" }, "description": "kb_ids withheld by policy — REPLAY HYGIENE: on a replay this holds the pursuit's own response. Auditable proof the engine did not read the answer key." },
+        "empty_result": { "type": "boolean", "description": "true when card search returned nothing usable — the precondition for a legitimate gap rather than an invention." },
+        "facets": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "card_search (P13/C10, WP13 R9): the facet filter applied, facet name -> accepted values. ON the line so the retrieval replays from the log alone — the bare-query rule generalized: the LINE is sufficient." },
+        "path": { "type": "array", "items": { "type": "string" }, "description": "path_descend: the anchor card's doc_path. Navigation context, never a retrieval key (KB10)." },
+        "relation": { "type": "string", "enum": ["parent", "siblings", "children"], "description": "path_descend: which neighborhood of the anchor was walked." },
+        "catalog_size": { "type": "integer", "minimum": 0, "description": "card_search (P13/C10): searchable cards at query time — the denominator catalog_scan_cost_share reads (B51's carrier). When lanes joined, this counts the UNION universe — the one idf was computed over." },
+        "lanes": { "type": "array", "items": { "type": "string", "enum": ["firm", "pursuit", "org"] }, "description": "card_search (P17/C1, B75§3a): the memory lanes whose catalogs joined this search. ABSENT on firm-only lines — every pre-P17 line replays byte-identically. REPLAY RESOLUTION (the line is sufficient): absent -> firm store; 'pursuit' -> <workspace>/<pursuit_id>/memory (pursuit_id is on every line); 'org' -> <workspace>/orgs/<kb.org_id>/memory." },
+        "org_id": { "type": "string", "description": "card_search (P17/C1): the org whose memory lane joined, when lanes includes 'org' — on the line so replay never consults the brief. Opaque org_NNNN id; org NAMES live only in file content, never here (B75§2)." }
+      }
+    },
+
+    "target": {
+      "type": "object",
+      "description": "What this record was working on, so per-section telemetry rolls up without parsing prose.",
+      "additionalProperties": false,
+      "properties": {
+        "section_id": { "type": "string" },
+        "section_type": { "type": "string" },
+        "slot_ref_id": { "type": "string", "description": "Path A: the buyer's own numbering from the target-slot fixture." }
+      }
+    },
+
+    "gate": {
+      "type": "object",
+      "description": "gate records — human decision points. On automated replay these are auto-approved; auto_approved MUST be true then, so replay results are never mistaken for human-approved output.",
+      "additionalProperties": false,
+      "properties": {
+        "which": { "type": "string", "enum": ["gate_0_intake", "gate_1_strategy", "gate_2_plan"] },
+        "decision": { "type": "string", "enum": ["approved", "approved_with_edits", "rejected", "auto_approved"] },
+        "actor": { "type": "string" },
+        "auto_approved": { "type": "boolean", "default": false },
+        "edits_summary": { "type": "string" },
+        "wait_ms": { "type": "integer", "minimum": 0, "description": "Human latency — separated from compute latency so cycle-time reporting can tell the two apart." }
+      }
+    },
+
+    "validation": {
+      "type": "object",
+      "description": "validation records — one per check per section. The audit trail behind the annotated draft.",
+      "additionalProperties": false,
+      "properties": {
+        "check": { "type": "string", "enum": ["claim_audit", "coverage", "consistency", "red_team", "voice_polish", "anonymization", "pre_export_leakage", "injection_screen", "extraction", "reconciliation"], "description": "anonymization and pre_export_leakage added by B13, injection_screen by B18 — each a metric that filtered on values the enum lacked (REPORTING_SPEC's 'injection screen flags'). extraction added by P12/C10 (B51's named carrier): per-document flag/pass for degraded extraction and the two-path diff. reconciliation added by P13/C10 (WP13 R6): per-re-ingest flag/pass — flag when anything drifted or orphaned, pass when all matched/created." },
+        "result": { "type": "string", "enum": ["pass", "flag", "block", "waived"] },
+        "claim_tier": { "type": "integer", "enum": [1, 2, 3] },
+        "claim_text_digest": { "type": "string" },
+        "fact_sheet_ref": { "type": "string", "description": "kb_id of the Fact Sheet entry that verified (or failed to verify) a Tier-1 claim." },
+        "score": { "type": "number", "description": "red_team: section score." },
+        "waived_by": { "type": "string" },
+        "waiver_reason": { "type": "string" }
+      }
+    },
+
+    "gap": {
+      "type": "object",
+      "description": "gap records — the engine asked instead of inventing. Gap rate and resolution time are day-one dashboard metrics; they are computed from these lines.",
+      "additionalProperties": false,
+      "properties": {
+        "gap_id": { "type": "string" },
+        "reason": { "type": "string", "enum": ["kb_empty", "stale_fact", "needs_sme", "partner_only", "not_offered", "ambiguous_requirement"] },
+        "question_to_human": { "type": "string" },
+        "pinged_at": { "type": "string", "format": "date-time" },
+        "answered_at": { "type": "string", "format": "date-time" },
+        "resolution": { "type": "string", "enum": ["answered", "waived", "descoped", "unresolved"] }
+      }
+    },
+
+    "artifact": {
+      "type": "object",
+      "description": "artifact records — every durable output written, with a content hash so a run can be verified reproducible.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "enum": ["bid_brief", "pursuit_plan", "target_slots", "draft", "annotated_draft", "revision", "export", "write_back_file", "writeback_facts", "research_pack", "pursuit_memory", "template_fill_facts", "submission_bundle"] },
+        "path": { "type": "string" },
+        "revision_n": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string" }
+      }
+    },
+
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "recoverable": { "type": "boolean" },
+        "action_taken": { "type": "string", "enum": ["retried", "fell_back_model", "skipped_section", "aborted_run", "surfaced_to_human"] }
+      }
+    },
+
+    "run": {
+      "type": "object",
+      "description": "run_start / run_end / cost_rollup records — the run's own header and footer.",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["live", "replay", "regression_bench", "dry_run", "handoff"], "description": "replay/regression_bench runs MUST be excluded from production telemetry aggregates. handoff runs (P20/B81) carry real judgment through the operator seam with no API and no marginal dollar; cost-bearing aggregates already admit only run.mode == 'live'." },
+        "replay_of": { "type": "string", "description": "run_id or pursuit_id being replayed." },
+        "engine_version": { "type": "string" },
+        "config_digest": { "type": "string", "description": "Hash of the effective config — research_mode, effort_allocation, model routing, gate collapse toggle. Two runs with the same digest are comparable; different digests explain divergence." },
+        "research_mode": { "type": "string", "enum": ["full_web", "allowlist", "airgapped"] },
+        "effort_allocation": { "type": "string", "enum": ["uniform", "weighted"] },
+        "kb_snapshot": { "type": "string", "description": "KB version/commit at run time. Without this, comparing two runs weeks apart compares two different knowledge bases and attributes the difference to the engine." },
+        "pursuit_kb_snapshot": { "type": "string", "description": "run_start (P17/C1): snapshot of the pursuit's own memory lane (<pursuit>/memory) when non-empty — the kb_snapshot philosophy extended: two runs compare only when BOTH universes match (B75§3b)." },
+        "org_kb_snapshot": { "type": "string", "description": "run_start (P17/C1): snapshot of the linked org's memory lane when joined. Absent when no org is linked or its lane is empty." },
+        "status": { "type": "string", "enum": ["completed", "failed", "aborted", "awaiting_gate", "awaiting_gap"] },
+        "totals": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cost_usd": { "type": "number" },
+            "input_tokens": { "type": "integer" },
+            "output_tokens": { "type": "integer" },
+            "wall_ms": { "type": "integer" },
+            "compute_ms": { "type": "integer" },
+            "human_wait_ms": { "type": "integer" },
+            "agent_calls": { "type": "integer" },
+            "sections": { "type": "integer" },
+            "gaps_opened": { "type": "integer" },
+            "tier1_blocks": { "type": "integer" }
+          }
+        }
+      }
+    },
+
+    "notes": { "type": "string", "description": "Free text. Not parsed by the dashboard — for human debugging only." }
+  },
+  "allOf": [
+    { "if": { "properties": { "record_type": { "enum": ["run_start", "run_end", "cost_rollup"] } }, "required": ["record_type"] }, "then": { "required": ["run"] } },
+    { "if": { "properties": { "record_type": { "enum": ["stage_start", "stage_end"] } }, "required": ["record_type"] }, "then": { "required": ["stage"] } },
+    { "if": { "properties": { "record_type": { "const": "agent_call" } }, "required": ["record_type"] }, "then": { "required": ["agent", "model"], "description": "B10: 'model required on agent_call' was prose-only. Cost attribution and model-routing telemetry are worthless without the exact id." } },
+    { "if": { "properties": { "record_type": { "const": "tool_call" } }, "required": ["record_type"] }, "then": { "required": ["tool"] } },
+    { "if": { "properties": { "record_type": { "const": "kb_retrieval" } }, "required": ["record_type"] }, "then": { "required": ["kb"] } },
+    { "if": { "properties": { "record_type": { "const": "gate" } }, "required": ["record_type"] }, "then": { "required": ["gate"] } },
+    { "if": { "properties": { "record_type": { "const": "validation" } }, "required": ["record_type"] }, "then": { "required": ["validation"] } },
+    { "if": { "properties": { "record_type": { "const": "gap" } }, "required": ["record_type"] }, "then": { "required": ["gap"] } },
+    { "if": { "properties": { "record_type": { "const": "artifact" } }, "required": ["record_type"] }, "then": { "required": ["artifact"] } },
+    { "if": { "properties": { "record_type": { "const": "error" } }, "required": ["record_type"] }, "then": { "required": ["error"] } }
+  ]
+}

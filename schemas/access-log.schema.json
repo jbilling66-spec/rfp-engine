@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/access-log.schema.json",
+  "title": "AccessLogLine",
+  "description": "One line of a restricted-access log (E4, B37/D23; closes B30(c)'s P9 marker in engine/kb/provenance.py). The anti-leakage boundary's evidence trail (S8): every attempt — granted or denied, human or machine — leaves a line BEFORE authorization decides. A separate file from the run log by decision: provenance access is a security record, not pipeline telemetry. B14's richer file shape (sources list, identifiers map) lives on the provenance records; this schema covers only the log line.",
+  "type": "object",
+  "required": ["ts", "actor", "purpose", "action", "granted"],
+  "additionalProperties": false,
+  "properties": {
+    "ts": { "type": "string", "format": "date-time", "description": "Real wall-clock UTC — this is a security log, deliberately outside the byte-determinism regime (timestamped files are excluded, tests/kb/test_seed_store.py)." },
+    "actor": { "type": "string", "description": "Who attempted the access — a human name from the identity seam, or 'engine' for machine paths." },
+    "purpose": { "type": "string", "enum": ["audit", "purge", "right_of_review", "anonymization_scan"], "description": "The closed purpose vocabulary — a purpose any caller can invent is a comment, not a control (S8)." },
+    "action": { "type": "string", "enum": ["read", "scan_index", "reverse_index", "delete", "sweep"], "description": "What was attempted on the restricted store." },
+    "granted": { "type": "boolean" },
+    "kb_id": { "type": "string", "description": "The card whose provenance was touched (read/delete)." },
+    "name": { "type": "string", "description": "right_of_review: the identifier searched for." },
+    "client": { "type": "string", "description": "purge sweep: the client the sweep verified removed." },
+    "clean": { "type": "boolean", "description": "purge sweep verdict — the evidence the purge honored the client commitment." }
+  }
+}

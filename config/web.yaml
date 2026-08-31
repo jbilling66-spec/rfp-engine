@@ -1,0 +1,12 @@
+# Web shell configuration (P9, B37/D17).
+# auth.mode:
+#   declared — the operator declares a name at /api/session; a token cookie
+#              carries it. Pre-A5 reality: names are trusted as given, the
+#              same trust the CLI's getpass path extends.
+#   header   — the A5 SSO seam: identity comes from a reverse proxy that
+#              authenticates against the IdP and SETS auth.header_name
+#              (stripping any client-supplied copy — the 127.0.0.1 bind is
+#              what makes same-host proxying safe). /api/session is disabled.
+auth:
+  mode: declared
+  header_name: X-Auth-User

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/writeback-facts.schema.json",
+  "title": "WritebackFacts",
+  "description": "The write-back decision record (E5, B37/D19): T6/S7's contract had no carrier — every cell the tool wrote AND every cell it refused, with the reason, so 'which of these did we touch?' is answerable by looking, never by re-deriving. The buyer's inbox original is never mutated; output_file is the copy under exports/writeback/. A refusal here is the system working (the pricing grid lands as refused_shape — B28(4)'s shape-skip rule reaching the exit door).",
+  "type": "object",
+  "required": ["pursuit_id", "plan_sha256", "draft_sha256", "revision_n", "confirmed_by", "at", "source_file", "output_file", "cells"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "plan_sha256": { "type": "string", "description": "The frozen plan this write-back obeyed — cells come only from what the pursuit plan names (T6)." },
+    "draft_sha256": { "type": "string", "description": "The exact envelope whose prose landed in cells." },
+    "revision_n": { "type": "integer", "minimum": 0 },
+    "confirmed_by": { "type": "string", "description": "The human who confirmed the previewed diff (S7) — write-back never runs unconfirmed." },
+    "at": { "type": "string", "format": "date-time" },
+    "source_file": { "type": "string", "description": "The buyer's file the copy was made FROM (inbox path + sha256 recorded by the artifact line)." },
+    "output_file": { "type": "string", "description": "The written copy under exports/writeback/ — the only file the tool touches." },
+    "cells": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slot_id", "decision", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "slot_id": { "type": "string" },
+          "ref_id": { "type": "string" },
+          "sheet": { "type": "string" },
+          "cell": { "type": "string", "description": "A1-style address from the slot's source_locator (the xlsx lane)." },
+          "docx_anchor": { "type": "string", "description": "The slot's heading anchor (the docx lane, P16/C8)." },
+          "table_index": { "type": "integer", "minimum": 0, "description": "docx lane: body-order table index, re-derived from the digest-bound source (never a client echo)." },
+          "row": { "type": "integer", "minimum": 0 },
+          "column": { "type": "integer", "minimum": 0 },
+          "decision": { "type": "string", "enum": ["written", "refused_shape", "refused_unnamed", "empty_no_prose", "refused_no_cell"], "description": "written = drafted prose landed; refused_shape = boolean/numeric/record/table/template_fill/none never take model prose (the pricing grid lives here); refused_unnamed = the plan names no such cell (T6); empty_no_prose = the slot stays honestly empty for the human (verify.py's state_if_not_offered posture); refused_no_cell = the docx slot has no addressable answer cell — its prose ships via the rendered response document, not write-back (P16/C8)." },
+          "reason": { "type": "string" },
+          "before": { "type": "string", "description": "Cell value before (written cells only — the diff the human confirmed)." },
+          "after": { "type": "string" }
+        }
+      }
+    }
+  }
+}

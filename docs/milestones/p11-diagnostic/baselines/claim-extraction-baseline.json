@@ -1,0 +1,77 @@
+{
+ "at": "2026-08-11T22:16:10Z",
+ "by_mode": {
+  "attribution": {
+   "caught": 4,
+   "recall": 1.0,
+   "total": 4
+  },
+  "embedded": {
+   "caught": 2,
+   "recall": 1.0,
+   "total": 2
+  },
+  "hedge": {
+   "caught": 1,
+   "recall": 0.5,
+   "total": 2
+  },
+  "inference": {
+   "caught": 4,
+   "recall": 1.0,
+   "total": 4
+  },
+  "quantifier": {
+   "caught": 4,
+   "recall": 0.8,
+   "total": 5
+  }
+ },
+ "cases_fingerprint": "168a99dfd432779d36cd8fd9e8ff94a4295b6edb3e6e42e91ee3e04e734da4ce",
+ "causes": {
+  "dropped_unknown_slot": 2
+ },
+ "code_fingerprint": "7fd8cda28e7a1099a3fe395a9572ebf1469846fd7a8d6484effafd50a8b7a2b2",
+ "extraction_recall": 0.8824,
+ "miss_detail": {
+  "extract_hedge_002": {
+   "cause": "dropped_unknown_slot",
+   "causes_matched": [
+    "dropped_unknown_slot"
+   ],
+   "n_claims": 0,
+   "output_tokens": 106,
+   "tiers_extracted": [],
+   "unmarked_warnings": [],
+   "warnings": [
+    "extract_hedge_002: claim for unknown slot 'extract_hedge_002' dropped"
+   ],
+   "wire_excerpt": "{\"claims\":[{\"fact_sheet_ref\":\"kb_fact000032\",\"slot_id\":\"extract_hedge_002\",\"text\":\"On-site response is available in as little as two hours across the region.\",\"tier\":1}]}"
+  },
+  "extract_quantifier_005": {
+   "cause": "dropped_unknown_slot",
+   "causes_matched": [
+    "dropped_unknown_slot"
+   ],
+   "n_claims": 0,
+   "output_tokens": 100,
+   "tiers_extracted": [],
+   "unmarked_warnings": [],
+   "warnings": [
+    "extract_quantifier_005: claim for unknown slot 'extract_quantifier_005' dropped"
+   ],
+   "wire_excerpt": "{\"claims\":[{\"fact_sheet_ref\":null,\"slot_id\":\"extract_quantifier_005\",\"text\":\"All of our delivery consultants hold current platform certifications.\",\"tier\":1}]}"
+  }
+ },
+ "misses": [
+  "extract_hedge_002",
+  "extract_quantifier_005"
+ ],
+ "model_fingerprint": "488acebf108b12496f958f7b1dfa3e19a3ee5550df556481f9f373d3de9c1082",
+ "n_cases": 21,
+ "n_controls": 4,
+ "over_extracted": [],
+ "over_extraction_rate": 0.0,
+ "prompts_fingerprint": "522894ff88d3cd86a4185dc50b4e70a9e4740419739b03e516feb33f8e2f1bbe",
+ "suite": "extraction_set"
+}

@@ -1,0 +1,6 @@
+# Frontier tier: adversarial buyer persona (B34(9)). ADVISORY — no gate
+# consumes the score until A4 calibrates the judge. The rubric below
+# (prompt.md) is rt_v1; its id rides the validation config extra and the
+# text is digest-covered here. tools: none.
+tier: frontier
+tools: []

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RFP Engine</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <div class="nm">RFP Engine</div>
+      <div class="sub">response workbench</div>
+    </div>
+    <nav id="mainNav">
+      <a href="#/" data-view="board" class="active">Pursuits</a>
+      <a href="#/kb" data-view="kb">Knowledge base</a>
+      <a href="#/assistant" data-view="assistant">Assistant</a>
+      <a href="#/telemetry" data-view="telemetry">Telemetry</a>
+    </nav>
+    <div class="who" id="whoCard">
+      <div class="who-name" id="whoName">not signed in</div>
+      <button id="signInBtn" class="ghost">declare operator</button>
+    </div>
+  </aside>
+  <main>
+    <div id="jobStrip" class="jobstrip" hidden>
+      <span class="pulse"></span><span id="jobMsg"></span>
+    </div>
+    <section id="view-board" class="view show">
+      <header class="viewhead">
+        <h1>Pursuits</h1>
+        <button id="newPursuitBtn">+ New pursuit</button>
+      </header>
+      <div id="boardRows" class="rows"></div>
+    </section>
+    <section id="view-detail" class="view">
+      <a href="#/" class="back">&larr; all pursuits</a>
+      <header class="viewhead"><h1 id="detailTitle"></h1></header>
+      <div id="detailFacts" class="facts"></div>
+      <div class="actions" id="detailActions"></div>
+      <div id="detailSections" class="rows"></div>
+    </section>
+    <section id="view-review" class="view">
+      <a href="#/" class="back" id="reviewBack">&larr; pursuit</a>
+      <header class="viewhead"><h1 id="reviewTitle"></h1>
+        <div><button id="reviseBtn">Revise (apply pending)</button></div>
+      </header>
+      <div id="reviewFacts" class="facts"></div>
+      <div id="reviewSections" class="rows"></div>
+    </section>
+    <section id="view-kb" class="view">
+      <header class="viewhead">
+        <h1>Knowledge base</h1>
+        <div>
+          <a class="ghost" href="/api/kb/export.xlsx">Export workbook</a>
+        </div>
+      </header>
+      <div class="facts" id="kbFilters">
+        <input id="kbSearch" type="search" placeholder="search title, summary, owner…">
+        <select id="kbLayer">
+          <option value="">every layer</option>
+          <option value="fact_sheet">fact sheet</option>
+          <option value="corpus">corpus</option>
+          <option value="playbook">playbook</option>
+        </select>
+        <select id="kbStale">
+          <option value="">any review date</option>
+          <option value="past_due">past due</option>
+          <option value="due_soon">due soon</option>
+        </select>
+      </div>
+      <div id="kbProposals" class="rows"></div>
+      <div id="kbRows" class="rows"></div>
+    </section>
+    <section id="view-assistant" class="view">
+      <header class="viewhead">
+        <h1>Assistant</h1>
+        <div class="asst-spend" id="asstSpend"></div>
+      </header>
+      <p class="muted hint">Grounded in the steward and workbench docs
+        and the knowledge base. It reads and proposes — every change it
+        drafts waits in the KB inbox for your review.</p>
+      <div id="asstThread" class="asst-thread"></div>
+      <div class="asst-compose">
+        <input id="asstInput" maxlength="4000"
+               placeholder="ask about the KB, the process, or a pursuit…">
+        <button id="asstSend">Send</button>
+      </div>
+      <p class="muted hint" id="asstUsage"></p>
+    </section>
+    <section id="view-telemetry" class="view">
+      <header class="viewhead"><h1>Telemetry</h1>
+        <div>
+          <button id="telProd" class="ghost active">System owner</button>
+          <button id="telBench" class="ghost">Bench</button>
+        </div>
+      </header>
+      <p class="muted" id="telNote"></p>
+      <div id="telRows" class="rows"></div>
+    </section>
+  </main>
+</div>
+<div id="opOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h2>Who is deciding?</h2>
+    <p class="hint">Decisions and comments are recorded under this name.</p>
+    <input id="opName" maxlength="60" placeholder="your name">
+    <div class="modal-foot">
+      <button id="opGo">Start session</button>
+    </div>
+  </div>
+</div>
+<div id="newOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h2>New pursuit</h2>
+    <input id="npId" placeholder="pur_example" maxlength="44">
+    <p class="hint">Then upload the RFP workbook (.xlsx), an optional
+      ramble.md, and an optional research-pack.md on the detail screen.</p>
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="npGo">Create</button>
+    </div>
+  </div>
+</div>
+<div id="gate0Overlay" class="overlay" hidden>
+  <div class="modal wide">
+    <h2>Gate 0 &mdash; intake review</h2>
+    <p class="hint">Confirm the engine's reading of the package before any
+      research spend. Corrections rewrite the brief; open questions never
+      block &mdash; skip freely.</p>
+    <div id="g0Body"></div>
+    <input id="g0Notes" placeholder="notes (required to reject — the redo feedback)">
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="g0Reject" class="danger">Reject (re-run intake)</button>
+      <button id="g0Approve">Confirm &amp; approve</button>
+    </div>
+  </div>
+</div>
+<div id="gate1Overlay" class="overlay" hidden>
+  <div class="modal wide">
+    <h2>Gate 1 — brief &amp; win themes</h2>
+    <div id="g1Body"></div>
+    <label class="hint"><input type="checkbox" id="g1Collapse">
+      Small deal: collapse Gates 1+2 (auto-approves the plan ONLY if it
+      carries no open gaps — a human decision is never preselected)</label>
+    <input id="g1Notes" placeholder="notes (required to reject)">
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="g1Reject" class="danger">Reject</button>
+      <button id="g1Approve">Approve</button>
+    </div>
+  </div>
+</div>
+<div id="gate2Overlay" class="overlay" hidden>
+  <div class="modal wide">
+    <h2>Gate 2 — pursuit plan</h2>
+    <div id="g2Body"></div>
+    <input id="g2Notes" placeholder="notes (required to reject — the redo feedback)">
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="g2Reject" class="danger">Reject (redo with feedback)</button>
+      <button id="g2Approve">Approve &amp; freeze</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

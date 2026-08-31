@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/submission-bundle.schema.json",
+  "title": "SubmissionBundle",
+  "description": "The to-the-buyer deliverable set, on the record (P18/C1, B77§2 D2) — v1 PlacementRun's tri-state law reimplemented at the bundle grain. The expected set derives from the CONTAINER (firm_default → the filled template; client_provided → one write-back deliverable per declared source + the rendered response), NEVER from the filesystem — so a form that was never produced appears here as status=absent instead of silently missing, which is the failure mode the P18 row exists to prevent. The file's own tri-state: no bundle file = never composed; an entry absent = expected, not yet produced; refused = a lane ran and said no, reason carried; produced = path + digest + decision-record path. The composer OVERWRITES at each compose — this is the current-state record; history lives in the run log's artifact lines. The downloads surface reads THIS, not a directory scrape.",
+  "type": "object",
+  "required": ["pursuit_id", "at", "composed_by", "deliverables"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "at": { "type": "string", "format": "date-time" },
+    "composed_by": { "type": "string", "description": "The operator whose confirmed action triggered this compose — the bundle never composes unattended." },
+    "deliverables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "lane", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "description": "The deliverable's basename — what the downloads listing shows under 'To the buyer'. Two entries sharing a name is a compose-time refusal (v1's sort-order collision, banned), so the name is unambiguous by construction." },
+          "path": { "type": "string", "description": "Pursuit-relative path the download surface serves FROM — never re-derived by basename search." },
+          "lane": { "type": "string", "enum": ["xlsx_writeback", "docx_writeback", "template_fill", "submission_render"], "description": "Which exit door owes this deliverable. Named, never sniffed from the path (v1's channel lesson)." },
+          "source_file": { "type": "string", "description": "Write-back lanes: the buyer's declared source file this deliverable is the filled copy OF." },
+          "sha256": { "type": "string", "description": "produced: digest of the file at path, read at compose time — the bundle vouches for exact bytes, not a name." },
+          "facts_path": { "type": "string", "description": "produced/refused: pursuit-relative path of this deliverable's decision record (writeback-facts / template-fill-facts) — the per-file record whose name the fNN scheme keeps collision-free (B77§2 D1)." },
+          "revision_n": { "type": "integer", "minimum": 0, "description": "produced: the drafts revision the deliverable was built from." },
+          "status": { "type": "string", "enum": ["produced", "absent", "refused"], "description": "produced = on disk, digested, decision record attached; absent = the container expects it and no lane has produced it yet (the RECORDED absence); refused = its lane ran and refused, reason carried. Writer-enforced (the slot_count precedent — the composer, not jsonschema conditionals, holds the per-status obligations): produced always carries sha256, plus facts_path for the lanes that keep a decision record (write-back and fill; submission_render has none — its proof is the export artifact line); refused carries reason." },
+          "reason": { "type": "string", "description": "refused: the lane's refusal, verbatim — the record answers 'why is this not here?' without a log dive." }
+        }
+      }
+    }
+  }
+}

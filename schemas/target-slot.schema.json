@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine/target-slot.schema.json",
+  "title": "TargetSlot",
+  "description": "One normalized requirement extracted from a buyer's structure (default template, questionnaire, portal, or fillable grid). The Structure Resolution stage parses any incoming RFP into an ordered list of TargetSlots. The engine generalizes over TargetSlots, never over the raw document.",
+  "type": "object",
+  "required": ["slot_id", "source_mode", "response_shape"],
+  "additionalProperties": false,
+  "properties": {
+    "slot_id": { "type": "string", "description": "Internal stable id for this slot." },
+    "ref_id": {
+      "type": "string",
+      "description": "The buyer's OWN identifier, preserved verbatim for submission (e.g. hosp-erp '10.0.11'). May be missing or malformed in the source — do not silently normalize."
+    },
+    "source_mode": { "type": "string", "enum": ["firm_default", "client_provided"] },
+    "source_locator": {
+      "type": "object",
+      "description": "Where this slot lives in the original artifact — required for write-back into the buyer's own file.",
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string" },
+        "sheet": { "type": "string" },
+        "cell": { "type": "string", "description": "Answer cell / range in A1 notation, e.g. 'C7'. 'blue cells only' → the writable target." },
+        "docx_anchor": { "type": "string", "description": "Heading/bookmark path for prose documents." }
+      }
+    },
+    "path": { "type": "string", "description": "Human path within the target structure, e.g. 'Section 9 > 9.0.3'." },
+    "parent": { "type": "string", "description": "slot_id of the parent group (for hierarchical numbering)." },
+    "is_header": {
+      "type": "boolean",
+      "default": false,
+      "description": "True for group/section headers that take NO response (hosp-erp gray 'Description' rows). Header slots organize children; the engine must not attempt to answer them."
+    },
+    "question_text": { "type": "string" },
+    "sub_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Multi-part asks inside one slot — each must be answered (checklist for coverage QA)."
+    },
+    "eval_criterion": {
+      "type": "string",
+      "description": "The buyer's evaluation-criterion label when the structure is organized by criterion rather than topic (e.g. OTAS 'Operational Excellence'). One criterion may pull from many atom types."
+    },
+    "eval_weight": { "type": "number", "description": "Scoring weight if the RFP states one." },
+    "required": { "type": "boolean", "default": true },
+    "response_shape": {
+      "type": "string",
+      "enum": ["prose", "boolean", "numeric", "record", "table", "template_fill", "none"],
+      "description": "prose=free text; boolean=yes/no (often a gate); numeric=a number/count; record=one structured row of parallel fields; table=repeating rows; template_fill=type values into a buyer-defined grid (pricing, rate card); none=header/no-response."
+    },
+    "response_fields": {
+      "type": "array",
+      "description": "For response_shape record/table/template_fill: the parallel columns to fill. e.g. hosp-erp §9 Support: offering / response_time_sla / standard_or_optional / tools / engagement_options.",
+      "items": {
+        "type": "object",
+        "required": ["key", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "label": { "type": "string" },
+          "type": { "type": "string", "enum": ["text", "number", "currency", "percent", "boolean", "enum"], "default": "text" },
+          "source_locator": { "type": "object", "description": "Cell for this specific field (grid write-back).", "additionalProperties": true }
+        }
+      }
+    },
+    "answer_location": {
+      "type": "string",
+      "enum": ["inline", "appendix"],
+      "default": "inline",
+      "description": "hosp-erp routinely says 'Do not insert here. Include as part of the RASCI/pricing/case-study appendix, referencing…'. 'appendix' → the drafted content goes to a separate bundle and the inline cell holds a pointer."
+    },
+    "appendix_ref": { "type": "string", "description": "Name/id of the target appendix when answer_location='appendix' (e.g. 'RASCI Appendix', 'Pricing Template')." },
+    "gating": {
+      "type": "object",
+      "description": "Conditional logic. A boolean 'Do you offer this?' slot can disable its children when the answer is negative.",
+      "additionalProperties": false,
+      "properties": {
+        "gates": { "type": "array", "items": { "type": "string" }, "description": "slot_ids skipped when this slot's answer is negative." },
+        "gated_by": { "type": "string", "description": "slot_id whose negative answer skips this slot." }
+      }
+    },
+    "fill_type": {
+      "type": "string",
+      "enum": ["authored", "template_fill"],
+      "default": "authored",
+      "description": "authored=engine writes prose/records; template_fill=engine maps firm data onto a buyer-defined taxonomy (fixed phase list, fixed role rate card) and may compute totals."
+    },
+    "constraints": {
+      "type": "object",
+      "description": "Slot- or globally-applied rules. Global rules often come from an 'Instructions for Respondents' tab and apply to every slot.",
+      "additionalProperties": false,
+      "properties": {
+        "max_words": { "type": "integer" },
+        "max_chars": { "type": "integer" },
+        "brevity": { "type": "string", "enum": ["terse", "normal", "narrative"], "description": "hosp-erp: 'avoid lengthy narrative' → terse." },
+        "format": { "type": "string", "description": "e.g. 'pdf_attachment', 'blue_cells_only'." },
+        "flags": { "type": "array", "items": { "type": "string" }, "description": "e.g. ['no_offshore','disclose_partner_delivery','state_if_not_offered']." }
+      }
+    },
+    "cross_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "ref_ids this slot references (e.g. 'as described in 6.0.14'). Keep answers consistent; tolerate malformed/self references in the source."
+    }
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/metric-definition.schema.json",
+  "title": "MetricDefinition",
+  "description": "One canonical metric definition (see ../reporting/REPORTING_SPEC.md and ../reporting/METRICS_CATALOG.md). Every number rendered on any dashboard, report, or alert resolves to exactly one entry of this type. Charts may not compute metrics inline — this file is the single source of truth so two screens cannot disagree about what 'edit-survival' means.",
+  "type": "object",
+  "required": ["metric_id", "name", "family", "definition", "source", "grain", "unit"],
+  "additionalProperties": false,
+  "properties": {
+    "metric_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Stable snake_case identifier. Referenced by dashboards, alerts, and report templates. Never reused for a different meaning — deprecate and mint a new id instead." },
+    "name": { "type": "string", "description": "Display name as it appears on screen." },
+    "family": {
+      "type": "string",
+      "enum": ["quality", "cost", "efficiency", "learning", "business", "ops_safety"],
+      "description": "Which metric family this belongs to."
+    },
+    "definition": { "type": "string", "description": "Plain-language definition, precise enough that two engineers implement it identically." },
+    "formula": { "type": "string", "description": "The computation, expressed over named source fields. Numerator and denominator both stated explicitly for any rate." },
+
+    "source": {
+      "type": "object",
+      "description": "Which stream(s) the metric is computed from. Cross-stream metrics join on pursuit_id + target.section_id.",
+      "required": ["streams"],
+      "additionalProperties": false,
+      "properties": {
+        "streams": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "enum": ["run_log", "feedback_event", "review_session", "kb", "eval_results", "crm", "manual_entry", "config"] }
+        },
+        "fields": { "type": "array", "items": { "type": "string" }, "description": "Specific fields consumed, e.g. agent_call.cost_usd, feedback_event.edit_reason, review_session.active_ms." },
+        "filters": { "type": "array", "items": { "type": "string" }, "description": "Row filters always applied, e.g. run.mode == 'live'." }
+      }
+    },
+
+    "grain": {
+      "type": "string",
+      "enum": ["section", "run", "pursuit", "revision", "reviewer_role", "release", "period"],
+      "description": "The level at which one value of this metric exists. Aggregating below its grain is an error."
+    },
+    "unit": {
+      "type": "string",
+      "enum": ["ratio", "percent", "count", "usd", "hours", "minutes", "milliseconds", "days", "score", "basis_points", "boolean"]
+    },
+    "direction": { "type": "string", "enum": ["higher_is_better", "lower_is_better", "context_only"], "default": "context_only" },
+
+    "dimensions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Legal slice-by dimensions, e.g. section_type, claim_tier, edit_reason, model_tier, actor_role, engine_version, pursuit_type."
+    },
+
+    "comparability": {
+      "type": "object",
+      "description": "What must be held constant for two values of this metric to be comparable. Violations are segmented or annotated by the reporting layer, never silently averaged (decision O4).",
+      "additionalProperties": false,
+      "properties": {
+        "hold_constant": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["kb_snapshot", "config_digest", "engine_version", "model_pins", "rate_card_version", "judge_model", "prompt_version"] }
+        },
+        "excludes_run_modes": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["replay", "regression_bench", "dry_run", "live"] },
+          "default": ["replay", "regression_bench", "dry_run"]
+        },
+        "annotate_on_change": { "type": "boolean", "default": true, "description": "Trend charts mark the point where a held-constant dimension changed." }
+      }
+    },
+
+    "reliability": {
+      "type": "object",
+      "description": "How much weight this number can bear. Low-n metrics that are rendered as percentages are how a pilot talks itself into a conclusion it has no evidence for.",
+      "additionalProperties": false,
+      "properties": {
+        "min_n": { "type": "integer", "description": "Below this denominator, render as a raw count, not a rate. Default 5 for rates." },
+        "estimated": { "type": "boolean", "default": false, "description": "true = derived from an approximate input (e.g. passive session timing). Must be labeled as estimated wherever displayed." },
+        "confidence_caveat": { "type": "string", "description": "Standing caveat shown with the metric, e.g. win-rate changes at pilot volume are not statistically distinguishable from noise." },
+        "known_failure_mode": { "type": "string", "description": "The way this metric misleads when read alone, and the companion metric that corrects it." }
+      }
+    },
+
+    "target": {
+      "type": "object",
+      "description": "The bar, where one exists. Absent for context-only metrics.",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "comparator": { "type": "string", "enum": [">=", "<=", ">", "<", "=="] },
+        "basis": { "type": "string", "enum": ["baseline", "eval_bar", "budget", "aspirational", "none"], "description": "Where the number came from. 'baseline' targets resolve against the WP-Zero human baseline capture." },
+        "set_after_observation": { "type": "boolean", "default": false, "description": "true = deliberately unset until observed data exists (decision Q5 cost posture)." }
+      }
+    },
+
+    "alerting": {
+      "type": "object",
+      "description": "Exception alerting only. A metric without a decision attached to it does not get an alert.",
+      "additionalProperties": false,
+      "properties": {
+        "alert": { "type": "boolean", "default": false },
+        "condition": { "type": "string" },
+        "severity": { "type": "string", "enum": ["info", "warning", "serious", "critical"] },
+        "route_to": { "type": "string", "description": "Role or channel. Incident-class alerts (anonymization failure) route to a named human, not a digest." }
+      }
+    },
+
+    "views": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["pursuit_lead", "system_owner", "practice_leadership", "finance_exec", "bench_only"] },
+      "description": "Which audience views render this metric."
+    },
+
+    "owner": { "type": "string", "description": "Role accountable for this number being right and for the decision it informs. A metric with no owner is deleted at the next review." },
+    "status": { "type": "string", "enum": ["active", "proposed", "deprecated"], "default": "active" },
+    "introduced_in": { "type": "string", "description": "Release or date the definition took effect. Changing a formula requires a new metric_id or a dated redefinition note." },
+    "notes": { "type": "string" }
+  }
+}

@@ -1,0 +1,7 @@
+# Per-agent config: model tier, tool grants (S5 least privilege).
+# The Intake Analyst reads raw buyer documents, therefore it holds NO write
+# tools and NO KB-write access (S1) — extraction only. Documents are inlined
+# into the prompt inside the shared untrusted frame, so it needs no read
+# tool either (B19: narrowed from a never-implemented read_document grant).
+tier: frontier
+tools: []

@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 514,
+   "doc_path": [
+    "Data Migration for District Systems"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_b617583c47"
+  },
+  {
+   "chars": 458,
+   "doc_path": [
+    "Testing for State Reporting"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_d202f79d37"
+  }
+ ],
+ "doc_id": "cd_fc6e7a4b378b",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Data Migration for District Systems"
+  },
+  {
+   "kind": "paragraph",
+   "text": "[CLIENT] carried nine years of position-control history and\na chart of accounts shaped by state reporting requirements. Our conversion\napproach preserved the state-mandated account-code structure exactly while\nremapping local segments, and converted position history in full so\nseniority and step-and-lane calculations survived the transition. Three\nmock conversions preceded the production load, each reconciled to the\npenny against the legacy trial balance and to the position against the\nstate personnel report."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Testing for State Reporting"
+  },
+  {
+   "kind": "paragraph",
+   "text": "State-report fidelity was the district's hardest requirement. We built a\ntest harness that generated every state-mandated export \u2014 personnel,\nfinance, and transparency files \u2014 from converted test data and compared\nthem field-by-field against legacy submissions for the same periods.\nDiscrepancies were dispositioned with the district's state-reporting\ncoordinator before go-live. The testing workstream was delivered inside\nthe [FEE] engagement for [CLIENT]."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "fc6e7a4b378b3fcdbec7ea54aea991e4ff7646a7d50a066bbbc45024c258e3df"
+}

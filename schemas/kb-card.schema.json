@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/kb-card.schema.json",
+  "title": "KBCard",
+  "description": "Card-catalog front-matter for every KB document/passage. Agents search cards (cheap, few hundred tokens) before opening full documents (targeted) — the token-efficiency layer. The v1 taxonomy supplies the metadata vocabulary, demoted from gating ontology to retrieval metadata.",
+  "type": "object",
+  "required": ["kb_id", "layer", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "kb_id": { "type": "string" },
+    "layer": {
+      "type": "string",
+      "enum": ["fact_sheet", "corpus", "playbook"],
+      "description": "fact_sheet = curated Tier-1 facts (governed); corpus = past responses & distilled Q&A (provenance-labeled, ungated); playbook = voice spec, lessons, kill-lists (flywheel-written)."
+    },
+    "doc_kind": { "type": "string", "enum": ["fact", "past_response", "qa_pair", "section_exemplar", "case_study", "reference", "lesson", "voice_spec", "outline_template", "research_pack"] },
+    "title": { "type": "string" },
+    "summary": { "type": "string", "description": "≤10 lines. What's inside and when to open it. This is what agents read during card search." },
+    "type_tags": { "type": "array", "items": { "type": "string" }, "description": "v1 atom-taxonomy types as metadata (e.g. ocm, methodology, product_expertise)." },
+    "platform": { "type": "array", "items": { "type": "string" } },
+    "function": { "type": "array", "items": { "type": "string" } },
+    "phase": { "type": "array", "items": { "type": "string" } },
+    "industries": { "type": "array", "items": { "type": "string" } },
+    "section_types": { "type": "array", "items": { "type": "string" }, "description": "Which normalized section types this content typically serves (exec_summary, methodology, pricing_narrative…)." },
+    "question_forms": { "type": "array", "items": { "type": "string" }, "description": "P17/C2 (B65 enrichment step 1, B75§5): the questions this chunk answers, emitted by the ingest questioner seam. FINDABLE, NEVER QUOTABLE — the X10 generated_description posture: catalog metadata joined into _catalog_text for scoring, living in frontmatter only, so targeted_open's body return and every drafting prompt never contain them. Model-generated retrieval aids must not become groundable content; the named test is tests/kb/test_question_forms_findable_never_quotable.py." },
+    "outcome": { "type": "string", "enum": ["won", "lost", "shortlisted", "unknown", "n/a"], "description": "Corpus layer: the result of the pursuit this content came from. Retrieval prefers won." },
+    "edit_survival": { "type": "number", "minimum": 0, "maximum": 1, "description": "Observed survival rate when this content was used in drafts — flywheel-updated quality signal." },
+    "claim_tier_max": { "type": "integer", "enum": [1, 2, 3], "description": "Highest claim tier contained — tells the drafter whether Claim Audit will scrutinize passages sourced from here." },
+    "sensitivity": { "type": "string", "enum": ["public", "internal", "restricted"], "default": "internal" },
+    "use_restriction": { "type": "boolean", "default": false, "description": "D2: this client's work may not be reused as reference or exemplar. Honored at retrieval — the card is withheld and the exclusion recorded in kb_retrieval. Added by B12 — the flag was decided (D2) before any schema defined it." },
+    "legal_hold": { "type": "boolean", "default": false, "description": "D2: suspends purge and aging-out for this card; overrides retention automation. Added by B12." },
+    "canonical_block": { "type": "boolean", "default": false, "description": "This card's body is approved boilerplate the drafter reproduces near-verbatim with the card cited in kb_retrieval (consumer lands P7). v2-local concept, no spec source — see B12." },
+    "anonymization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["anonymized", "raw_restricted", "not_required"] },
+        "placeholders_used": { "type": "array", "items": { "type": "string" }, "description": "e.g. [CLIENT], [FEE], [REFERENCE_NAME]" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "RESTRICTED field — never surfaced into drafts; used for audit and de-anonymization by authorized humans only.",
+      "additionalProperties": false,
+      "properties": {
+        "source_pursuit": { "type": "string" },
+        "source_client": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "ingested_by": { "type": "string" },
+        "derived_from": { "type": "array", "items": { "type": "string" }, "description": "kb_ids this card was derived from (merge, distillation, exemplar extraction). D1: purge follows these links so removing a source client removes everything derived from its material. Added by B12 — D1 calls the derivation-surviving link build-time, not retrofit." },
+        "authored_by": { "type": "string", "enum": ["firm", "buyer", "third_party"], "description": "P17/C2: who authored the SOURCE this card came from. The firm corpus only ever holds 'firm' (the ingest gate refuses the rest — S4/T3, untouched); the pursuit memory lane records all three because its material dies with the pursuit and never grounds Tier-1 claims (B75§2)." }
+      }
+    },
+    "owner": { "type": "string", "description": "Required for fact_sheet layer; optional elsewhere." },
+    "verified_date": { "type": "string", "format": "date", "description": "fact_sheet layer: last verification. Stale facts flag in Claim Audit." },
+    "review_due": { "type": "string", "format": "date", "description": "fact_sheet layer: when this fact must be re-verified (set by the steward, e.g. cert expiry or verified_date + policy interval). Feeds the fact_sheet_staleness metric. Added by B8 — the metric referenced this field before any schema defined it." },
+    "version": { "type": "integer", "default": 1 },
+    "content_path": { "type": "string", "description": "Where the full document lives (file path / object key)." },
+    "grain": {
+      "type": "string",
+      "enum": ["chunk", "atom"],
+      "description": "WP13 two-tier grain. corpus cards wrap a structure-aware chunk; fact_sheet cards are subpoint atoms (one claim, one owner, one verified date). Absent on cards written before WP13 — treat as 'chunk'."
+    },
+    "canonical_doc_id": { "type": "string", "description": "The persisted canonical document model (L1) this card derives from. Root of the purge-cascade and re-ingestion match chain." },
+    "doc_path": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Heading path within the source document, outermost first (e.g. ['6.0 Accelerators and Tools','6.0.2 Data Migration']). NAVIGATION AND PROVENANCE ONLY — never a retrieval key, never the card's identity. A past response's outline is the structure one buyer demanded; treating it as canonical destroys subpoint re-cut."
+    },
+    "chunk_span": {
+      "type": "object",
+      "description": "Diagnostic, never enforced. Size is observed to catch extraction bugs — a forty-page chunk means sections were merged, not that content is too long. No token limit is applied anywhere in the pipeline.",
+      "additionalProperties": false,
+      "properties": {
+        "chars": { "type": "integer" },
+        "elements": { "type": "integer", "description": "Count of canonical-model elements merged into this chunk." },
+        "pages": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "content_origin": {
+      "type": "string",
+      "enum": ["source_text", "generated_description", "human_authored"],
+      "default": "source_text",
+      "description": "generated_description = a vision model's caption of a figure, not text that existed in the document. Same fabrication exposure as VLM table extraction: must never ground a Tier-1 claim — enforced structurally (such a card can never be layer fact_sheet, see allOf below, and fact_catalog filters it as a belt), not via claim_tier_max, which has no readers (X10 deviation, B59). (WP13 R13.)"
+    },
+    "figure_class": {
+      "type": "string",
+      "enum": ["chart", "diagram", "logo", "signature", "screenshot", "photo", "other"],
+      "description": "Picture-classification result. logo and signature are anonymization targets — confidential artifacts that text-based scanning cannot see — and are removed rather than described."
+    },
+    "extraction_status": {
+      "type": "string",
+      "enum": ["clean", "degraded", "manual"],
+      "default": "clean",
+      "description": "degraded = extraction was imperfect. The card is STILL ingested and STILL retrievable — ingestion is never gated on extraction quality (X6). manual = human-entered or hand-corrected."
+    },
+    "identity": {
+      "type": "object",
+      "description": "Content-anchored identity so card ids survive re-ingestion. Without this, a better OCR pass orphans every edit_survival score attached to the card — the flywheel's accumulated memory.",
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": { "type": "string", "description": "Hash of normalized chunk content. Primary match key on re-ingestion." },
+        "structural_key": { "type": "string", "description": "Heading path + element position. Tiebreak when content drifts slightly." },
+        "source_hash": { "type": "string", "description": "Content hash of the L0 source artifact." },
+        "matched_from": { "type": "string", "description": "On re-ingestion: the prior kb_id whose history this card inherited." },
+        "drift": { "type": "number", "minimum": 0, "maximum": 1, "description": "Normalized content distance from the matched prior version. Reported in the reconciliation report; high drift is reviewed, not silently merged." }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "layer": { "const": "fact_sheet" } }, "required": ["layer"] },
+      "then": { "required": ["owner", "verified_date"], "description": "B8: the governed layer's owner/verified_date requirement was prose-only; now enforced." }
+    },
+    {
+      "if": { "properties": { "content_origin": { "const": "generated_description" } }, "required": ["content_origin"] },
+      "then": { "properties": { "layer": { "not": { "const": "fact_sheet" } } }, "description": "WP13 R13 as structure: a generated description can never BE a fact card, so it can never enter the fact catalog the Claim Auditor grounds Tier-1 against (B59)." }
+    }
+  ]
+}

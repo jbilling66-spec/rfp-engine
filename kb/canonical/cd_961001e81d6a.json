@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 531,
+   "doc_path": [
+    "Timeline and Milestones"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_be9cb6e2ea"
+  },
+  {
+   "chars": 493,
+   "doc_path": [
+    "Risk Management"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_38c438e0a6"
+  }
+ ],
+ "doc_id": "cd_961001e81d6a",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Timeline and Milestones"
+  },
+  {
+   "kind": "paragraph",
+   "text": "We proposed a sixteen-month program for [CLIENT] in\nfive stages, anchored to the fiscal-year boundary so the first full close\non the new platform aligned with the audit calendar. Key milestones:\ndesign complete at month four, conversion dress rehearsal at month nine,\npayroll parallels months ten through twelve, go-live at month thirteen,\nand stabilization exit at month sixteen. Each milestone carried written\nentry and exit criteria agreed at program start, and the fee schedule of\n[FEE] mapped payments to milestone acceptance."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Risk Management"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The risk register for [CLIENT] opened with the three\nrisks that sink utility ERP programs: seasonal outage-crew payroll rules,\nretirement-fund reporting formats, and meter-data interface stability. Each\ncarried a mitigation with a named owner and a test that proved the\nmitigation worked \u2014 not a narrative. Risk review was a standing program\nboard agenda item; new risks entered through any workstream lead without\ngatekeeping. Reference: [REFERENCE_NAME], Director of Administrative Services."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "961001e81d6a87f922f1e3a04591faf22fdf38f9480428d71c82bf3b07a31ef0"
+}

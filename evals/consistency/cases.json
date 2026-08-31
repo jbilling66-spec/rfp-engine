@@ -1,0 +1,582 @@
+[
+ {
+  "case_id": "consistency_model_001",
+  "expected": {
+   "labels": [
+    "cycle count"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: cycle count",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: four full payroll parallel cycles before cutover\n---\nSection B: three parallel payroll cycles are run prior to go-live"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_002",
+  "expected": {
+   "labels": [
+    "duration"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: duration",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: hypercare runs four weeks per wave\n---\nSection B: hypercare runs six weeks per wave"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_003",
+  "expected": {
+   "labels": [
+    "count"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: count",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: we retired 24 legacy systems\n---\nSection B: we retired 31 legacy systems"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_004",
+  "expected": {
+   "labels": [
+    "delivery model"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: delivery model",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: all delivery is onshore for healthcare clients\n---\nSection B: an offshore build pod supports the healthcare workstream"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_005",
+  "expected": {
+   "labels": [
+    "date"
+   ],
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "CONFLICT: date",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: go-live is month thirteen\n---\nSection B: the system goes live in month sixteen"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_006",
+  "expected": {
+   "labels": [
+    "commercial model"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: commercial model",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: the fee is fixed with a capped contingency\n---\nSection B: the engagement is billed time-and-materials"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_007",
+  "expected": {
+   "labels": [
+    "count"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: count",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: seven mock conversions precede the production load\n---\nSection B: we run three mock conversions before production"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_008",
+  "expected": {
+   "labels": [
+    "cutover shape"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: cutover shape",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: interfaces are cut over in a single event\n---\nSection B: interface cutover is phased across three waves"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_009",
+  "expected": {
+   "labels": [
+    "delivery mix"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: delivery mix",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: training is 70% e-learning and 30% instructor-led\n---\nSection B: training is delivered entirely in person"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_010",
+  "expected": {
+   "labels": [
+    "tenure"
+   ],
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "CONFLICT: tenure",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: the engagement partner has 15 years of ERP advisory experience\n---\nSection B: our engagement partner brings over two decades of ERP advisory work"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_011",
+  "expected": {
+   "labels": [
+    "SLA"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: SLA",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: a Sev-1 receives a 30-minute response 24/7\n---\nSection B: Sev-1 issues receive a response within four business hours"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_012",
+  "expected": {
+   "labels": [
+    "schedule"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: schedule",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: the project runs sixteen months in five stages\n---\nSection B: the programme completes in twelve months across four stages"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_013",
+  "expected": {
+   "labels": [
+    "data handling"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: data handling",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: no data leaves client-controlled environments\n---\nSection B: migration data is staged in our regional delivery centre"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_014",
+  "expected": {
+   "labels": [
+    "methodology"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: methodology",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: we propose a two-wave cutover\n---\nSection B: a single big-bang cutover is proposed"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_015",
+  "expected": {
+   "labels": [
+    "outcome figure"
+   ],
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "CONFLICT: outcome figure",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: reporting close cycle is cut from nine days to four\n---\nSection B: the close cycle improves from nine days to six"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_016",
+  "expected": {
+   "labels": [
+    "certification status"
+   ],
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONFLICT: certification status",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: we hold a current SOC 2 Type II attestation\n---\nSection B: our SOC 2 Type II attestation is being pursued"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_017",
+  "expected": {
+   "labels": [
+    "restatement, not a conflict"
+   ],
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONTROL: restatement, not a conflict",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: four weeks of hypercare per wave\n---\nSection B: hypercare is four weeks for each go-live wave"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_018",
+  "expected": {
+   "labels": [
+    "complementary, not conflicting"
+   ],
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONTROL: complementary, not conflicting",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: the fee includes a capped contingency pool\n---\nSection B: unused contingency is returned to the client at closeout"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_019",
+  "expected": {
+   "labels": [
+    "consistent sequence"
+   ],
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "CONTROL: consistent sequence",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: payroll parallels run months ten through twelve\n---\nSection B: go-live follows the final payroll parallel"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ },
+ {
+  "case_id": "consistency_model_020",
+  "expected": {
+   "labels": [
+    "compatible detail"
+   ],
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "CONTROL: compatible detail",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Section A: training is role-based\n---\nSection B: curricula are built from the client's configured processes"
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-10",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.9,
+   "blocking": false,
+   "method": "assertion",
+   "metric": "consistency_detection"
+  },
+  "suite": "consistency_set",
+  "target": "consistency_checker",
+  "tier": "component"
+ }
+]

@@ -1,0 +1,15 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "$685,000": "FEE",
+    "Tallgrass County Schools": "CLIENT"
+  },
+  "ingested_by": "ingestion_agent",
+  "sources": [
+    {
+      "date": "2025-01-28",
+      "source_client": "Tallgrass County Schools",
+      "source_pursuit": "pur_tallgrass_data_2025"
+    }
+  ]
+}

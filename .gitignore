@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.env
+.DS_Store
+# Anchored to the root workspace only: an unanchored "pursuits/" matches
+# at every depth, which silently swallowed tests/fixtures/pursuits/ — the
+# committed corpus the metric resolver is measured against (B40/D13).
+/pursuits/
+# Handoff exchange files (P20) carry buyer prompt text; unanchored on
+# purpose — a non-default --workspace must never land request/response
+# files in tracked space (B83 D8). Nothing committed carries this name.
+pending-calls/
+fixtures-local/
+# The restricted-token list (B85 D3): machine state, never tracked — the
+# tripwire reads it at test time and fails loudly when it is missing.
+/tripwire-local/
+# Vendored extraction weights (B51): GB-scale, resolved locally, never
+# committed — the committed record is config/extraction-models.json (digests).
+/models/
+# C6 benchmark datasets + prediction runs (GB-scale, licensed for use not
+# redistribution) — the committed record is the milestone's results files.
+/benchmarks/
+kb/runs/
+kb/restricted/access.jsonl
+kb/reconciliation/

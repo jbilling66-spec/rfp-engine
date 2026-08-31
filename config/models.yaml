@@ -1,0 +1,57 @@
+# Exact model ids per tier + fallback (spec N5). This file is part of the
+# effective config — editing it changes config_digest on every subsequent run.
+#
+# prices: USD per MTok, per MODEL id (B34(21)) — tier models AND fallbacks all
+# priced, because a fallback call bills at the fallback's rates. Four
+# components: input, output, cache_read, cache_write (5-minute cache-write
+# rate; cache economics were two-thirds of v1's live input). Drafted from the
+# published Anthropic price sheet fetched 2026-08-07 (platform.claude.com
+# pricing docs — "from the claude-api reference, not memory", B29(a)(2));
+# the owner's sign-off before the first RFP_LIVE=1 run is the J2 gate.
+#
+# PRICE-REVIEW TRIGGER FIRED 2026-08-28 (B70): claude-sonnet-5 re-priced from
+# introductory (2.00/10.00/0.20/2.50, expired 2026-08-31) to standard
+# (3.00/15.00/0.30/3.75) ahead of the changeover; the owner signed the four
+# numbers (J2). No further announced expiry — `prices_valid_until` (optional,
+# YYYY-MM-DD) is the guard for the next dated pricing: when set, LiveCaller
+# refuses construction past that date instead of silently billing at a stale
+# table (a stale table under-prices every call AND loosens the cost ceilings
+# by the same factor).
+
+# ADOPTERS: this table is dated (pricing_as_of below) and prices change —
+# verify every figure against the current published price sheet before your
+# first live run, and set prices_valid_until when a published expiry exists.
+pricing_as_of: "2026-08-28"
+
+tiers:
+  frontier:
+    model: claude-fable-5
+    fallback: claude-opus-5
+  mid:
+    model: claude-sonnet-5
+    fallback: claude-opus-5
+  fast:
+    model: claude-haiku-4-5-20251001
+    fallback: claude-sonnet-5
+
+prices:
+  claude-fable-5:
+    input: 10.00
+    output: 50.00
+    cache_read: 1.00
+    cache_write: 12.50
+  claude-opus-5:
+    input: 5.00
+    output: 25.00
+    cache_read: 0.50
+    cache_write: 6.25
+  claude-sonnet-5:
+    input: 3.00
+    output: 15.00
+    cache_read: 0.30
+    cache_write: 3.75
+  claude-haiku-4-5-20251001:
+    input: 1.00
+    output: 5.00
+    cache_read: 0.10
+    cache_write: 1.25

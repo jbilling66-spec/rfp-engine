@@ -1,0 +1,3 @@
+{"run_id": "run_planted", "pursuit_id": "pur_planted", "seq": 1, "ts": "2026-08-10T12:00:01.000Z", "record_type": "run_start", "run": {"mode": "regression_bench", "engine_version": "0.1.0", "config_digest": "cfg:planted", "kb_snapshot": "kb@planted"}}
+{"run_id": "run_planted", "pursuit_id": "pur_planted", "seq": 2, "ts": "2026-08-10T12:00:02.000Z", "record_type": "validation", "stage": "validation", "validation": {"check": "claim_audit", "result": "pass", "claim_tier": 1, "claim_text_digest": "sha:planted-unflagged"}}
+{"run_id": "run_planted", "pursuit_id": "pur_planted", "seq": 3, "ts": "2026-08-10T12:00:03.000Z", "record_type": "run_end", "run": {"status": "completed"}}

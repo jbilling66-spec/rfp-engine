@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/eval-case.schema.json",
+  "title": "EvalCase",
+  "description": "One labeled test case in the eval suite (see ../evaluation/EVAL_SUITE.md). Covers all three tiers: component (single agent, labeled expectation), trajectory (assertion over a run log), and system (full replay). Cases are versioned data, kept outside the KB and excluded from retrieval so evals measure capability rather than memorization.",
+  "type": "object",
+  "required": ["case_id", "tier", "target", "input"],
+  "additionalProperties": false,
+  "properties": {
+    "case_id": { "type": "string" },
+    "tier": { "type": "string", "enum": ["component", "trajectory", "system"] },
+    "target": { "type": "string", "description": "What is under test: agent name (intake_analyst, kb_mapper, claim_auditor, ingestion_agent…), or 'pipeline' for system cases." },
+    "suite": { "type": "string", "description": "Named set this case belongs to, e.g. poison_set, anonymization_set, mapper_retrieval, adversarial_structures." },
+    "held_out": { "type": "boolean", "default": false, "description": "true = never used for prompt tuning. Keep ≥20% of every suite held out permanently." },
+
+    "input": {
+      "type": "object",
+      "description": "The case input. Reference files by path rather than inlining large documents.",
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string" },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "generator": { "type": "string", "description": "Runtime fixture builder ('module:function' under engine.*) the harness invokes to create input.files[0] in the case workdir. Exists because committed binaries are barred by the tripwire's extraction sweep (B40/D21): media cases (C11 logo/signature docx) generate at run time." },
+        "prompt_context": { "type": "string" },
+        "kb_snapshot": { "type": "string", "description": "Frozen KB version this case is scored against — the engine must be the only variable across runs." },
+        "kb_excluded": { "type": "array", "items": { "type": "string" }, "description": "kb_ids withheld for this case. Eval hygiene: the answer must not be retrievable." }
+      }
+    },
+
+    "expected": {
+      "type": "object",
+      "description": "Ground truth. Component cases carry labels; trajectory cases carry assertions; system cases carry the human-submitted reference.",
+      "additionalProperties": false,
+      "properties": {
+        "labels": { "type": "array", "items": { "type": "string" }, "description": "e.g. correct card kb_ids, required requirement-matrix entries, identifiers that must be anonymized." },
+        "claim_truth": { "type": "string", "enum": ["true", "fabricated", "stale", "unverifiable"], "description": "Poison-set cases: what the Claim Auditor should conclude." },
+        "claim_tier": { "type": "integer", "enum": [1, 2, 3] },
+        "must_flag": { "type": "boolean", "description": "The engine is required to raise a gap/flag rather than produce prose." },
+        "must_not_contain": { "type": "array", "items": { "type": "string" }, "description": "Strings whose presence in output is an automatic fail — leaked client names, fees, reference contacts." },
+        "media": { "type": "object", "additionalProperties": false, "properties": { "must_flag": { "type": "boolean", "description": "C11: the ingest report must carry the media flag for this document (an embedded logo/signature image is identity the text scan cannot see)." } } },
+        "reference_output": { "type": "string", "description": "Path to the human-submitted or golden output for similarity scoring." },
+        "trajectory_assertions": {
+          "type": "array",
+          "description": "Trajectory tier: assertions evaluated against the run log rather than the output.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "assert": { "type": "string", "enum": ["cited_subset_of_opened", "gap_emitted", "no_excluded_card_opened", "max_tool_calls", "max_cost_usd", "stage_reached", "no_unflagged_tier1"] },
+              "value": { "type": ["string", "number", "boolean"] }
+            }
+          }
+        }
+      }
+    },
+
+    "scoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": { "type": "string", "enum": ["exact_match", "set_overlap", "rubric_judge", "human_panel", "assertion", "similarity"] },
+        "metric": { "type": "string", "description": "e.g. recall@5, precision, pairwise_accuracy, anonymization_recall." },
+        "bar": { "type": "number", "description": "Pass threshold for this case or its suite." },
+        "blocking": { "type": "boolean", "default": false, "description": "true = failing this blocks release with no waiver path (fabricated-Tier-1 recall, anonymization recall)." },
+        "rubric_id": { "type": "string", "description": "Which rubric version the judge used — rubrics are versioned; scores across rubric versions are not comparable." },
+        "judge_model": { "type": "string", "description": "Judge scores are only comparable within the same judge model. A judge change invalidates the historical series until recalibrated." }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_pursuit": { "type": "string" },
+        "authored_by": { "type": "string" },
+        "created": { "type": "string", "format": "date" },
+        "last_reviewed": { "type": "string", "format": "date" },
+        "synthetic": { "type": "boolean", "description": "true for adversarial/constructed cases (poison claims, injected contradictions, synthetic structures)." }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

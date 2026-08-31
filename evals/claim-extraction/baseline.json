@@ -1,0 +1,44 @@
+{
+ "at": "2026-08-14T07:56:43Z",
+ "by_mode": {
+  "attribution": {
+   "caught": 4,
+   "recall": 1.0,
+   "total": 4
+  },
+  "embedded": {
+   "caught": 2,
+   "recall": 1.0,
+   "total": 2
+  },
+  "hedge": {
+   "caught": 2,
+   "recall": 1.0,
+   "total": 2
+  },
+  "inference": {
+   "caught": 4,
+   "recall": 1.0,
+   "total": 4
+  },
+  "quantifier": {
+   "caught": 5,
+   "recall": 1.0,
+   "total": 5
+  }
+ },
+ "cases_fingerprint": "4d7bdf72feba179edc5d5c601f0dc5b07888e7ab82d3cbc8fed0ec278f1cb801",
+ "causes": {},
+ "claim_extraction_recall": 1.0,
+ "claim_over_extraction_rate": 0.0,
+ "code_fingerprint": "4ae643824fae1b99f0220c45fb9b55813932ce7a96b0bc47ced6469e2c0e8e4d",
+ "miss_detail": {},
+ "misses": [],
+ "model_fingerprint": "488acebf108b12496f958f7b1dfa3e19a3ee5550df556481f9f373d3de9c1082",
+ "n_cases": 21,
+ "n_controls": 4,
+ "over_extracted": [],
+ "prompts_fingerprint": "522894ff88d3cd86a4185dc50b4e70a9e4740419739b03e516feb33f8e2f1bbe",
+ "run_id": "run_0008",
+ "suite": "claim_extraction_set"
+}

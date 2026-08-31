@@ -1,0 +1,10 @@
+{
+  "description": "Mapping between the two outcome vocabularies (P0 erratum, DECISIONS B7). feedback-event.outcome.result is what the steward records at pursuit close; kb-card.outcome is the retrieval-preference label back-written onto that pursuit's corpus cards.",
+  "feedback_to_card": {
+    "won": "won",
+    "lost": "lost",
+    "shortlisted": "shortlisted",
+    "withdrawn": "n/a",
+    "no_decision": "unknown"
+  }
+}

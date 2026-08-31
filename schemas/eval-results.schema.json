@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/eval-results.schema.json",
+  "title": "EvalResults",
+  "description": "The release record (S1, B40/D4): E7/N3's 'every release records its eval results' had no carrier, and the eval_pass_state metric names an eval_results stream nothing produced. `engine eval` writes this file under docs/releases/<engine_version>/ on every run and exits nonzero when a blocking bar is unmet; COMMITTING it is the deliberate release act (B34(29) siting — the record is evidence, and the clause-6 run logs attach beside it in the same directory). Promotion, pre-production reading: the record exists and eval_pass_state is true for this engine_version (closer for real environments: A5/A6). Every lane declares its measurement basis honestly (B40/D10) — this record never states a live number nobody measured.",
+  "type": "object",
+  "required": ["engine_version", "generated_at", "mode", "hold_constant", "suites", "gates", "judge_calibration", "blocking_failures", "overrides", "eval_pass_state"],
+  "additionalProperties": false,
+  "properties": {
+    "engine_version": { "type": "string", "description": "A release is a commit (N3): engine/version.py's 0.1.0+<short-sha>, so a record naming one is reproducible." },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "mode": { "type": "string", "const": "regression_bench", "description": "Eval runs are bench runs even when live-called — eval dollars and eval records never enter a production series (O3, B34(16))." },
+    "hold_constant": {
+      "type": "object",
+      "required": ["engine_version", "config_digest", "kb_snapshot", "model_pins", "prompt_version", "judge_model", "rate_card_version"],
+      "additionalProperties": false,
+      "description": "The comparability keys (R11, metric-definition.hold_constant) — two records are comparable only when these match; the reporting layer segments at these boundaries and never averages across them silently.",
+      "properties": {
+        "engine_version": { "type": "string" },
+        "config_digest": { "type": "string" },
+        "kb_snapshot": { "type": "string" },
+        "model_pins": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Tier -> exact model id (N5: full eval re-run on any model change)." },
+        "prompt_version": { "type": "string", "description": "Formally aliased to config_digest (B40/D5) — a second carrier would be a second source of truth; the alias is stated here, not hidden." },
+        "judge_model": { "type": ["string", "null"], "description": "null until a judge is calibrated (A4) — never a placeholder id nobody ran." },
+        "rate_card_version": { "type": "string", "description": "synthetic-v0 until A1 (B40/D14) — a rate change must read as a rate change, never a cost movement." }
+      }
+    },
+    "suites": {
+      "type": "object",
+      "description": "One entry per eval lane, keyed by suite name (poison, extraction, injection, anonymization, mapper, structure, voice, intake, consistency, drafter, red_team, trajectory, ...). The measured numbers live under `measures` and the declared bars under `bar` — scalar per metric (B11: compound bars are one case per metric, each with its own scalar bar).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["basis", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "basis": { "type": "string", "enum": ["deterministic", "scripted", "live_baseline"], "description": "How the numbers were obtained (B40/D10): deterministic = measured fresh offline, real numbers; scripted = harness proven with scripted math, the model half unmeasured; live_baseline = read from a recorded live baseline behind fingerprint checks." },
+          "status": { "type": "string", "enum": ["pass", "fail", "not_measured_live", "baseline_stale"], "description": "baseline_stale = the dual fingerprint refused a comparison (prompts or cases moved since the recorded measure) — the honest state after an un-re-baselined prompt edit, never silently 'pass'." },
+          "blocking": { "type": "boolean", "description": "true = failing this suite blocks release with no waiver path (fabricated-Tier-1 recall, anonymization recall — E2/E4)." },
+          "advisory": { "type": "boolean", "description": "true = reported, never gated (red_team per B34(9)); a spread or an uncalibrated judge score must not gate (v1 metric-contract lesson)." },
+          "measures": { "type": "object", "description": "The suite's numbers as measured — recall/precision/n, per-family tables, boolean results. Free-shape by design: the lane's meaning lives in its harness; the record carries what was measured." },
+          "bar": { "type": "object", "description": "The declared bar(s), scalar per named metric (e.g. {\"recall\": 0.98, \"precision\": 0.85} or {\"family_floor\": 0.75, \"benign_false_positives\": 0})." },
+          "fingerprints": { "type": "object", "additionalProperties": { "type": "string" }, "description": "The drift locks the numbers stand behind (prompts_fingerprint, cases_fingerprint, lexicon_fingerprint, spec_fingerprint)." },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "description": "The six release-gate clauses (EVAL_SUITE promotion criteria, E7). Failing clause 1 blocks; clauses 2-4 fail only past a named owner's written override (in `overrides`); clauses evaluated by a phase that has not run yet carry not_performed + their closer — visibly, never silently omitted.",
+      "items": {
+        "type": "object",
+        "required": ["clause", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "clause": { "type": "integer", "minimum": 1, "maximum": 6 },
+          "status": { "type": "string", "enum": ["pass", "fail", "not_performed"] },
+          "detail": { "type": "string", "description": "For fail: which bar, measured vs required — the record names what blocked, never a bare red." },
+          "closer": { "type": "string", "description": "For not_performed: the phase that makes this clause evaluable (A3 replay, A4 judge calibration)." }
+        }
+      }
+    },
+    "judge_calibration": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "description": "Gate 5's input, carried explicitly (B40/G-J): not_performed with its closer beats silent omission — a promotion gate that cannot be evaluated must say so on the record.",
+      "properties": {
+        "status": { "type": "string", "enum": ["not_performed", "current", "stale"] },
+        "closer": { "type": "string" },
+        "judge_model": { "type": ["string", "null"] },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "blocking_failures": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "suite.metric names ('poison.recall') for every unmet blocking bar — the exit-nonzero reasons, enumerable by a caller without re-deriving."
+    },
+    "overrides": {
+      "type": "array",
+      "description": "E7's named-owner written overrides for gate clauses 2-4 (never clause 1 — no waiver path). Empty is the normal state.",
+      "items": {
+        "type": "object",
+        "required": ["gate_clause", "by", "at", "note"],
+        "additionalProperties": false,
+        "properties": {
+          "gate_clause": { "type": "integer", "minimum": 2, "maximum": 4 },
+          "by": { "type": "string" },
+          "at": { "type": "string", "format": "date-time" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "eval_pass_state": { "type": "boolean", "description": "The metric of the same name resolves from this field: true iff no blocking failure and every evaluable gate passes (not_performed gates carry their closer and do not fail the state pre-production — the narrowing is logged in B40/D4)." }
+  }
+}

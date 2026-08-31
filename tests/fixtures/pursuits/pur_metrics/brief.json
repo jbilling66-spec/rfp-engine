@@ -1,0 +1,11 @@
+{
+ "pursuit_id": "pur_metrics",
+ "status": "draft",
+ "buyer": {
+  "name": "Fixture County Utilities"
+ },
+ "procurement": {
+  "what_is_bought": "ERP implementation services"
+ },
+ "requirements_matrix": []
+}

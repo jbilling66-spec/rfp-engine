@@ -1,0 +1,28 @@
+# Core-content manifest for the ERP implementation service line: the
+# content every credible response must cover. P6 loads these as pursuit-plan
+# obligations; P2 only proves the file loads and validates.
+# Format is v2-local (B16, no spec source); the formal schema is
+# schemas/manifest.schema.json (shipped at P6, B27 — the loader delegates).
+service_line: erp-implementation
+obligations:
+  - id: pm-approach
+    title: Project management approach
+    description: Cadence, decision log, escalation, and scope-change control.
+  - id: staffing-plan
+    title: Staffing plan with named roles
+    description: Team composition, onshore/offshore mix, client counterparts.
+  - id: integration-methodology
+    title: Integration methodology
+    description: Interface inventory, contract sheets, sequencing, HL7/FHIR where clinical.
+  - id: data-migration
+    title: Data migration approach
+    description: Mock conversions, reconciliation evidence, cutover rehearsal.
+  - id: testing-methodology
+    title: Testing methodology
+    description: Test passes, payroll parallels, exit criteria.
+  - id: training-ocm
+    title: Training and change management
+    description: Role-based curricula, super-users, measured adoption.
+  - id: support-hypercare
+    title: Support and hypercare model
+    description: Command center, SLAs, criteria-based exit to steady state.

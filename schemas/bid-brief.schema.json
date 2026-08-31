@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/bid-brief.schema.json",
+  "title": "BidBrief",
+  "description": "Output of the Intake Analyst (+ both researchers + Win-Theme Strategist). The 'clean brief out' of the ramble-in pattern. Approved by a human at Gate 1 (Strategy). Frozen context that all downstream agents condition on.",
+  "type": "object",
+  "required": ["pursuit_id", "buyer", "procurement", "requirements_matrix", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "created": { "type": "string", "format": "date-time" },
+    "intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "file": { "type": "string" },
+              "kind": { "type": "string", "enum": ["rfp_main", "appendix", "qa_log", "addendum", "pricing_template", "research_pack", "other"] },
+              "format": { "type": "string", "enum": ["pdf", "docx", "xlsx", "pptx", "other"] },
+              "role": { "type": "string", "enum": ["core", "supplemental", "target"], "description": "Declared document role (P15/B67 §3): core = the one document you would read if you read only one; supplemental = added context; target = the artifact the response must fill. NOT inferable from the upload — declared at deposit or asked at gate_0." }
+            }
+          }
+        },
+        "ramble_context": { "type": "string", "description": "Free-form context from the pursuit lead (voice/text), verbatim." },
+        "gaps": {
+          "type": "array",
+          "description": "The intake questions, persisted (P15/B70 — run-log gap lines alone could never be answered). Same gap_id vocabulary as the emitted lines; origin separates the deterministic completeness checks from the advisory questioner, whose questions gate NOTHING (E5/A4).",
+          "items": {
+            "type": "object",
+            "required": ["gap_id", "reason", "question_to_human", "origin", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "gap_id": { "type": "string" },
+              "target": { "type": "string", "description": "Dotted brief path the question is about (e.g. procurement.deadlines); absent for questions with no single field." },
+              "reason": { "type": "string", "enum": ["kb_empty", "stale_fact", "needs_sme", "partner_only", "not_offered", "ambiguous_requirement"] },
+              "question_to_human": { "type": "string" },
+              "origin": { "type": "string", "enum": ["completeness", "questioner"] },
+              "status": { "type": "string", "enum": ["open", "answered", "skipped"] },
+              "answer": { "type": "string" },
+              "answered_by": { "type": "string" },
+              "answered_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "description": "The assumption register (P15/B70): every inference the intake MODEL made, listed for human confirmation at gate_0 — a confident-but-wrong inference is worse than a gap because it never announces itself. source=code marks values code parsed deterministically (weights, dates); they are shown, not confirmable.",
+          "items": {
+            "type": "object",
+            "required": ["field", "source", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "field": { "type": "string", "description": "Dotted brief path, e.g. procurement.what_is_bought or requirements_matrix[3].weight_text." },
+              "value": { "description": "The inferred value as written to the brief (any JSON type)." },
+              "source": { "type": "string", "enum": ["model", "code"] },
+              "status": { "type": "string", "enum": ["unconfirmed", "confirmed", "corrected"] },
+              "corrected_to": { "description": "The human's replacement value when status=corrected." },
+              "corrected_by": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "buyer": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "org_id": { "type": "string", "pattern": "^org_[a-z0-9_-]{1,40}$", "description": "P17/C2 (B75§2): the workspace org registry key linking this pursuit to per-organization memory. HUMAN-LINKED at gate_0 (approve_gate0's org step — the declared-not-inferred precedent of document roles), never model-inferred; buyer.name stays the free display string. Stamped pre-freeze so it rides into brief.frozen.json. Opaque id — org names live in the registry's file content, never in ids." },
+        "vertical": { "type": "string" },
+        "profile": { "type": "string", "description": "Who they are, mission language, strategic context — fuels tailoring." },
+        "terminology": { "type": "array", "items": { "type": "string" }, "description": "Buyer's own terms to mirror (left-hand rule)." },
+        "incumbent": { "type": "string" },
+        "research_mode_used": { "type": "string", "enum": ["full_web", "allowlist", "airgapped"] },
+        "research_findings": {
+          "type": "array",
+          "description": "Cited findings from both researchers (B21(2); B23): source_kind discriminates internal_kb / research_pack / web, source is the kb_id or URL the citedness gate verified. topic stays a free string — the out-of-vocab landing value is the literal 'other'.",
+          "items": {
+            "type": "object",
+            "required": ["claim", "topic", "source_kind", "source"],
+            "additionalProperties": false,
+            "properties": {
+              "claim": { "type": "string" },
+              "detail": { "type": "string", "description": "Optional elaboration — absent, never empty, when the researcher gave none." },
+              "topic": { "type": "string" },
+              "source_kind": { "type": "string", "enum": ["internal_kb", "research_pack", "web"] },
+              "source": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "procurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "what_is_bought": { "type": "string" },
+        "response_structure": { "type": "string", "enum": ["designated", "free_flow", "mixed"], "description": "Drives the Path A / Path B fork." },
+        "deadlines": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "required_forms": { "type": "array", "items": { "type": "string" } },
+        "submission_method": { "type": "string" },
+        "red_flags": {
+          "type": "array",
+          "description": "Typed, first-class flags (B17; WP2/T1/C2/C3): injection screen hits, AI-use/disclosure/originality clauses, independence/OCI (flag and hand off — never adjudicated), hidden buyer-file content, plus the original onerous-term family.",
+          "items": {
+            "type": "object",
+            "required": ["kind", "detail"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "type": "string", "enum": ["injection", "ai_use", "independence_oci", "onerous_term", "unrealistic_timeline", "wired_for_incumbent", "hidden_content", "other"] },
+              "detail": { "type": "string" },
+              "excerpt": { "type": "string", "description": "Verbatim quote from the buyer document." },
+              "source_location": { "type": "string", "description": "e.g. 'rfp.pdf p2' or 'workbook.xlsx: 2. Integration !D2'" },
+              "detected_by": { "type": "string", "enum": ["screen", "model", "both"] },
+              "routed_to": { "type": "string", "description": "independence_oci only: the conflicts process. The shape carries no adjudication field by design (C3)." }
+            }
+          }
+        }
+      }
+    },
+    "requirements_matrix": {
+      "type": "array",
+      "description": "Extracted requirements with the buyer's evaluation weights — carried forward from v1. Steers red-team scoring lens and reviewer attention (and drafting depth when effort_allocation=weighted).",
+      "items": {
+        "type": "object",
+        "required": ["requirement"],
+        "additionalProperties": false,
+        "properties": {
+          "ref": { "type": "string", "description": "Buyer's own numbering, verbatim." },
+          "requirement": { "type": "string" },
+          "section": { "type": "string" },
+          "weight": { "type": "number", "description": "Evaluation weight if stated, verbatim-as-stated (30 for '30%'), never normalized — normalization is a downstream computation (B17)." },
+          "weight_basis": { "type": "string", "enum": ["percent", "points"], "description": "B17: disambiguates weight. Required by code (not schema) whenever weight is present." },
+          "weight_text": { "type": "string", "description": "The buyer's weight statement exactly as written (B17 verbatim evidence; P15) — the model source the parsed weight came from, and the assumption register's correction target. Retained even when unparseable." },
+          "mandatory": { "type": "boolean" }
+        }
+      }
+    },
+    "win_themes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "description": "The 6–8 generated angles, including killed ones (kept for the record).",
+          "items": {
+            "type": "object",
+            "required": ["theme"],
+            "additionalProperties": false,
+            "properties": {
+              "candidate_id": { "type": "string", "description": "Stable id (cand_NN, code-assigned in generation order) — B22(11)/B37(E2): Gate-1 edits address candidates by this id; index addressing cannot survive a re-rendered list. Required by code on every written candidate." },
+              "theme": { "type": "string" },
+              "rationale": { "type": "string" },
+              "status": { "type": "string", "enum": ["proposed", "killed", "approved"] },
+              "cites": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "Finding sources (buyer.research_findings[].source values) this theme rests on (B23). Required by code on every model-authored candidate; human-added candidates at Gate 1 may omit it (B17 weight_basis pattern)." },
+              "kill_reason": { "type": "string", "description": "The judge's (or Gate-1 human's) reason this candidate died — kept with the retained candidate so the artifact, not a checkpoint, carries the record (B5, B23)." }
+            }
+          }
+        },
+        "approved": { "type": "array", "items": { "type": "string" }, "description": "The 2–3 survivors, human-approved at Gate 1." }
+      }
+    },
+    "fit_signals": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "EMPTY HOOK for the deferred go/no-go scoring project. Populate later without schema redesign."
+    },
+    "status": { "type": "string", "enum": ["draft", "gate1_pending", "approved", "declined"] },
+    "gate1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "approved_by": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      }
+    },
+    "gate0": {
+      "type": "object",
+      "description": "The intake-review stamp (P15/B70, mirror of gate1). gate_0 is checkpoint-keyed — no status value; this block is the artifact-side record that a human confirmed the engine's reading of the package before research spent anything.",
+      "additionalProperties": false,
+      "properties": {
+        "approved_by": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

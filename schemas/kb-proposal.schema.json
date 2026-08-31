@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/kb-proposal.schema.json",
+  "title": "KBProposal",
+  "description": "A proposed change to the knowledge base, carrying its diff and awaiting a human (S2, B40/D19). S4 is the rule this contract exists to enforce: flywheel writes to the Fact Sheet and Playbook are PROPOSALS WITH A DIFF, never silent commits — the anti-poisoning control, because content that can enter the corpus without a human seeing it is content an attacker (or a confused agent) can plant. Every write door produces one of these: the flywheel router, xlsx import, an in-place card edit, a mint, a deprecation, an outcome back-label. Nothing writes a card directly except the derived-signal path (edit_survival), which changes no content.",
+  "type": "object",
+  "required": ["proposal_id", "created", "status", "source", "target", "kind"],
+  "additionalProperties": false,
+  "properties": {
+    "proposal_id": { "type": "string", "pattern": "^prop_[a-z0-9]{4,32}$" },
+    "created": { "type": "string", "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "accepted", "rejected", "superseded"],
+      "description": "proposed until a steward decides. superseded = a later proposal covers the same ground; nothing is deleted (the v1 governance spine — a rejected proposal is evidence about what the flywheel wanted, and erasing it loses the signal)."
+    },
+    "source": {
+      "type": "object",
+      "required": ["door"],
+      "additionalProperties": false,
+      "description": "Where the proposal came from — the provenance a steward judges it by. A flywheel proposal carries the events that produced it, so 'why is this being suggested?' is answerable by looking rather than by re-deriving.",
+      "properties": {
+        "door": {
+          "type": "string",
+          "enum": ["flywheel", "xlsx_import", "card_edit", "mint", "deprecate", "backlabel", "ingestion", "assistant", "gap_answer"],
+          "description": "flywheel = routed from feedback events; xlsx_import = a steward's bulk edit; card_edit/mint/deprecate = the curation screen; backlabel = an outcome writing back onto the corpus it drew from; ingestion = a claim candidate the ingestion model flagged in a corpus chunk, auto-drafted as a fact-sheet proposal (P13/C14, the owner's call at B59 — owner/verified_date stay blank until a steward supplies them at acceptance, S4 preserved); assistant = the steward assistant drafting on the operator's instruction (P14/B63) — source.operator carries the human, the door carries the mechanism, and acceptance still runs through the steward inbox like every other door."
+        },
+        "pursuit_id": { "type": "string" },
+        "event_ids": { "type": "array", "items": { "type": "string" } },
+        "section_id": { "type": "string" },
+        "operator": { "type": "string", "description": "The authenticated human who opened this door, when a human did. Absent for machine-routed flywheel proposals — the absence is itself the signal that no human has looked yet." },
+        "external": { "type": "boolean", "description": "true = the originating signal came from outside the firm (a guest comment). Kept separable for the same reason actor_role keeps external_reviewer separate: untrusted-provenance signal must never pool with internal." }
+      }
+    },
+    "target": {
+      "type": "string",
+      "enum": ["fact_sheet", "corpus", "voice_spec", "playbook", "validation_tuning"],
+      "description": "The flywheel target this proposal serves — the same vocabulary feedback_event.flywheel_routing.target uses, so a proposal and the event that produced it agree on where the lesson goes."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["update_card", "new_card", "deprecate_card", "voice_spec_change", "playbook_note", "validation_tuning_note", "outcome_backlabel"],
+      "description": "What the proposal would do if accepted."
+    },
+    "kb_id": { "type": "string", "description": "The card this concerns, for kinds that concern one." },
+    "diff": {
+      "type": "object",
+      "description": "field -> {before, after}. The DIFF is the point (S4): a steward approves a visible change, never a description of one. Computed over parsed models rather than serialized text, so formatting noise never presents as an edit.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "before": {},
+          "after": {}
+        }
+      }
+    },
+    "note": { "type": "string", "description": "Plain-language reason a reader can act on — why the flywheel or the steward thinks this should change." },
+    "decided": {
+      "type": "object",
+      "required": ["by", "at", "decision"],
+      "additionalProperties": false,
+      "description": "The steward's disposition. Recorded on the proposal itself so the decision and what was decided never drift apart.",
+      "properties": {
+        "by": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" },
+        "decision": { "type": "string", "enum": ["accepted", "rejected"] },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/slots.schema.json",
+  "title": "TargetSlotsContainer",
+  "description": "The slots.json container (E4, B37/D23): formalizes what B25 deliberately left informal, because P9's write-back depends on it (B26 — 'the cells come from the slots'). Wraps the parsed TargetSlot[] with the parse provenance that binds cells to the exact source file. Each slots[] item is validated against the FROZEN target-slot.schema.json by the writer (engine/planning/plan.py validates every slot before writing; enforced by tests/planning) — the container schema deliberately does not duplicate the frozen per-slot contract.",
+  "type": "object",
+  "required": ["pursuit_id", "source_mode", "parser_version", "source_sha256", "slot_count", "slots"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "source_mode": { "type": "string", "description": "How the structure arrived (parse.py owns the vocabulary; currently client_provided)." },
+    "parser_version": { "type": "string", "description": "The parser that produced these slots — a re-parse under a newer parser is a different container." },
+    "source_sha256": { "type": "string", "description": "Digest of the buyer file the slots were parsed from — the write-back binding: cells may only be written into a copy of THIS file." },
+    "slot_count": { "type": "integer", "minimum": 0, "description": "Must equal len(slots) — the honest-count guard the writer enforces." },
+    "slots": { "type": "array", "items": { "type": "object" }, "description": "TargetSlot objects, each schema-valid against target-slot.schema.json (frozen, CLAUDE.md rule 3) — validated per-item by the writer, not re-specified here." },
+    "sources": {
+      "type": "array",
+      "description": "P16 (mixed target sets): one entry per parsed target file when the declared set has MORE than one. Absent on single-target containers — their shape is byte-pinned pre-P16. When present, the top-level source_sha256 is the FIRST declared target's digest and write-back consults this list to bind each slot's file to its exact source.",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["file", "source_sha256", "parser_version"],
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string" },
+          "source_sha256": { "type": "string" },
+          "parser_version": { "type": "string" }
+        }
+      }
+    }
+  }
+}

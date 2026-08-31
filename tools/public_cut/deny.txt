@@ -1,0 +1,41 @@
+# The public-cut deny list (B85 D7, D9): every deliberate exclusion, named
+# so intent is written, not implied. The script asserts none of these paths
+# exists in staging; the drift test asserts each exists in the private tree
+# (the list cannot rot into fiction) and that no allowlist entry covers it.
+#
+# The working record — the firm's internal narrative:
+DECISIONS.md
+SESSION.md
+lessons.md
+ROADMAP.md
+docs/v1-ledger.md
+docs/redline-batch.md
+docs/plans
+docs/uat
+docs/releases
+# Milestone evidence beyond what tests and code read (real spend figures,
+# a transcribed verbal review, an API request id):
+docs/milestones/p8-live-run/cost-actuals.md
+docs/milestones/p8-live-run/review-sheet.md
+docs/milestones/p8-live-run/draft.json
+docs/milestones/p8-live-run/annotated-draft.json
+docs/milestones/p8-live-run/poison-run.jsonl
+docs/milestones/p10-close
+docs/milestones/b50-harness-frame
+# (docs/milestones/p14 was listed here until CI's first run proved it holds
+# zero tracked files — an empty working-tree dir no clone ever has; nothing
+# untracked can ship through a git-archive export, so the entry was noise.)
+# Derived stats from use-not-redistribute benchmark datasets (B85 §5):
+docs/milestones/p12-extraction-gate
+# The vendored design pack stays history except its two shipped files
+# (spec/CLAUDE.md, spec/observability/sample-run.jsonl — allowlisted):
+spec/README.md
+spec/DECISION_LOG.md
+spec/ENTERPRISE_READINESS.md
+spec/architecture
+spec/evaluation
+spec/handoff
+spec/kb
+spec/reporting
+spec/schemas
+spec/security

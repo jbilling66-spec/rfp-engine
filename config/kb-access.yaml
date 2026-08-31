@@ -1,0 +1,14 @@
+# WHAT each actor may do with the restricted provenance store (S8).
+# Purposes: audit | purge | right_of_review | anonymization_scan.
+# "engine" is the machine identity, limited to the two purposes code needs;
+# de-anonymization (audit, right_of_review) is human-only.
+#
+# This file is the GRANTS table, not the identity source (B14(3) closed at
+# P10/c20). Web-originated reads carry the authenticated operator as the
+# actor; an operator this table does not name is denied and the denial is
+# logged. Adding a name here is therefore a deliberate grant of access to
+# client-identifying material, not a convenience — it is the list a
+# privacy review reads.
+actors:
+  owner: [audit, purge, right_of_review, anonymization_scan]
+  engine: [anonymization_scan, purge]

@@ -1,0 +1,11 @@
+{
+  "derived_from": [],
+  "identifiers": {},
+  "ingested_by": "steward",
+  "sources": [
+    {
+      "date": "2026-06-01",
+      "source_pursuit": "pur_curated_seed"
+    }
+  ]
+}

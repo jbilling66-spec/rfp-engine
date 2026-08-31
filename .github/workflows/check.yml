@@ -1,0 +1,72 @@
+# The cross-platform bootstrap proof (P22, B85): the DOCUMENTED bootstrap,
+# nothing more — a red here is a finding about the lock or the docs, fixed
+# deliberately (make lock / doc change), never by weakening a test.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded push's matrix is cancelled, never left burning runner
+# minutes (B87 §2).
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+# The job only reads the checkout; the default token gets no write scope.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    # The suite runs ~3min; its web job-runner tests have polled up to
+    # ~11min under load (lessons.md). 30min turns a hang into a legible
+    # failure instead of the 6-hour runner default.
+    timeout-minutes: 30
+    steps:
+      # Actions pinned to full commit SHAs (B89): a moving major tag is a
+      # supply-chain door into the runner that writes the mirror's proof.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The tripwire's history track scans every commit reachable from
+          # any ref — a shallow clone would blind it.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          enable-cache: true
+
+      - name: Bootstrap (the documented path)
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install -r requirements.lock -e .
+
+      - name: Restricted-token list
+        # Private repo: the TRIPWIRE_TOKENS secret (one token per line)
+        # becomes the machine-local list, so CI runs the honest full suite.
+        # Public mirror: no secret — the committed attestation covers the
+        # empty-list posture. Neither present -> the tripwire fails loudly,
+        # which is the intended signal to configure one of the two.
+        env:
+          TRIPWIRE_TOKENS: ${{ secrets.TRIPWIRE_TOKENS }}
+        run: |
+          if [ -n "$TRIPWIRE_TOKENS" ]; then
+            # GitHub masks the secret only as a WHOLE string; a tripwire
+            # failure message prints individual tokens, so mask each
+            # non-comment line before the file exists (B87 §2).
+            printf '%s\n' "$TRIPWIRE_TOKENS" | while IFS= read -r line; do
+              case "$line" in ''|'#'*) continue ;; esac
+              echo "::add-mask::$line"
+            done
+            mkdir -p tripwire-local
+            printf '%s\n' "$TRIPWIRE_TOKENS" > tripwire-local/tokens.txt
+          fi
+
+      - name: Offline suite (zero spend)
+        run: make check

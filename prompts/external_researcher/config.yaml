@@ -1,0 +1,10 @@
+# Per-agent config: model tier, tool grants (S5 least privilege).
+# The External Researcher holds NO web tool in any pre-production mode (B21(8)):
+# airgapped runs read an uploaded pack inlined in the untrusted research
+# frame; full_web/allowlist are FakeCaller smoke modes proving the switch.
+# Granting a real web tool is a WIDENING and lands, with allowlist
+# enforcement and the live query carrier, at the A6/R3 revert — with human
+# review. Queries themselves are code-derived abstracted topics (S6).
+# Mid tier per the architecture roster.
+tier: mid
+tools: []

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/feedback-event.schema.json",
+  "title": "FeedbackEvent",
+  "description": "One structured event from the in-app review loop (or a submission outcome, or a measured review session). The atomic unit of the flywheel: section type × claim tier × edit reason routes each event to its learning target. Edit-survival telemetry is computed directly from these, and reviewer-effort events supply the human side of the blended cost model (../reporting/REPORTING_SPEC.md).",
+  "type": "object",
+  "required": ["event_id", "pursuit_id", "kind", "at", "actor_role"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": { "type": "string" },
+    "pursuit_id": { "type": "string" },
+    "revision": { "type": "integer", "description": "Which draft revision this event occurred on." },
+    "at": { "type": "string", "format": "date-time" },
+    "actor": { "type": "string", "description": "Reviewer identity (for attribution, not blame). Never an aggregation key in any view outside the reviewer's own screen." },
+    "actor_role": {
+      "type": "string",
+      "enum": ["pursuit_lead", "sme", "partner", "proposal_manager", "contracts", "fact_sheet_steward", "external_reviewer", "other"],
+      "description": "Role of the actor. Required for cost attribution — a partner-hour and a coordinator-hour differ by 4–6×, and effort is aggregated by role, never by named person. external_reviewer (E6, B37): a guest commenting through a share link — folding externals into `other` would silently pool untrusted-provenance signal with internal firm roles, the one aggregation the trust model must keep separable."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["comment", "edit", "accept", "reject", "waive_block", "outcome", "review_session"],
+      "description": "comment = inline instruction to the Revision Agent; edit = direct human text change; accept/reject = disposition of an agent revision; waive_block = human overrode a Tier-1 block (always logged); outcome = pursuit-level win/loss result; review_session = a measured span of human time on task (effort block required)."
+    },
+    "section_id": { "type": "string" },
+    "section_type": { "type": "string", "description": "Normalized section category (e.g. exec_summary, methodology, ocm, pricing_narrative) — the aggregation key for edit-survival and Playbook lessons." },
+    "claim_tier": { "type": "integer", "enum": [1, 2, 3], "description": "Tier of the claim(s) touched, when applicable." },
+    "edit_reason": {
+      "type": "string",
+      "enum": ["factual", "tone", "length", "structure", "strategy", "compliance", "other"],
+      "description": "Why the human intervened. THE routing signal: factual → Fact Sheet/corpus correction; tone → voice spec; length/structure → Playbook drafting guidance; strategy → win-theme/planning lessons; compliance → validation-stack tuning."
+    },
+    "before": { "type": "string", "description": "Text before the change (edit/accept/reject kinds)." },
+    "after": { "type": "string", "description": "Text after the change." },
+    "comment_text": { "type": "string", "description": "The reviewer's inline comment (comment kind)." },
+    "agent_reply": { "type": "string", "description": "Revision Agent's response to the comment." },
+    "outcome": {
+      "type": "object",
+      "description": "kind=outcome only: the pursuit result, back-labels every corpus entry from this pursuit.",
+      "additionalProperties": false,
+      "properties": {
+        "result": { "type": "string", "enum": ["won", "lost", "shortlisted", "withdrawn", "no_decision"] },
+        "buyer_feedback": { "type": "string" },
+        "score_received": { "type": "string" }
+      }
+    },
+    "effort": {
+      "type": "object",
+      "description": "kind=review_session: measured human time on task. The missing input to the blended cost model — reviewer hours dominate engine spend by orders of magnitude and cannot be reconstructed after the fact, so this must be capturing before the pilot. Passive by default; the reviewer is never asked to fill in a timesheet.",
+      "additionalProperties": false,
+      "properties": {
+        "active_ms": { "type": "integer", "description": "Foreground, focused time with the review surface open, idle-timed-out after 90s of no interaction. Estimated, and labeled as such wherever displayed." },
+        "measurement": {
+          "type": "string",
+          "enum": ["passive", "confirmed", "manual"],
+          "default": "passive",
+          "description": "passive = UI-measured; confirmed = reviewer accepted or adjusted the pre-filled figure at gate close; manual = entered for offline work (the marked-up printout on a plane)."
+        },
+        "confirmed_minutes": { "type": "integer", "description": "The reviewer's figure at gate close, pre-filled with the passive measurement. Accepting the default is one click — this is the only effort field a human ever touches." },
+        "scope": { "type": "string", "enum": ["section", "gate", "gap_answer", "document_prep", "pursuit"], "description": "What the session covered. Gate and gap-answer scopes join to run-log gate.wait_ms and gap records. document_prep (P13/C17, B51's carrier; spec N1/R3) = human time preparing buyer documents for the engine (transcribing matrices, retyping tables, cleaning scans) — the cost the extraction layer exists to remove, and unmeasurable once it has been removed: the scope must exist BEFORE the pilot or the baseline is gone forever." },
+        "gate": { "type": "string", "enum": ["gate_1", "gate_2", "review_loop", "final_signoff"] },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" }
+      }
+    },
+
+    "flywheel_routing": {
+      "type": "object",
+      "description": "Set by the Feedback Learner after processing.",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "string", "enum": ["fact_sheet", "corpus", "voice_spec", "playbook", "validation_tuning", "none"] },
+        "action_taken": { "type": "string" },
+        "processed_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "review_session" } }, "required": ["kind"] },
+      "then": { "required": ["effort"], "description": "B9: 'effort block required' was prose-only; a review_session without effort is an unrecoverable measurement lost (R3)." }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "outcome" } }, "required": ["kind"] },
+      "then": { "required": ["outcome"] }
+    }
+  ]
+}

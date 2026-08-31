@@ -1,0 +1,34 @@
+# Loaded rates for Layer-2 (human) and Layer-3 (blended) cost metrics.
+#
+# SYNTHETIC UNTIL A1. Every figure below is invented for the pre-production
+# build so the resolver's Layer-2/3 path is exercised and rate_card_version
+# pinning is provable. Rates are configuration, not client data, so a
+# synthetic card is legitimate here in a way synthetic client facts never
+# are — but no number below has been near the firm's actual cost base, and
+# nothing computed from them may be shown to anyone as a real figure.
+#
+# A1 replaces this file with real loaded rates. When it does, bump
+# rate_card_version: metrics carry the version on every value, so a rate
+# change RE-LABELS the series rather than moving it (R11). A cost trend
+# that silently spans two rate cards is a lie told by arithmetic.
+
+rate_card_version: "synthetic-v0"
+currency: USD
+effective_from: "2026-01-01"
+basis: "loaded hourly cost — salary, benefits, and overhead; not a bill rate"
+
+roles:
+  partner: 385.0
+  proposal_manager: 180.0
+  pursuit_lead: 210.0
+  sme: 240.0
+  contracts: 165.0
+  fact_sheet_steward: 140.0
+  external_reviewer: 0.0   # guests are not the firm's cost
+  other: 175.0
+
+# The rate applied when an effort event carries no actor_role, or a role
+# the table does not name. Deliberately the middle of the range rather
+# than the cheapest: an unattributed hour that quietly costs the least
+# would make sloppy attribution look like savings.
+default_role_rate: 175.0

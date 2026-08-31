@@ -1,0 +1,743 @@
+[
+  {
+    "case_id": "anon_001",
+    "expected": {
+      "labels": [
+        "Foxglove Robotics",
+        "$1,240,000",
+        "Jordan Mercer"
+      ],
+      "must_not_contain": [
+        "Foxglove"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Foxglove Robotics.",
+      "files": [
+        "docs/anon_001.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_002",
+    "expected": {
+      "labels": [
+        "Foxglove Robotics",
+        "$980,000"
+      ],
+      "must_not_contain": [
+        "Foxglove"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Foxglove Robotics.",
+      "files": [
+        "docs/anon_002.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_003",
+    "expected": {
+      "labels": [
+        "Foxglove Robotics",
+        "Jordan Mercer"
+      ],
+      "must_not_contain": [
+        "Foxglove"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Foxglove Robotics.",
+      "files": [
+        "docs/anon_003.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_004",
+    "expected": {
+      "labels": [
+        "Ridgeline Municipal Utilities",
+        "$1,760,000",
+        "Elena Vasquez"
+      ],
+      "must_not_contain": [
+        "Ridgeline"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Ridgeline Municipal Utilities.",
+      "files": [
+        "docs/anon_004.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_005",
+    "expected": {
+      "labels": [
+        "Ridgeline Municipal Utilities"
+      ],
+      "must_not_contain": [
+        "Ridgeline"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Ridgeline Municipal Utilities.",
+      "files": [
+        "docs/anon_005.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_006",
+    "expected": {
+      "labels": [
+        "Ridgeline Municipal Utilities",
+        "$2,050,000"
+      ],
+      "must_not_contain": [
+        "Ridgeline"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Ridgeline Municipal Utilities.",
+      "files": [
+        "docs/anon_006.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_007",
+    "expected": {
+      "labels": [
+        "Sablewood Foods",
+        "$1,420,000"
+      ],
+      "must_not_contain": [
+        "Sablewood"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Sablewood Foods.",
+      "files": [
+        "docs/anon_007.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_008",
+    "expected": {
+      "labels": [
+        "Sablewood Foods",
+        "Theo Okafor"
+      ],
+      "must_not_contain": [
+        "Sablewood"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Sablewood Foods.",
+      "files": [
+        "docs/anon_008.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_009",
+    "expected": {
+      "labels": [
+        "Sablewood Foods"
+      ],
+      "must_not_contain": [
+        "Sablewood"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Sablewood Foods.",
+      "files": [
+        "docs/anon_009.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_010",
+    "expected": {
+      "labels": [
+        "Copperfield Logistics",
+        "$3,120,000"
+      ],
+      "must_not_contain": [
+        "Copperfield"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Copperfield Logistics.",
+      "files": [
+        "docs/anon_010.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_011",
+    "expected": {
+      "labels": [
+        "Copperfield Logistics",
+        "$2,500,000"
+      ],
+      "must_not_contain": [
+        "$2.5M",
+        "Copperfield"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Copperfield Logistics.",
+      "files": [
+        "docs/anon_011.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_012",
+    "expected": {
+      "labels": [
+        "Copperfield Logistics",
+        "$1,340,000",
+        "Nadia Osei"
+      ],
+      "must_not_contain": [
+        "Copperfield"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Copperfield Logistics.",
+      "files": [
+        "docs/anon_012.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_013",
+    "expected": {
+      "labels": [
+        "Amberview Senior Living",
+        "$890,000",
+        "Ruth Calloway"
+      ],
+      "must_not_contain": [
+        "Amberview"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Amberview Senior Living.",
+      "files": [
+        "docs/anon_013.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_014",
+    "expected": {
+      "labels": [
+        "Amberview Senior Living",
+        "Ruth Calloway"
+      ],
+      "must_not_contain": [
+        "Amberview"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Amberview Senior Living.",
+      "files": [
+        "docs/anon_014.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_015",
+    "expected": {
+      "labels": [
+        "Amberview Senior Living",
+        "Ruth Calloway"
+      ],
+      "must_not_contain": [
+        "Amberview",
+        "r.calloway@amberview.example"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Amberview Senior Living.",
+      "files": [
+        "docs/anon_015.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_016",
+    "expected": {
+      "labels": [
+        "Pinehurst Savings Bank",
+        "$2,780,000",
+        "Victor Lindqvist"
+      ],
+      "must_not_contain": [
+        "Pinehurst"
+      ]
+    },
+    "held_out": false,
+    "input": {
+      "description": "Synthetic past-response excerpt for Pinehurst Savings Bank.",
+      "files": [
+        "docs/anon_016.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_017",
+    "expected": {
+      "labels": [
+        "Pinehurst Savings Bank",
+        "Victor Lindqvist"
+      ],
+      "must_not_contain": [
+        "(555) 214-8890",
+        "Pinehurst"
+      ]
+    },
+    "held_out": true,
+    "input": {
+      "description": "Synthetic past-response excerpt for Pinehurst Savings Bank.",
+      "files": [
+        "docs/anon_017.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_018",
+    "expected": {
+      "labels": [
+        "Pinehurst Savings Bank",
+        "$1,900,000"
+      ],
+      "must_not_contain": [
+        "1,900,000",
+        "Pinehurst"
+      ]
+    },
+    "held_out": true,
+    "input": {
+      "description": "Synthetic past-response excerpt for Pinehurst Savings Bank.",
+      "files": [
+        "docs/anon_018.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_019",
+    "expected": {
+      "labels": [
+        "Larkspur Group",
+        "$1,510,000",
+        "Ines Beaumont"
+      ],
+      "must_not_contain": [
+        "Larkspur"
+      ]
+    },
+    "held_out": true,
+    "input": {
+      "description": "Synthetic past-response excerpt for Larkspur Group.",
+      "files": [
+        "docs/anon_019.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_020",
+    "expected": {
+      "labels": [
+        "Larkspur Group",
+        "Ines Beaumont",
+        "Caleb Foster"
+      ],
+      "must_not_contain": [
+        "Larkspur"
+      ]
+    },
+    "held_out": true,
+    "input": {
+      "description": "Synthetic past-response excerpt for Larkspur Group.",
+      "files": [
+        "docs/anon_020.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-07-31",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_021",
+    "expected": {
+      "labels": [
+        "Northwind Regional Health"
+      ],
+      "media": {
+        "must_flag": true
+      },
+      "must_not_contain": [
+        "Northwind"
+      ]
+    },
+    "held_out": true,
+    "input": {
+      "description": "Runtime-built DOCX with an embedded buyer logo image (C11): the identity the text scan cannot see.",
+      "files": [
+        "anon_021.docx"
+      ],
+      "generator": "engine.extraction.corpus:build_logo_case_docx"
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-08-23",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_022",
+    "expected": {
+      "labels": [
+        "Northwind Regional Health"
+      ],
+      "media": {
+        "must_flag": true
+      },
+      "must_not_contain": [
+        "Northwind"
+      ]
+    },
+    "held_out": true,
+    "input": {
+      "description": "Runtime-built DOCX with an embedded signature image (C11).",
+      "files": [
+        "anon_022.docx"
+      ],
+      "generator": "engine.extraction.corpus:build_signature_case_docx"
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-08-23",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  }
+]

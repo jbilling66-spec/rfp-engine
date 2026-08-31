@@ -1,0 +1,24 @@
+{
+  "derived_from": [
+    "kb_8d403441f4"
+  ],
+  "identifiers": {
+    "$1,180,000": "FEE",
+    "$2,340,000": "FEE",
+    "Dana Whitfield": "REFERENCE_NAME",
+    "Meridian Health Partners": "CLIENT"
+  },
+  "ingested_by": "ingestion_agent",
+  "sources": [
+    {
+      "date": "2025-06-02",
+      "source_client": "Meridian Health Partners",
+      "source_pursuit": "pur_meridian_qa_2025"
+    },
+    {
+      "date": "2025-03-20",
+      "source_client": "Meridian Health Partners",
+      "source_pursuit": "pur_meridian_intg_2025"
+    }
+  ]
+}

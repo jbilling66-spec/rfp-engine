@@ -1,0 +1,6 @@
+# The committed synthetic non-vacuity probe (B85 D4). Exactly one clearly
+# fake token; every tripwire scan appends it to its list, and the history
+# scan asserts THIS file is found — proof the plumbing can fail, on any
+# history depth, including a fresh single-commit public mirror. This is
+# never a real name, and the scans exclude this file from offender reports.
+zz-tripwire-probe-not-a-real-name-zz

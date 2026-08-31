@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 553,
+   "doc_path": [
+    "Testing Methodology"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_818ba0126d"
+  },
+  {
+   "chars": 455,
+   "doc_path": [
+    "Staffing Model"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_feafaa8aa6"
+  }
+ ],
+ "doc_id": "cd_3824e342564b",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Testing Methodology"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Interface testing ran in three passes for [CLIENT]. Pass\none validated field-level mapping with synthetic messages generated from\nthe contract sheets. Pass two replayed thirty days of production message\ntraffic into the test environment and reconciled outcomes against the\nlegacy system's results, with every mismatch dispositioned by a named\nanalyst. Pass three was a full-volume soak test at twice peak load,\nrunning the error-queue procedures live. Exit required zero unexplained\nmismatches and a signed disposition log approved by the program board."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Staffing Model"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The [CLIENT] program ran with a blended team: an onshore\nengagement lead, two functional architects for finance and payroll, a\ndata-conversion lead, and an offshore build pod of six that rotated one\nmember onshore each quarter for knowledge continuity. Client-side\ncounterparts were named for every workstream, and no deliverable was\naccepted without its counterpart's review. Staffing for the eleven-month\nengagement fit within the [FEE] services budget."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "3824e342564bd12d4adfec422b779c72031744f4252124b138b96f3c0c20cac0"
+}

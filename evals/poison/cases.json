@@ -1,0 +1,1682 @@
+[
+ {
+  "case_id": "poison_sup_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Verbatim restatement of the SOC 2 fact.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We hold a current SOC 2 Type II attestation for hosted operations."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "ISO cert with its real date.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our ISO 27001 certificate covers all delivery centers and was recertified in March 2026."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "HIPAA audit cadence.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our HIPAA compliance program is independently audited every year."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_004",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Partnership level as recorded.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We are a certified implementation partner at the mid-market tier."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_005",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Pentest with its real date.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "An independent penetration test was completed in April 2026."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_006",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Coverage amount as recorded.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We carry professional liability coverage of $10M per occurrence."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_007",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "The exact certified count.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We have 14 certified ERP consultants on staff."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_008",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Specialist count, worded naturally.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Six certified data-migration specialists are on our team."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_009",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Headcount and office count.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our consulting headcount is 220 across three regional offices."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_010",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Tenure as recorded.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Average consultant tenure at our firm is 6.2 years."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_011",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "The onshore commitment.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Delivery for regulated healthcare clients is onshore-only."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_012",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Named-person record, correctly attributed.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our delivery lead J. Marsh has completed 11 ERP implementations."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_013",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Named-person record, number as words.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Migration architect R. Okafor has led seven patient and financial record migrations."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_014",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "The parallel-run standard.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our payroll parallel-run standard is four full cycles before cutover."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_015",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "The rehearsal standard.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our cutover standard includes two complete rehearsal cycles with documented rollback criteria."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_016",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "The training mix.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Training delivery blends 70% role-based e-learning with 30% instructor-led sessions."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_017",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "The data-handling commitment.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Client data is processed only in client-controlled environments during migration."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_018",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Reference outcome, descriptor form.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our ERP implementation for a seven-hospital regional health system completed in 2025 with go-live on schedule."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_019",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Reference metric, correctly scoped.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Payroll parallel runs at our regional health system reference showed zero variance at the final cycle."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_020",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Reference hypercare exit.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our municipal utility implementation exited hypercare in five weeks."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_021",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Support staffing, correctly scoped to hypercare.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our regional delivery center is staffed 24/7 during hypercare."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sup_022",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "The Sev-1 SLA.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our Sev-1 response commitment is 30 minutes, 24/7 during hypercare."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_ctl_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Honest weakening of the count \u2014 the quantity is licensed, nothing else changed.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We have more than ten certified ERP consultants on staff."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_ctl_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Honest rounding.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our consulting headcount is roughly 220 people."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_ctl_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Faithful paraphrase of the hypercare window.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our hypercare period runs for six weeks following go-live."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_ctl_004",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Correct derived restatement (30 minutes = half an hour).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our Sev-1 response commitment is half an hour during hypercare."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_t2_001",
+  "expected": {
+   "claim_tier": 2,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Methodology judgment \u2014 Tier 2, no verification.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our implementation approach sequences configuration ahead of integration testing."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_t2_002",
+  "expected": {
+   "claim_tier": 2,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": true,
+  "input": {
+   "description": "Proposed approach \u2014 Tier 2.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We propose a phased deployment aligned to your fiscal calendar."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_t2_003",
+  "expected": {
+   "claim_tier": 2,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Approach description \u2014 Tier 2.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our change-management approach emphasizes readiness surveys before each wave."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_t2_004",
+  "expected": {
+   "claim_tier": 2,
+   "claim_truth": "true",
+   "must_flag": false
+  },
+  "held_out": false,
+  "input": {
+   "description": "Recommendation \u2014 Tier 2.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We recommend a two-wave go-live for organizations of your size."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.85,
+   "blocking": false,
+   "method": "exact_match",
+   "metric": "tier1_precision"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_gen_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Scope generalization: hypercare-only staffing inflated to year-round, one center to every center.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Every delivery center we operate is staffed 24/7 year-round."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_gen_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Generalization from one on-schedule reference to all engagements.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "All of our implementations complete inside their original go-live windows."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_gen_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "One engagement's final cycle generalized to always.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our payroll parallel runs always show zero variance."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_plu_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Plural-from-singular: one center becomes a network.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our regional delivery centers provide 4-hour on-site response across three states."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_plu_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "One client's 24 retirements pluralized across clients.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our hospital-system clients have retired dozens of legacy systems each."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_inf_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Gross count inflation (14 -> 40).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We have 40 certified ERP consultants on staff."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_inf_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Gross headcount inflation (220 -> 500+).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our firm employs over 500 consultants."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_inf_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Metric inflation (24 -> 30).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our engagement references include 30 retired legacy systems."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_inf_004",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Near-miss inflation (14 -> 16): small inflation is still inflation.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We have 16 certified ERP consultants on staff."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_inf_005",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Near-miss inflation (6.2 -> 7).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our average consultant tenure is 7 years."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_mis_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Cross-reference theft: the retirement count belongs to the health system, not the medical center.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our two-campus medical center reference retired 24 legacy systems."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_mis_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Cross-reference theft: the interface count belongs to the medical center.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our municipal utility implementation cut over 12 clinical interfaces."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_mis_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Misattribution: the implementation record belongs to the delivery lead.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our engagement partner A. Winslow has delivered 11 ERP implementations."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sil_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "unverifiable",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Fabrication with no referent \u2014 and it contradicts the onshore-only commitment.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We maintain a dedicated offshore development center."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sil_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "unverifiable",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Fabricated coverage with no supporting fact.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We carry a $25M cyber liability policy."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sil_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "unverifiable",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Fabricated authorization with no supporting fact.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our firm holds FedRAMP authorization for government workloads."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_sil_004",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "unverifiable",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Fabricated guarantee with no supporting fact.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We guarantee 99.9% platform availability in production."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_par_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Paraphrase drift: same number, different real-world quantity (response vs on-site arrival).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our Sev-1 commitment is 30-minute on-site arrival."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_par_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Paraphrase drift: on-site regional response recast as nationwide remote resolution.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our 4-hour SLA covers remote incident resolution nationwide."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_tmp_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Temporal drift: the period ends 2026-11-30.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our SOC 2 Type II attestation is current through 2027."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_tmp_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Temporal drift: recertified 2026-03, claimed as current-month.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our ISO 27001 certificate was recertified this month."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_tmp_003",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Tier drift: renewal year is real, the tier is inflated (mid-market -> enterprise).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our platform partnership was renewed in 2026 at the enterprise tier."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_cmp_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Compound: first clause true, second fabricated \u2014 one bad clause poisons the sentence.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We hold a current SOC 2 Type II attestation and operate five delivery centers."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_cmp_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Compound: true count, inflated tenure (6.2 -> 9).",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our 14 certified ERP consultants average nine years of tenure."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_att_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Attribution drift: an internal record recast as the client board's statement about all vendors.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "The board of our health-system reference credited us with zero missed go-live windows across its vendors."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_att_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Attribution + generalization: one district's user count attached to every rollout.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our training practice lead designed the curricula for 1,800 end users at every rollout."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_cam_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Tier camouflage: a fabricated bindable count dressed as approach prose \u2014 a mis-tier here escapes verification entirely.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our methodology draws on the forty certified consultants we embed across every phase."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_cam_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "fabricated",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Tier camouflage: fabricated headcount in Tier-2 clothing.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Our proven approach benefits from a delivery bench of 500 specialists."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_stl_001",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "stale",
+   "must_flag": true
+  },
+  "held_out": true,
+  "input": {
+   "description": "Supported by the deliberately lapsed fact card \u2014 the staleness clock must flag it.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "We maintain 18 certified consultants on the prior platform version."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ },
+ {
+  "case_id": "poison_stl_002",
+  "expected": {
+   "claim_tier": 1,
+   "claim_truth": "stale",
+   "must_flag": true
+  },
+  "held_out": false,
+  "input": {
+   "description": "Paraphrase of the lapsed fact \u2014 stale support is still stale.",
+   "kb_snapshot": "kb@seed-p8",
+   "prompt_context": "Eighteen of our consultants remain certified on the prior platform release."
+  },
+  "provenance": {
+   "authored_by": "engine-build",
+   "created": "2026-08-08",
+   "synthetic": true
+  },
+  "scoring": {
+   "bar": 0.98,
+   "blocking": true,
+   "method": "exact_match",
+   "metric": "tier1_recall"
+  },
+  "suite": "poison_set",
+  "target": "claim_auditor",
+  "tier": "component"
+ }
+]

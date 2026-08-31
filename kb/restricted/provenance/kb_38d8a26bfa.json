@@ -1,0 +1,16 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "$760,000": "FEE",
+    "Bluegrass Municipal Utilities": "CLIENT",
+    "Sofia Camacho": "REFERENCE_NAME"
+  },
+  "ingested_by": "ingestion_agent",
+  "sources": [
+    {
+      "date": "2024-10-14",
+      "source_client": "Bluegrass Municipal Utilities",
+      "source_pursuit": "pur_bluegrass_pay_2024"
+    }
+  ]
+}

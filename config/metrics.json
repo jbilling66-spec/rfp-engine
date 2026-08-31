@@ -1,0 +1,869 @@
+[
+  {
+    "metric_id": "edit_survival_rate",
+    "name": "Edit-survival rate",
+    "family": "quality",
+    "definition": "Share of engine-drafted text that survives, unchanged in substance, from the first drafted revision to the submitted document.",
+    "formula": "surviving_drafted_chars / total_drafted_chars, computed per section then weighted by section length; substance-preserving whitespace and formatting edits excluded.",
+    "source": {
+      "streams": ["feedback_event", "run_log"],
+      "fields": ["feedback_event.before", "feedback_event.after", "feedback_event.kind", "artifact.revision_n", "target.section_id"],
+      "filters": ["run.mode == 'live'", "pursuit reached submission"]
+    },
+    "grain": "section",
+    "unit": "ratio",
+    "direction": "higher_is_better",
+    "dimensions": ["section_type", "claim_tier", "engine_version", "pursuit_type"],
+    "comparability": {
+      "hold_constant": ["kb_snapshot", "config_digest", "engine_version", "model_pins", "prompt_version"],
+      "excludes_run_modes": ["replay", "regression_bench", "dry_run"],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 5,
+      "estimated": false,
+      "known_failure_mode": "Rises when reviewers disengage as easily as when quality improves. Read next to review_rounds_to_accept and reviewer_hours_per_proposal — survival up with hours flat is disengagement, not improvement."
+    },
+    "target": { "value": 0.7, "comparator": ">=", "basis": "baseline", "set_after_observation": true },
+    "views": ["system_owner", "practice_leadership"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "edit_reason_mix",
+    "name": "Edit reason mix",
+    "family": "quality",
+    "definition": "Distribution of reviewer edits across reason codes: factual, tone, length, structure, strategy, compliance, other.",
+    "formula": "count(edits by reason) / count(all edits), per period.",
+    "source": { "streams": ["feedback_event"], "fields": ["feedback_event.edit_reason", "feedback_event.kind"], "filters": ["kind == 'edit'"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "context_only",
+    "dimensions": ["section_type", "claim_tier", "engine_version"],
+    "comparability": { "hold_constant": ["engine_version", "prompt_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": {
+      "min_n": 20,
+      "known_failure_mode": "Diagnostic, not evaluative — a shift toward 'tone' is a voice-spec problem and a shift toward 'factual' is a KB problem. They need opposite fixes, so the mix matters more than the total."
+    },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "review_rounds_to_accept",
+    "name": "Review rounds to acceptance",
+    "family": "quality",
+    "definition": "Number of full review passes a section goes through before a reviewer accepts it.",
+    "formula": "max(revision) at accept event, per section; reported as median and 90th percentile.",
+    "source": { "streams": ["feedback_event"], "fields": ["feedback_event.revision", "feedback_event.kind"], "filters": ["kind == 'accept'"] },
+    "grain": "section",
+    "unit": "count",
+    "direction": "lower_is_better",
+    "dimensions": ["section_type", "actor_role"],
+    "comparability": { "hold_constant": ["engine_version", "prompt_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "min_n": 5, "known_failure_mode": "Compare against the WP-Zero baseline round count; without it the number has no scale." },
+    "views": ["system_owner", "practice_leadership"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "tier1_block_rate",
+    "name": "Tier-1 block rate",
+    "family": "quality",
+    "definition": "Share of drafted sections containing at least one Tier-1 bindable claim that the Claim Auditor blocked pending verification.",
+    "formula": "sections_with_tier1_block / sections_drafted.",
+    "source": { "streams": ["run_log"], "fields": ["validation.check", "validation.result", "validation.claim_tier", "run.totals.tier1_blocks"], "filters": ["run.mode == 'live'"] },
+    "grain": "run",
+    "unit": "percent",
+    "direction": "context_only",
+    "dimensions": ["section_type", "engine_version"],
+    "comparability": { "hold_constant": ["kb_snapshot", "engine_version", "prompt_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": {
+      "min_n": 5,
+      "known_failure_mode": "A falling block rate is equally consistent with a better Fact Sheet and with an auditor that stopped catching things. Only interpretable beside poison-set recall from the eval suite (E2)."
+    },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "tier1_waiver_rate",
+    "name": "Tier-1 waiver rate",
+    "family": "ops_safety",
+    "definition": "Share of Tier-1 blocks released by human waiver rather than by verification.",
+    "formula": "blocks_waived / blocks_raised.",
+    "source": { "streams": ["run_log"], "fields": ["validation.waived_by", "validation.waiver_reason"], "filters": ["run.mode == 'live'"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "lower_is_better",
+    "dimensions": ["actor_role", "section_type"],
+    "comparability": { "hold_constant": ["engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "min_n": 5, "known_failure_mode": "A high waiver rate means the blocking control has become a click-through. A waiver with an empty reason string is an alert, not a data point." },
+    "target": { "value": 0.15, "comparator": "<=", "basis": "aspirational", "set_after_observation": true },
+    "alerting": { "alert": true, "condition": "waiver recorded with empty or boilerplate waiver_reason", "severity": "serious", "route_to": "system_owner" },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "false_gap_rate",
+    "name": "False-gap rate",
+    "family": "quality",
+    "definition": "Share of gaps raised to a human where the answer was in fact retrievable from the KB at the time of the run.",
+    "formula": "gaps_resolved_from_existing_kb / gaps_raised.",
+    "source": { "streams": ["run_log", "feedback_event", "eval_results"], "fields": ["gap.gap_id", "gap.resolution", "kb.empty_result", "kb.cards_returned"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "lower_is_better",
+    "dimensions": ["section_type", "engine_version"],
+    "comparability": { "hold_constant": ["kb_snapshot", "engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "min_n": 10, "known_failure_mode": "Over-flagging trains reviewers to click past gap pings, silently disabling the invention guard (decision E3)." },
+    "target": { "value": 0.05, "comparator": "<=", "basis": "eval_bar" },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "gap_resolution_hours",
+    "name": "Gap resolution time",
+    "family": "efficiency",
+    "definition": "Elapsed hours from a gap ping being sent to a human answer being recorded.",
+    "formula": "gap.answered_at - gap.pinged_at, reported as median and share unanswered past the escalation threshold.",
+    "source": { "streams": ["run_log"], "fields": ["gap.pinged_at", "gap.answered_at", "gap.resolution"], "filters": ["run.mode == 'live'"] },
+    "grain": "pursuit",
+    "unit": "hours",
+    "direction": "lower_is_better",
+    "dimensions": ["actor_role", "section_type"],
+    "comparability": { "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "min_n": 5, "known_failure_mode": "Median hides the tail; the unanswered-past-escalation share is the number that predicts a stalled pursuit." },
+    "alerting": { "alert": true, "condition": "gap unanswered past escalation threshold (decision N4)", "severity": "warning", "route_to": "pursuit_lead" },
+    "views": ["pursuit_lead", "system_owner"],
+    "owner": "pursuit_lead",
+    "status": "active"
+  },
+  {
+    "metric_id": "red_team_score",
+    "name": "Red-team score",
+    "family": "quality",
+    "definition": "Adversarial reviewer-agent score on the annotated draft, on the calibrated rubric.",
+    "formula": "Mean rubric score across scored sections; judge model and rubric_id recorded with every value.",
+    "source": { "streams": ["run_log", "eval_results"], "fields": ["validation.check", "validation.score"], "filters": ["validation.check == 'red_team'"] },
+    "grain": "run",
+    "unit": "score",
+    "direction": "higher_is_better",
+    "dimensions": ["section_type", "engine_version"],
+    "comparability": { "hold_constant": ["engine_version", "judge_model", "prompt_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"], "annotate_on_change": true },
+    "reliability": { "min_n": 5, "estimated": true, "known_failure_mode": "An uncalibrated judge is a random number generator with a confident tone (E5). The series breaks at any judge-model change — segment, never splice." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "engine_cost_per_pursuit",
+    "name": "Engine cost per pursuit",
+    "family": "cost",
+    "definition": "Direct model API spend for all runs belonging to a pursuit.",
+    "formula": "sum(agent_call.cost_usd) over the pursuit's live runs; equals sum of run.totals.cost_usd.",
+    "source": { "streams": ["run_log"], "fields": ["agent_call.cost_usd", "run.totals.cost_usd"], "filters": ["run.mode == 'live'"] },
+    "grain": "pursuit",
+    "unit": "usd",
+    "direction": "lower_is_better",
+    "dimensions": ["model_tier", "section_type", "stage"],
+    "comparability": { "hold_constant": ["model_pins", "engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "known_failure_mode": "Never a headline. Reported alone it makes the engine look cheap while reviewer hours — orders of magnitude larger — go unmeasured. Always a component of blended_cost_per_proposal." },
+    "target": { "basis": "budget", "set_after_observation": true },
+    "alerting": { "alert": true, "condition": "exceeds soft per-pursuit budget by 50%, or circuit breaker trips (N6)", "severity": "warning", "route_to": "system_owner" },
+    "views": ["pursuit_lead", "system_owner", "finance_exec"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "engine_cost_per_section",
+    "name": "Engine cost per section",
+    "family": "cost",
+    "definition": "Direct model spend attributable to drafting and validating one section.",
+    "formula": "sum(agent_call.cost_usd) grouped by target.section_id.",
+    "source": { "streams": ["run_log"], "fields": ["agent_call.cost_usd", "target.section_id", "target.section_type", "retries"], "filters": ["run.mode == 'live'"] },
+    "grain": "section",
+    "unit": "usd",
+    "direction": "lower_is_better",
+    "dimensions": ["section_type", "model_tier", "agent"],
+    "comparability": { "hold_constant": ["model_pins", "engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "known_failure_mode": "Useful mainly as an outlier detector — the section type costing many times the median is usually a retry loop or a runaway retrieval, not expensive content." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "reviewer_hours_per_proposal",
+    "name": "Reviewer hours per proposal",
+    "family": "cost",
+    "definition": "Total human time on task across all reviewers for one pursuit, from first gate to submission.",
+    "formula": "sum(review_session.active_ms) / 3.6e6, plus gate-close confirmed adjustments; grouped by actor_role.",
+    "source": { "streams": ["review_session", "feedback_event"], "fields": ["review_session.active_ms", "review_session.actor_role", "feedback_event.actor_role"], "filters": ["run.mode == 'live'"] },
+    "grain": "pursuit",
+    "unit": "hours",
+    "direction": "lower_is_better",
+    "dimensions": ["actor_role", "section_type", "pursuit_type"],
+    "comparability": { "hold_constant": ["engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": {
+      "min_n": 3,
+      "estimated": true,
+      "known_failure_mode": "Passive timing undercounts offline review and overcounts an idle open tab; the 90-second idle timeout and the gate-close confirmation are the corrections. Aggregate by role only — never by named person outside the reviewer's own view."
+    },
+    "target": { "basis": "baseline", "comparator": "<=", "set_after_observation": true },
+    "views": ["practice_leadership", "system_owner", "finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "human_cost_per_proposal",
+    "name": "Human cost per proposal",
+    "family": "cost",
+    "definition": "Reviewer hours by role priced at the loaded rate card.",
+    "formula": "sum over roles of (reviewer_hours[role] * loaded_rate[role]); rate_card_version recorded with every value.",
+    "source": { "streams": ["review_session", "config"], "fields": ["review_session.active_ms", "review_session.actor_role", "rates.yaml"], "filters": ["run.mode == 'live'"] },
+    "grain": "pursuit",
+    "unit": "usd",
+    "direction": "lower_is_better",
+    "dimensions": ["actor_role"],
+    "comparability": { "hold_constant": ["rate_card_version", "engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"], "annotate_on_change": true },
+    "reliability": { "min_n": 3, "estimated": true, "known_failure_mode": "A rate-card revision reads as a productivity change unless the version is pinned and annotated on the trend." },
+    "views": ["practice_leadership", "finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "blended_cost_per_proposal",
+    "name": "Blended cost per submitted proposal",
+    "family": "cost",
+    "definition": "Engine spend plus priced reviewer time, per proposal actually submitted. The decision-grade cost figure.",
+    "formula": "(engine_cost + human_cost) / submissions in period; abandoned pursuits reported as a separate line, not folded in silently.",
+    "source": { "streams": ["run_log", "review_session", "config", "crm"], "fields": ["run.totals.cost_usd", "review_session.active_ms", "rates.yaml"], "filters": ["run.mode == 'live'"] },
+    "grain": "period",
+    "unit": "usd",
+    "direction": "lower_is_better",
+    "dimensions": ["pursuit_type", "period"],
+    "comparability": { "hold_constant": ["rate_card_version", "engine_version", "model_pins"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"], "annotate_on_change": true },
+    "reliability": { "min_n": 3, "estimated": true, "known_failure_mode": "Meaningless without the WP-Zero baseline to compare against — that is what makes baseline capture the one unrecoverable item (N1)." },
+    "target": { "basis": "baseline", "comparator": "<=", "set_after_observation": true },
+    "views": ["practice_leadership", "finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "cost_delta_vs_baseline",
+    "name": "Cost delta vs. human baseline",
+    "family": "cost",
+    "definition": "Blended cost per proposal as a ratio of the pre-pilot human baseline cost per proposal.",
+    "formula": "blended_cost_per_proposal / baseline_cost_per_proposal, matched on comparable pursuit type and size.",
+    "source": { "streams": ["run_log", "review_session", "manual_entry"], "fields": ["blended_cost_per_proposal", "baseline capture (WP-Zero)"] },
+    "grain": "period",
+    "unit": "ratio",
+    "direction": "lower_is_better",
+    "dimensions": ["pursuit_type"],
+    "comparability": { "hold_constant": ["rate_card_version"], "annotate_on_change": true },
+    "reliability": { "min_n": 3, "estimated": true, "confidence_caveat": "Baseline is drawn from 3–5 past pursuits and carries its own variance; treat differences under ~20% as indistinguishable.", "known_failure_mode": "Pursuit-to-pursuit variance in size and complexity swamps small deltas — match on comparable pursuits or say so." },
+    "views": ["practice_leadership", "finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "cost_bps_of_deal_value",
+    "name": "Response cost as basis points of pursued value",
+    "family": "cost",
+    "definition": "Blended response cost expressed against the estimated contract value of the pursuit.",
+    "formula": "(blended_cost / estimated_contract_value) * 10000.",
+    "source": { "streams": ["run_log", "review_session", "crm"], "fields": ["blended_cost_per_proposal", "crm.estimated_contract_value"] },
+    "grain": "pursuit",
+    "unit": "basis_points",
+    "direction": "context_only",
+    "dimensions": ["pursuit_type"],
+    "comparability": { "hold_constant": ["rate_card_version"] },
+    "reliability": { "known_failure_mode": "Depends on a CRM estimate that is itself a guess early in a pursuit; useful for proportionality, not for precision." },
+    "views": ["finance_exec", "practice_leadership"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "cost_per_win",
+    "name": "Blended cost per win",
+    "family": "cost",
+    "definition": "Total blended response cost across all pursuits in a period divided by wins recorded in that period.",
+    "formula": "sum(blended_cost over pursuits in period) / count(wins in period).",
+    "source": { "streams": ["run_log", "review_session", "crm"], "fields": ["blended_cost_per_proposal", "crm.outcome"], "filters": ["run.mode == 'live'"] },
+    "grain": "period",
+    "unit": "usd",
+    "direction": "lower_is_better",
+    "dimensions": ["pursuit_type"],
+    "comparability": { "hold_constant": ["rate_card_version", "engine_version"] },
+    "reliability": { "min_n": 8, "estimated": true, "confidence_caveat": "Lagging by the full sales cycle and dominated by win-rate noise at pilot volume. A curiosity for the first two years, not a KPI.", "known_failure_mode": "Reads as a productivity metric when it is mostly a measure of which deals happened to close." },
+    "views": ["finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "cycle_time_days",
+    "name": "Cycle time, receipt to submission",
+    "family": "efficiency",
+    "definition": "Calendar days from RFP receipt to submission.",
+    "formula": "submission_date - receipt_date, per pursuit.",
+    "source": { "streams": ["run_log", "crm"], "fields": ["run.totals.wall_ms", "artifact.kind", "crm.receipt_date"], "filters": ["run.mode == 'live'"] },
+    "grain": "pursuit",
+    "unit": "days",
+    "direction": "lower_is_better",
+    "dimensions": ["pursuit_type"],
+    "comparability": { "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "min_n": 3, "known_failure_mode": "Bounded below by the buyer's deadline, not by the engine — a team that finishes early still submits on the due date, so improvement shows up as slack, not as a shorter cycle." },
+    "target": { "basis": "baseline", "comparator": "<=", "set_after_observation": true },
+    "views": ["practice_leadership", "system_owner"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "compute_vs_human_wait",
+    "name": "Compute time vs. human wait",
+    "family": "efficiency",
+    "definition": "Split of elapsed run time into engine compute and time waiting on a human (gates and gap answers).",
+    "formula": "run.totals.compute_ms and run.totals.human_wait_ms; wall_ms = compute_ms + human_wait_ms.",
+    "source": { "streams": ["run_log"], "fields": ["run.totals.compute_ms", "run.totals.human_wait_ms", "gate.wait_ms"], "filters": ["run.mode == 'live'"] },
+    "grain": "run",
+    "unit": "milliseconds",
+    "direction": "context_only",
+    "dimensions": ["stage", "actor_role"],
+    "comparability": { "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "known_failure_mode": "Reported as a single elapsed number it measures reviewers' calendars and calls it engine latency (decision O6)." },
+    "views": ["system_owner", "pursuit_lead"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "cache_hit_ratio",
+    "name": "Prompt cache hit ratio",
+    "family": "efficiency",
+    "definition": "Share of input tokens served from prompt cache.",
+    "formula": "sum(tokens.cache_read) / sum(tokens.input + tokens.cache_read).",
+    "source": { "streams": ["run_log"], "fields": ["tokens.cache_read", "tokens.input", "tokens.cache_write"], "filters": ["run.mode == 'live'"] },
+    "grain": "run",
+    "unit": "percent",
+    "direction": "higher_is_better",
+    "dimensions": ["agent", "model_tier", "stage"],
+    "comparability": { "hold_constant": ["model_pins", "prompt_version"] },
+    "reliability": { "known_failure_mode": "The cheapest real lever on engine cost and usually worth more than a model downgrade — but a high ratio on a low-volume day means nothing." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "retry_rate",
+    "name": "Agent retry rate",
+    "family": "ops_safety",
+    "definition": "Share of agent calls that required at least one retry.",
+    "formula": "count(agent_call where retries > 0) / count(agent_call).",
+    "source": { "streams": ["run_log"], "fields": ["retries", "agent", "error.code"] },
+    "grain": "run",
+    "unit": "percent",
+    "direction": "lower_is_better",
+    "dimensions": ["agent", "model_tier", "stage"],
+    "comparability": { "hold_constant": ["model_pins", "engine_version"] },
+    "reliability": { "known_failure_mode": "Retries are where silent cost lives; a retry storm shows up in spend long before it shows up in quality." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "flywheel_yield",
+    "name": "Flywheel yield",
+    "family": "learning",
+    "definition": "Proposals the flywheel generated from reviewer feedback, and how many a steward accepted.",
+    "formula": "counts of flywheel_routing.action_taken by outcome (proposed / accepted / rejected), per period.",
+    "source": { "streams": ["feedback_event", "kb"], "fields": ["flywheel_routing.target", "flywheel_routing.action_taken", "flywheel_routing.processed_at"] },
+    "grain": "period",
+    "unit": "count",
+    "direction": "higher_is_better",
+    "dimensions": ["target", "section_type"],
+    "comparability": { "hold_constant": ["engine_version"] },
+    "reliability": { "known_failure_mode": "Volume of proposals is a vanity counter on its own; acceptance rate and the lesson-to-draft lag are the signal." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "lesson_to_draft_lag_days",
+    "name": "Lesson-to-draft lag",
+    "family": "learning",
+    "definition": "Days from a reviewer edit being recorded to the corresponding lesson appearing in a subsequent draft.",
+    "formula": "median(first_subsequent_citation_date - feedback_event.at) for accepted flywheel writes.",
+    "source": { "streams": ["feedback_event", "run_log", "kb"], "fields": ["feedback_event.at", "flywheel_routing.processed_at", "kb.cards_cited"] },
+    "grain": "period",
+    "unit": "days",
+    "direction": "lower_is_better",
+    "dimensions": ["target"],
+    "comparability": { "hold_constant": ["engine_version"] },
+    "reliability": { "min_n": 5, "known_failure_mode": "The actual measure of whether the flywheel turns. A healthy proposal count with an unbounded lag means the flywheel is a suggestion box." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "kb_citation_coverage",
+    "name": "KB citation coverage",
+    "family": "learning",
+    "definition": "Share of KB cards cited in at least one draft over the trailing twelve months.",
+    "formula": "distinct(kb.cards_cited over 12 months) / count(active cards).",
+    "source": { "streams": ["run_log", "kb"], "fields": ["kb.cards_cited", "kb.cards_opened", "kb.cards_returned"], "filters": ["run.mode == 'live'"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "higher_is_better",
+    "dimensions": ["card_type", "section_type"],
+    "comparability": { "hold_constant": ["kb_snapshot"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "known_failure_mode": "Low coverage can mean dead weight in the corpus or a retrieval problem; check against mapper recall before pruning anything." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "fact_sheet_staleness",
+    "name": "Fact Sheet staleness",
+    "family": "ops_safety",
+    "definition": "Count and share of governed Tier-1 facts past their review date.",
+    "formula": "count(facts where review_due < today) / count(active facts).",
+    "source": { "streams": ["kb"], "fields": ["kb_card.review_due", "kb_card.layer"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "lower_is_better",
+    "dimensions": ["fact_type"],
+    "comparability": {},
+    "reliability": { "known_failure_mode": "Stale governed facts are worse than missing ones — the auditor verifies against them and passes a claim that is no longer true." },
+    "target": { "value": 0.1, "comparator": "<=", "basis": "aspirational" },
+    "alerting": { "alert": true, "condition": "any certification or insurance fact past review date", "severity": "warning", "route_to": "fact_sheet_steward" },
+    "views": ["system_owner"],
+    "owner": "fact_sheet_steward",
+    "status": "active"
+  },
+  {
+    "metric_id": "win_rate",
+    "name": "Win rate",
+    "family": "business",
+    "definition": "Share of submitted proposals that resulted in a win.",
+    "formula": "wins / submissions, per period.",
+    "source": { "streams": ["crm", "feedback_event"], "fields": ["outcome.result", "outcome.score_received"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "higher_is_better",
+    "dimensions": ["pursuit_type", "engine_version"],
+    "comparability": { "hold_constant": ["engine_version"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": {
+      "min_n": 30,
+      "confidence_caveat": "At 10–20 pursuits a year a win-rate change will never reach statistical significance. 30% to 40% on eighteen pursuits is two extra wins and well inside noise. Displayed with n and this caveat, always.",
+      "known_failure_mode": "Staking the business case on demonstrated win-rate lift guarantees the case fails — not because the engine does not work, but because the sample cannot speak."
+    },
+    "views": ["practice_leadership", "finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "submission_volume",
+    "name": "Submission volume and no-bid mix",
+    "family": "business",
+    "definition": "Proposals submitted, pursuits abandoned, and opportunities no-bid in a period.",
+    "formula": "counts by disposition.",
+    "source": { "streams": ["crm", "run_log"], "fields": ["crm.disposition", "run.status"] },
+    "grain": "period",
+    "unit": "count",
+    "direction": "context_only",
+    "dimensions": ["pursuit_type", "disposition"],
+    "comparability": { "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "known_failure_mode": "Capacity gains show up here before they show up anywhere else — and so does the failure mode where cheap responses drive up bids that should have been no-bids." },
+    "views": ["practice_leadership", "finance_exec"],
+    "owner": "practice_leadership",
+    "status": "active"
+  },
+  {
+    "metric_id": "run_success_rate",
+    "name": "Run success rate",
+    "family": "ops_safety",
+    "definition": "Share of live runs that complete without an unrecovered failure.",
+    "formula": "runs with run.status == 'completed' / live runs started; resume events counted separately.",
+    "source": { "streams": ["run_log"], "fields": ["run.status", "error.recoverable", "error.action_taken"], "filters": ["run.mode == 'live'"] },
+    "grain": "period",
+    "unit": "percent",
+    "direction": "higher_is_better",
+    "dimensions": ["stage", "engine_version"],
+    "comparability": { "hold_constant": ["engine_version", "model_pins"], "excludes_run_modes": ["replay", "regression_bench", "dry_run"] },
+    "reliability": { "min_n": 5, "known_failure_mode": "A high success rate with frequent resumes is a reliability problem wearing a clean shirt — report resume count beside it (N2)." },
+    "alerting": { "alert": true, "condition": "run fails without successful resume", "severity": "serious", "route_to": "system_owner" },
+    "views": ["system_owner", "pursuit_lead"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "anonymization_scan_result",
+    "name": "Anonymization & leakage scan result",
+    "family": "ops_safety",
+    "definition": "Pass/fail of ingestion-time anonymization and the pre-export leakage scan against the restricted provenance index.",
+    "formula": "Boolean per scan. Any failure is an incident, not a trend point.",
+    "source": { "streams": ["run_log", "eval_results"], "fields": ["validation.check", "validation.result"], "filters": ["check in ('anonymization', 'pre_export_leakage')"] },
+    "grain": "run",
+    "unit": "boolean",
+    "direction": "higher_is_better",
+    "dimensions": ["stage"],
+    "comparability": {},
+    "reliability": { "known_failure_mode": "Averaging this into a percentage is itself the mistake — the required recall is 1.00 with no waiver (E4), so the only meaningful values are 'clean' and 'incident'." },
+    "target": { "value": 1, "comparator": "==", "basis": "eval_bar" },
+    "alerting": { "alert": true, "condition": "any failure", "severity": "critical", "route_to": "named human owner — incident path, not a digest" },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "eval_pass_state",
+    "name": "Eval suite pass state",
+    "family": "ops_safety",
+    "definition": "Pass/fail state of every blocking eval bar at the currently deployed release.",
+    "formula": "Per-bar result from the last full suite run attached to the release record (E7).",
+    "source": { "streams": ["eval_results"], "fields": ["scoring.metric", "scoring.bar", "scoring.blocking"] },
+    "grain": "release",
+    "unit": "boolean",
+    "direction": "higher_is_better",
+    "dimensions": ["target", "suite", "tier"],
+    "comparability": { "hold_constant": ["judge_model", "kb_snapshot"], "annotate_on_change": true },
+    "reliability": { "known_failure_mode": "A green board against an uncalibrated judge is decoration; calibration date is displayed with the board." },
+    "views": ["system_owner", "bench_only"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "injection_screen_flags",
+    "name": "Injection screen flags",
+    "family": "ops_safety",
+    "definition": "Injection-screen flags raised on intake documents (S2/T1). Any flag is reviewed at Gate 1; the count is context, not a target.",
+    "formula": "count(validation records where check == 'injection_screen' and result == 'flag'), per run.",
+    "source": { "streams": ["run_log"], "fields": ["validation.check", "validation.result", "stage"], "filters": ["check == 'injection_screen'"] },
+    "grain": "run",
+    "unit": "count",
+    "direction": "context_only",
+    "dimensions": ["stage", "engine_version"],
+    "reliability": { "known_failure_mode": "Zero forever means the screen is dead, not that buyers are polite — the planted-string regression test is the liveness check." },
+    "views": ["system_owner"],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "catalog_scan_cost_share",
+    "name": "Card-catalog scan share of run cost",
+    "family": "efficiency",
+    "definition": "Share of a run's token cost consumed by the first step of card-catalog retrieval \u2014 scanning the catalog \u2014 rather than by opening and using the documents it selects. The trigger metric for the retrieval ceiling.",
+    "formula": "catalog_scan_tokens_cost / run.totals.cost_usd, per run; catalog scan identified by the retrieval step marker on agent_call records.",
+    "source": {
+      "streams": [
+        "run_log"
+      ],
+      "fields": [
+        "agent_call.cost_usd",
+        "agent_call.step",
+        "kb_retrieval.catalog_size",
+        "run.totals.cost_usd"
+      ],
+      "filters": [
+        "run.mode == 'live'"
+      ]
+    },
+    "grain": "run",
+    "unit": "ratio",
+    "direction": "lower_is_better",
+    "dimensions": [
+      "engine_version",
+      "kb_snapshot"
+    ],
+    "comparability": {
+      "hold_constant": [
+        "kb_snapshot",
+        "engine_version",
+        "config_digest",
+        "model_pins"
+      ],
+      "excludes_run_modes": [
+        "replay",
+        "regression_bench",
+        "dry_run"
+      ],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 10,
+      "estimated": false,
+      "known_failure_mode": "A share, so it falls when anything else gets more expensive. A retry storm makes retrieval look efficient. Read beside catalog_size in absolute terms \u2014 the ceiling is driven by corpus growth, not by the ratio."
+    },
+    "target": {
+      "value": 0.2,
+      "comparator": "<",
+      "basis": "budget",
+      "set_after_observation": false
+    },
+    "alerting": {
+      "alert": true,
+      "condition": "sustained above 0.20 over a reporting period",
+      "severity": "warning",
+      "route_to": "system_owner"
+    },
+    "views": [
+      "system_owner",
+      "bench_only"
+    ],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "extraction_fabrication_count",
+    "name": "Extraction fabrication count",
+    "family": "ops_safety",
+    "definition": "Count of table cells present in one extraction path and absent or differing in the other, when the same document is extracted both deterministically and by the vision-language path. A non-zero count in the production path means the extractor invented content.",
+    "formula": "count of cell-level diffs between deterministic and VLM extraction of the same table; reported as a raw count, never as a rate.",
+    "source": {
+      "streams": [
+        "eval_results",
+        "run_log"
+      ],
+      "fields": [
+        "extraction.path",
+        "extraction.table_id",
+        "extraction.cell_values"
+      ],
+      "filters": [
+        "paired extraction runs only"
+      ]
+    },
+    "grain": "run",
+    "unit": "count",
+    "direction": "lower_is_better",
+    "dimensions": [
+      "extraction_path",
+      "document_class",
+      "extractor_version"
+    ],
+    "comparability": {
+      "hold_constant": [
+        "model_pins",
+        "config_digest",
+        "engine_version"
+      ],
+      "excludes_run_modes": [
+        "dry_run"
+      ],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 1,
+      "estimated": false,
+      "known_failure_mode": "Detects disagreement, not truth: if both paths fabricate the same cell, the count is zero. It is a tripwire, not a proof of correctness, and it only fires where a labeled or paired comparison exists."
+    },
+    "target": {
+      "value": 0,
+      "comparator": "==",
+      "basis": "eval_bar",
+      "set_after_observation": false
+    },
+    "alerting": {
+      "alert": true,
+      "condition": "any non-zero count in the production extraction path",
+      "severity": "critical",
+      "route_to": "system_owner"
+    },
+    "views": [
+      "system_owner",
+      "bench_only"
+    ],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "extraction_seconds_per_page",
+    "name": "Extraction seconds per page",
+    "family": "efficiency",
+    "definition": "Wall-clock extraction time per page of source document, on production hardware. The throughput watch on the extraction layer, which is a cost accepted for quality rather than a gain.",
+    "formula": "extraction_wall_ms / page_count, per document; report p50 and p95, never the mean.",
+    "source": {
+      "streams": [
+        "run_log"
+      ],
+      "fields": [
+        "extraction.wall_ms",
+        "extraction.page_count",
+        "extraction.path",
+        "extraction.cache_hit"
+      ],
+      "filters": [
+        "cache_hit == false"
+      ]
+    },
+    "grain": "run",
+    "unit": "milliseconds",
+    "direction": "lower_is_better",
+    "dimensions": [
+      "extraction_path",
+      "document_class",
+      "extractor_version"
+    ],
+    "comparability": {
+      "hold_constant": [
+        "engine_version",
+        "config_digest",
+        "model_pins"
+      ],
+      "excludes_run_modes": [
+        "dry_run"
+      ],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 10,
+      "estimated": false,
+      "known_failure_mode": "Improves dramatically and misleadingly once the content-digest cache warms. Cache hits are filtered out of this metric for that reason; watch cache_hit_ratio separately."
+    },
+    "target": {
+      "value": 5000,
+      "comparator": "<=",
+      "basis": "budget",
+      "set_after_observation": false
+    },
+    "alerting": {
+      "alert": true,
+      "condition": "p95 > 5000ms per page on target hardware",
+      "severity": "warning",
+      "route_to": "system_owner"
+    },
+    "views": [
+      "system_owner",
+      "bench_only"
+    ],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "extraction_table_fidelity",
+    "name": "Extraction table fidelity",
+    "family": "quality",
+    "definition": "Cell-level agreement between extracted tables and hand-labeled ground truth on the extraction bench. The standing quality signal for the document extraction layer.",
+    "formula": "matching_cells / total_labeled_cells, reported separately for simple and complex (merged/nested-header/multi-page) tables; never averaged across the two.",
+    "source": {
+      "streams": [
+        "eval_results",
+        "run_log"
+      ],
+      "fields": [
+        "extraction.doc_id",
+        "extraction.table_id",
+        "extraction.cell_values",
+        "bench.ground_truth"
+      ],
+      "filters": [
+        "bench corpus only",
+        "extractor_version pinned"
+      ]
+    },
+    "grain": "release",
+    "unit": "ratio",
+    "direction": "higher_is_better",
+    "dimensions": [
+      "document_class",
+      "table_complexity",
+      "extractor_version"
+    ],
+    "comparability": {
+      "hold_constant": [
+        "engine_version",
+        "config_digest",
+        "model_pins"
+      ],
+      "excludes_run_modes": [
+        "dry_run"
+      ],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 2,
+      "estimated": false,
+      "known_failure_mode": "Measured only against the labeled bench, which is small and hand-built. A high score means the extractor handles the documents someone thought to label \u2014 not the next scanned solicitation. Refresh the bench whenever a production document defeats it."
+    },
+    "target": {
+      "value": 0.9,
+      "comparator": ">=",
+      "basis": "eval_bar",
+      "set_after_observation": false
+    },
+    "alerting": {
+      "alert": true,
+      "condition": "complex-table fidelity < 0.90 on the bench",
+      "severity": "serious",
+      "route_to": "system_owner"
+    },
+    "views": [
+      "system_owner",
+      "bench_only"
+    ],
+    "owner": "system_owner",
+    "status": "active"
+  },
+  {
+    "metric_id": "manual_prep_hours_per_pursuit",
+    "name": "Manual document-prep hours per pursuit",
+    "family": "cost",
+    "definition": "Human time spent preparing buyer documents for the engine \u2014 transcribing requirement or compliance matrices, retyping tables, cleaning scans, restructuring forms. Layer 2 of the cost model, and the business claim the extraction layer is meant to satisfy.",
+    "formula": "sum of feedback_event.effort.active_ms where effort.scope == 'document_prep', converted to hours, per pursuit; reviewer-confirmed figures preferred over passive where both exist.",
+    "source": {
+      "streams": [
+        "feedback_event"
+      ],
+      "fields": [
+        "feedback_event.effort.active_ms",
+        "feedback_event.effort.confirmed_minutes",
+        "feedback_event.effort.scope",
+        "feedback_event.actor_role"
+      ],
+      "filters": [
+        "run.mode == 'live'",
+        "effort.scope == 'document_prep'"
+      ]
+    },
+    "grain": "pursuit",
+    "unit": "hours",
+    "direction": "lower_is_better",
+    "dimensions": [
+      "actor_role",
+      "document_class",
+      "engine_version"
+    ],
+    "comparability": {
+      "hold_constant": [
+        "engine_version",
+        "rate_card_version",
+        "config_digest"
+      ],
+      "excludes_run_modes": [
+        "replay",
+        "regression_bench",
+        "dry_run"
+      ],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 5,
+      "estimated": true,
+      "confidence_caveat": "Passively measured and labeled as estimated. Requires the document_prep effort scope to be live before the pilot \u2014 this work disappears once extraction improves, and cannot be reconstructed after the fact.",
+      "known_failure_mode": "Goes to zero for the honest reason (nobody transcribes any more) and the dishonest one (people stopped logging it, or moved the work outside the tool). Read next to reviewer_hours_per_proposal: prep falling while total hours hold flat means the work moved, not vanished."
+    },
+    "target": {
+      "comparator": "<",
+      "basis": "baseline",
+      "set_after_observation": true
+    },
+    "views": [
+      "system_owner",
+      "practice_leadership",
+      "finance_exec"
+    ],
+    "owner": "system_owner",
+    "status": "active"
+  }
+]

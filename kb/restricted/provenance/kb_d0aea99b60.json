@@ -1,0 +1,16 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "$2,215,000": "FEE",
+    "Harborlight Insurance Group": "CLIENT",
+    "Marcus Ellison": "REFERENCE_NAME"
+  },
+  "ingested_by": "ingestion_agent",
+  "sources": [
+    {
+      "date": "2025-05-30",
+      "source_client": "Harborlight Insurance Group",
+      "source_pursuit": "pur_harborlight_erp_2025"
+    }
+  ]
+}

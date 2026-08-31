@@ -1,0 +1,7 @@
+# Per-agent config: model tier, tool grants (S5 least privilege).
+# The Internal Researcher summarizes KB cards that CODE retrieved and opened
+# through the traced card_search/targeted_open choke point (B21(4)) — the
+# model drives no search and holds no tools; cards are inlined in kb_card
+# frames. Mid tier per the architecture roster.
+tier: mid
+tools: []

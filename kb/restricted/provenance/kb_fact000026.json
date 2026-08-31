@@ -1,0 +1,14 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "Cascade Valley Medical Center": "CLIENT"
+  },
+  "ingested_by": "steward",
+  "sources": [
+    {
+      "date": "2026-06-15",
+      "source_client": "Cascade Valley Medical Center",
+      "source_pursuit": "pur_fact_sheet_seed"
+    }
+  ]
+}

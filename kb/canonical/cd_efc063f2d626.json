@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 546,
+   "doc_path": [
+    "Implementation Methodology"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_88078df15d"
+  },
+  {
+   "chars": 468,
+   "doc_path": [
+    "Data Migration Approach"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_a795c02360"
+  }
+ ],
+ "doc_id": "cd_efc063f2d626",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Implementation Methodology"
+  },
+  {
+   "kind": "paragraph",
+   "text": "[CLIENT] engaged our team to replace a twenty-year-old\ngeneral ledger and payroll platform across seven hospitals. We proposed a\ntwo-wave cutover: finance and supply chain in wave one, payroll and human\ncapital in wave two, with a hard gate between waves requiring three\nconsecutive clean payroll parallels before wave-two entry. Each wave closed\nwith a rollback rehearsal, and go/no-go criteria were signed by the\nexecutive sponsor rather than the project team. The total engagement was\ndelivered for a fixed fee of [FEE] across fourteen months."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Data Migration Approach"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Our migration factory ran seven mock conversions before the first\nproduction load for [CLIENT]. Legacy chart-of-accounts\nsegments were mapped through a governed crosswalk workbook with sign-off by\nthe controller's office, and every mock produced a reconciliation packet:\nrow counts, hash totals, and out-of-balance exceptions with named owners.\nReference contact for this work: [REFERENCE_NAME], VP of Enterprise\nApplications, who chaired the weekly conversion review."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "efc063f2d626f0a0eef5552ea3389cd9e0bb2f6a646206629de5861f16024569"
+}

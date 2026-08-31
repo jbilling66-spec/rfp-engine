@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 573,
+   "doc_path": [
+    "Payroll Parallel Testing"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_a57b5490e1"
+  },
+  {
+   "chars": 451,
+   "doc_path": [
+    "Interface Inventory and Sequencing"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_38d8a26bfa"
+  }
+ ],
+ "doc_id": "cd_a1dc2db94274",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Payroll Parallel Testing"
+  },
+  {
+   "kind": "paragraph",
+   "text": "For the utility's biweekly and monthly payroll populations we ran four full\nparallel cycles, comparing every earning, deduction, and employer\ncontribution line against the legacy register at the employee level.\nVariances were classified as configuration, data, or legacy-defect, and\nonly configuration variances blocked exit. The final parallel for [CLIENT] produced 100% net-pay matches across 1,840 employees,\nwith a signed variance disposition for every prior exception. Union pay\nrules \u2014 standby, callout, and shift differentials \u2014 received dedicated\nscenario coverage."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Interface Inventory and Sequencing"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The [CLIENT] landscape carried forty-two interfaces, from meter-data systems\nto the state retirement fund. We classified each as retire, replace, or\ncarry-forward during design, and sequenced builds by payroll dependency:\ntime-entry and retirement feeds first, procurement punch-outs last.\nInterface cutover rehearsed twice before go-live inside the [FEE]\nfixed-fee engagement. Reference contact: [REFERENCE_NAME], Director of\nAdministrative Services."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "a1dc2db94274c69a96edeac131aece68006ea30b72537e35c7f73bdc09f74b81"
+}

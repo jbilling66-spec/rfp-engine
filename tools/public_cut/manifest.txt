@@ -1,0 +1,34 @@
+# The public-cut allowlist (B85 D7): deny-by-default — a path absent here
+# does NOT ship. tools/public_cut/deny.txt names the deliberate exclusions;
+# tests/contracts/test_public_cut.py pins both against the tree.
+.github
+.gitignore
+AGENTS.md
+CLAUDE.md
+CONTRIBUTING.md
+LICENSE
+Makefile
+README.md
+SECURITY.md
+config
+docker
+docs/advisor
+docs/graph
+docs/milestones/p11-diagnostic/baselines
+docs/milestones/p11-diagnostic/cost-actuals.md
+docs/milestones/p11-diagnostic/runs
+docs/milestones/p8-live-run/runs
+docs/pilot
+docs/steward
+engine
+evals
+kb
+prompts
+pyproject.toml
+requirements-extraction.lock
+requirements.lock
+schemas
+spec/CLAUDE.md
+spec/observability/sample-run.jsonl
+tests
+tools

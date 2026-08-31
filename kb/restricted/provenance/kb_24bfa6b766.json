@@ -1,0 +1,19 @@
+{
+  "derived_from": [
+    "kb_14bc4ba811",
+    "kb_ae15832e93"
+  ],
+  "identifiers": {
+    "$1,050,000": "FEE",
+    "Aaron Tuck": "REFERENCE_NAME",
+    "Tallgrass County Schools": "CLIENT"
+  },
+  "ingested_by": "ingestion_agent",
+  "sources": [
+    {
+      "date": "2025-06-25",
+      "source_client": "Tallgrass County Schools",
+      "source_pursuit": "pur_tallgrass_ocm_2025"
+    }
+  ]
+}

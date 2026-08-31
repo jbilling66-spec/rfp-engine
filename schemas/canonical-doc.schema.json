@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/canonical-doc.schema.json",
+  "title": "CanonicalDoc",
+  "description": "The L1 canonical document model plus its L2 chunks (WP13 R1/R2): every source format resolves to this shape and nothing enters the KB except through it. Holds ANONYMIZED text only (R7) — raw parsed output lives in the pursuit workspace under its TTL, raw source bytes (L0) in the restricted store. Derivation links are build-time, not retrofit: source_hash points at L0, each chunk's element span points into L1, and each chunk's kb_id backref points at its L3 card — the backrefs are what make heading-path descent a single-file read instead of a catalog scan (R9). Deliberately clock-free: byte-identical across kill/resume.",
+  "type": "object",
+  "required": ["doc_id", "source_hash", "extractor", "extraction_fingerprint", "extraction_status", "elements", "chunks"],
+  "additionalProperties": false,
+  "properties": {
+    "doc_id": { "type": "string", "pattern": "^cd_[0-9a-f]{12}$", "description": "Content-addressed from the L0 bytes: cd_ + sha256(source)[:12]." },
+    "source_hash": { "type": "string", "description": "Full sha256 of the L0 source artifact — the L1→L0 derivation link and the identity.source_hash every derived card carries." },
+    "extractor": { "type": "string", "description": "Which stack parsed this (python-docx | docling | text …) — the B57 seam identity, same vocabulary as ExtractedDoc.extractor." },
+    "extraction_fingerprint": { "type": "string", "description": "stack_fingerprint() of the producing stack (C12 machinery)." },
+    "extraction_status": {
+      "type": "string",
+      "enum": ["clean", "degraded", "manual"],
+      "description": "degraded = the parse was imperfect; the document is STILL modeled and STILL ingested (X6). Inherited by every card minted from this model."
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "images": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "elements": {
+      "type": "array",
+      "description": "The document's structure in reading order — the neutral element list both producer stacks emit into.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string", "enum": ["heading", "paragraph", "table_row", "figure", "qa"] },
+          "text": { "type": "string", "description": "Anonymized. table_row = pipe-joined cells; figure = empty until a description card exists (generation rides A1); qa = 'Q: …\\n\\nA: …'." },
+          "level": { "type": "integer", "minimum": 1, "description": "heading only: outline depth, 1 = outermost." },
+          "page": { "type": "integer", "minimum": 1, "description": "Source page where provenance survives extraction (PDF); absent for DOCX/text." },
+          "figure_class": { "type": "string", "enum": ["chart", "diagram", "logo", "signature", "screenshot", "photo", "other"], "description": "figure only: picture-classification result." }
+        }
+      }
+    },
+    "chunks": {
+      "type": "array",
+      "description": "L2: structure-aware chunks. Boundaries follow document structure; NO size cap anywhere (R4) — size is recorded on the card's chunk_span as a diagnostic, never enforced (R5).",
+      "items": {
+        "type": "object",
+        "required": ["doc_path", "elements", "chars"],
+        "additionalProperties": false,
+        "properties": {
+          "doc_path": { "type": "array", "items": { "type": "string" }, "description": "Heading path, outermost first. Navigation and provenance only (KB10) — never a retrieval key, never identity." },
+          "elements": {
+            "type": "array",
+            "prefixItems": [{ "type": "integer", "minimum": 0 }, { "type": "integer", "minimum": 0 }],
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "[start, end) index span into elements[] — the L2→L1 derivation link."
+          },
+          "kb_id": { "type": "string", "description": "Backref to the L3 card minted from this chunk — the descent index. Absent until the card exists." },
+          "chars": { "type": "integer", "minimum": 0 },
+          "pages": { "type": "array", "items": { "type": "integer" } }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "description": "Mapping between the two gap vocabularies (P0 erratum, DECISIONS B7). run-log.gap.reason records the fine-grained operational cause; pursuit-plan.gap.kind is the coarser review-surface category shown at Gate 2. The engine writes the reason; the plan derives the kind via reason_to_kind.",
+  "reason_to_kind": {
+    "kb_empty": "no_content",
+    "stale_fact": "tier1_unverified",
+    "needs_sme": "needs_sme",
+    "ambiguous_requirement": "needs_sme",
+    "partner_only": "needs_sme",
+    "not_offered": "no_content"
+  },
+  "kind_to_default_reason": {
+    "no_content": "kb_empty",
+    "thin_content": "kb_empty",
+    "tier1_unverified": "stale_fact",
+    "needs_sme": "needs_sme"
+  },
+  "notes": [
+    "B24 (recorded decision, 2026-08-02): partner_only -> needs_sme and not_offered -> no_content are CONFIRMED. One action model: every kind surfaces as a flagged gap requiring a human disposition (answered | omit_approved | reframed | draft_flagged). Reframe is NEVER preselected — it is one option the human may pick, and it always carries mandatory_review when chosen. The reason values remain operational information only.",
+    "thin_content has no dedicated run-log reason; it is kb_empty at the operational layer with a thin-content marker in the plan."
+  ]
+}

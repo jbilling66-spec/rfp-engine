@@ -1,0 +1,14 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "Bluegrass Municipal Utilities": "CLIENT"
+  },
+  "ingested_by": "steward",
+  "sources": [
+    {
+      "date": "2026-06-15",
+      "source_client": "Bluegrass Municipal Utilities",
+      "source_pursuit": "pur_fact_sheet_seed"
+    }
+  ]
+}

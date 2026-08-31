@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 543,
+   "doc_path": [
+    "Project Management Approach"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_50d5c5004a"
+  },
+  {
+   "chars": 410,
+   "doc_path": [
+    "Governance and Escalation"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_96afea2f4d"
+  }
+ ],
+ "doc_id": "cd_bbd0fa440b62",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Project Management Approach"
+  },
+  {
+   "kind": "paragraph",
+   "text": "[CLIENT]'s replacement program ran on a two-week\nsprint cadence inside a stage-gated frame: design, build, test, deploy,\nstabilize. The program management office published a single burn-down and\na decision log; every open decision had a named owner and a due date, and\ndecisions older than ten business days escalated automatically to the\nsteering committee. Scope change went through a one-page impact template \u2014\nschedule, cost, and downstream training impact \u2014 before any build work\nstarted. The program delivered on a [FEE] fixed-fee basis."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Governance and Escalation"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Governance for [CLIENT] had three tiers: a weekly\nworkstream sync, a biweekly program board with the CIO and CFO, and a\nmonthly executive steering committee. Risks carried likelihood, impact,\nand a mitigation owner; any risk scored red for two consecutive reviews\nwent to steering with a written mitigation plan. Reference contact: [REFERENCE_NAME], Chief Information Officer, who co-chaired the program board."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "bbd0fa440b627ab7b4011d0d515bd337c1e8d40283d64e265016afb6963934ab"
+}

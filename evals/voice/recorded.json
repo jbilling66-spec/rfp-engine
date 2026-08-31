@@ -1,0 +1,10 @@
+{
+ "benign_total": 5,
+ "false_positives": [],
+ "misses": [],
+ "n_cases": 27,
+ "n_terms": 22,
+ "recall": 1.0,
+ "spec_fingerprint": "6c790824cf4828922bc96e9550a0ac08cfca949833d813c2d117f85c28e803c5",
+ "suite": "voice_scan"
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/draft.schema.json",
+  "title": "Draft",
+  "description": "The drafting stage's artifact of record (P7, B31): every section and slot the approved plan owes, each with drafted prose or a named reason it has none. Written complete at prepass (in_progress — a run killed before its first model call still names every slot owed) and finalized at assembly. P9's revision lane increments revision_n; P9 write-back consumes the per-slot answers.",
+  "type": "object",
+  "required": ["pursuit_id", "plan_sha256", "revision_n", "status", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "plan_sha256": { "type": "string", "description": "sha256 of plan.frozen.json — binds this draft to the Gate-2-approved plan (T6 analog). A re-planned pursuit voids the draft by mismatch, not by convention." },
+    "revision_n": { "type": "integer", "minimum": 0, "description": "0 at P7. The P9 revision lane increments it (revise-never-restart)." },
+    "status": { "type": "string", "enum": ["in_progress", "complete"], "description": "in_progress = the prepass skeleton; complete = assembly finished (pended sections may remain — completeness of the record, not of the content)." },
+    "warnings": { "type": "array", "items": { "type": "string" }, "description": "Run-level drop-and-report records (B31): every wire deviation the parser corrected, named. Nothing is dropped silently." },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["section_id", "section_type", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "section_id": { "type": "string" },
+          "title": { "type": "string" },
+          "section_type": { "type": "string", "description": "Deterministic code-assigned type (B31: the 16-value KB ingest vocabulary + 'other'). Deliberately a bare string, not an enum — the vocabulary's source of truth is A2's; pinning it here would force schema churn there. Mirrors run-log target.section_type; 13 metrics slice on it." },
+          "status": { "type": "string", "enum": ["drafted", "pending", "omitted", "skipped_non_prose"], "description": "drafted = prose landed; pending = owed but not produced (reason names why — parse failure, awaiting disposition, killed run); omitted = human-approved omission (B24); skipped_non_prose = no authored-prose lane at P7 (B28(4))." },
+          "reason": { "type": "string", "description": "Why a non-drafted section has no prose. Required by code on every pending/omitted/skipped section." },
+          "prose": { "type": "string", "description": "Path B: the section's drafted text. Absent on Path A (per-slot answers carry the text)." },
+          "answers": {
+            "type": "array",
+            "description": "Path A: one entry per slot the section answers, in plan slot order. The write-back grain (P9).",
+            "items": {
+              "type": "object",
+              "required": ["slot_id", "status"],
+              "additionalProperties": false,
+              "properties": {
+                "slot_id": { "type": "string" },
+                "ref_id": { "type": "string", "description": "The buyer's own numbering, carried verbatim from the slot." },
+                "status": { "type": "string", "enum": ["drafted", "pending", "omitted", "gated_skipped", "awaiting_disposition"] },
+                "prose": { "type": "string" },
+                "reason": { "type": "string", "description": "Named reason for every non-drafted status." },
+                "kb_ids": { "type": "array", "items": { "type": "string" }, "description": "This answer's surviving citations — model-claimed ids intersected by code against the cards actually opened for this section (B21(4) carried to drafting). Union across answers = the section's cards_cited." },
+                "proposed_approach": { "type": "boolean", "description": "Code-scanned presence of the literal [proposed approach] flag in prose — never model-claimed." },
+                "omission_stated": { "type": "boolean", "description": "True when the code-composed honest-omission line is present (omit_approved + state_if_not_offered constraint flag; v1 lesson — the model structurally cannot author refusals)." }
+              }
+            }
+          },
+          "cards_cited": { "type": "array", "items": { "type": "string" }, "description": "Section-level citation union, plan kb_hits order. Mirrors the run-log step:'cite' kb_retrieval line — the WP9 edit_survival join input." },
+          "canonical": {
+            "type": "array",
+            "description": "One entry per canonical-block card the plan selected for this section (B12): was its body reproduced near-verbatim (whitespace-normalized containment)?",
+            "items": {
+              "type": "object",
+              "required": ["kb_id", "verified"],
+              "additionalProperties": false,
+              "properties": {
+                "kb_id": { "type": "string" },
+                "verified": { "type": "boolean", "description": "False = recorded finding, card still cited; P8's validation stack formalizes enforcement." }
+              }
+            }
+          },
+          "proposed_approach": { "type": "boolean", "description": "Any [proposed approach] flag present in this section's prose (code-scanned)." },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

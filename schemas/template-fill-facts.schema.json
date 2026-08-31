@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/template-fill-facts.schema.json",
+  "title": "TemplateFillFacts",
+  "description": "The in-place firm-template fill's decision record (P17/C8, B75§3c) — the writeback-facts pattern for the firm_default lane, in its own vocabulary: a fill records SECTIONS replaced (guidance stripped, placeholder removed), not cells written. Every section the template carries appears exactly once — filled, honestly left carrying its guidance, or refused with the reason — so 'what still needs a human?' is answerable by looking (remaining_guidance is v1's reporter made contract). The template at config/ is never mutated; output_file is the copy under exports/submission/.",
+  "type": "object",
+  "required": ["pursuit_id", "plan_sha256", "draft_sha256", "revision_n", "confirmed_by", "at", "template_file", "template_sha256", "output_file", "sections", "remaining_guidance"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "plan_sha256": { "type": "string", "description": "The frozen plan whose sections fed the fill — prose comes only from what it names." },
+    "draft_sha256": { "type": "string", "description": "The exact envelope whose section prose landed in the template." },
+    "revision_n": { "type": "integer", "minimum": 0 },
+    "confirmed_by": { "type": "string", "description": "The human who confirmed the previewed fill (S7) — it never runs unconfirmed." },
+    "at": { "type": "string", "format": "date-time" },
+    "template_file": { "type": "string", "description": "The firm template the copy was made FROM (config/templates/…)." },
+    "template_sha256": { "type": "string", "description": "Must equal the reference_sha256 the path_b_outline checkpoint recorded — the fill only touches the EXACT template the plan was built against (the digest-bound-source rule, B74§3b)." },
+    "output_file": { "type": "string", "description": "The filled copy under exports/submission/ — for firm_default pursuits this IS the to-the-buyer document (B75§1d: it replaces the generated response.docx)." },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["section_id", "docx_anchor", "decision", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "section_id": { "type": "string", "description": "The plan section whose prose fed (or should have fed) this template section." },
+          "slot_id": { "type": "string", "description": "The template slot (s-hNN…) the section bound through based_on." },
+          "docx_anchor": { "type": "string", "description": "The template heading, verbatim — placement is re-derived by reparse (guidance_box_map), never persisted." },
+          "decision": { "type": "string", "enum": ["filled", "kept_guidance", "fill_by_hand", "refused_unnamed"], "description": "filled = section prose REPLACED the guidance box and the placeholder table was removed (replacement-not-insertion); kept_guidance = no drafted prose for this section, so its guidance survives IDENTICAL — the honest outcome, reported in remaining_guidance; fill_by_hand = the shape has no automated fill (grids, case blocks, the metadata table, inline bracketed paragraphs — B75§1e) and a human finishes it; refused_unnamed = the frozen plan names no section for this template anchor." },
+          "reason": { "type": "string" },
+          "paragraphs": { "type": "integer", "minimum": 0, "description": "filled: how many delivered paragraphs replaced the guidance box." },
+          "placeholder_removed": { "type": "boolean", "description": "filled: the '[ Replace with … ]' placeholder table was deleted too — the v1 gap fixed (v1 shipped documents still carrying them)." }
+        }
+      }
+    },
+    "remaining_guidance": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The guidance texts still in the output — the sections a human still owns (v1's remaining_guidance reporter, now on the record). Includes fill_by_hand shapes."
+    }
+  }
+}

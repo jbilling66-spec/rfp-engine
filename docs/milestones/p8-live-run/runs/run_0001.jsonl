@@ -1,0 +1,9 @@
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":0,"ts":"2026-08-08T17:00:17.900Z","record_type":"run_start","run":{"mode":"live","engine_version":"0.1.0+db11d23","config_digest":"cfg:df4a0eff9c64","kb_snapshot":"kb@1e3cbc289a8e","research_mode":"airgapped"}}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":1,"ts":"2026-08-08T17:00:17.923Z","record_type":"stage_start","stage":"intake"}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":2,"ts":"2026-08-08T17:00:17.924Z","record_type":"validation","stage":"intake","validation":{"check":"injection_screen","result":"pass"}}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":3,"ts":"2026-08-08T17:00:17.926Z","record_type":"stage_end","stage":"intake"}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":4,"ts":"2026-08-08T17:00:17.926Z","record_type":"stage_start","stage":"bid_brief"}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":5,"ts":"2026-08-08T17:00:37.860Z","record_type":"agent_call","agent":"intake_analyst","model":"claude-fable-5","model_tier":"frontier","tokens":{"input":1777,"output":1647,"cache_write":1229},"cost_usd":0.115483,"stage":"bid_brief"}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":6,"ts":"2026-08-08T17:00:37.865Z","record_type":"artifact","stage":"bid_brief","artifact":{"kind":"bid_brief","path":"pursuits/slice-live/pur_demo/brief.json","sha256":"adc75959bfcfb5ade7737b10884623c3073d0d09a14e8d3687f59bc145b1fbe4"}}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":7,"ts":"2026-08-08T17:00:37.866Z","record_type":"stage_end","stage":"bid_brief"}
+{"run_id":"run_0001","pursuit_id":"pur_demo","seq":8,"ts":"2026-08-08T17:00:37.867Z","record_type":"run_end","run":{"status":"completed","totals":{"cost_usd":0.115483,"input_tokens":1777,"output_tokens":1647,"agent_calls":1,"gaps_opened":0,"tier1_blocks":0}}}

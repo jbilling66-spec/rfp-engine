@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 590,
+   "doc_path": [
+    "Executive Summary"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_b49ce6092f"
+  },
+  {
+   "chars": 438,
+   "doc_path": [
+    "Staffing and Roles"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_7080bd6b13"
+  }
+ ],
+ "doc_id": "cd_8627544e6898",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Executive Summary"
+  },
+  {
+   "kind": "paragraph",
+   "text": "[CLIENT] asked for a partner who had moved a K-12 district\noff a state-supported legacy finance system without disrupting a single\npayroll. Our proposal committed to exactly that: a phased implementation\nthat kept the legacy system live in parallel until three clean payroll\ncycles proved the replacement, staffed by consultants who had done\ndistrict conversions in this state and priced at a fixed [FEE] with no\nchange orders for in-scope work. The board's priorities \u2014 payroll\ncontinuity, state reporting compliance, and school-secretary usability \u2014\nstructured every section that follows."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Staffing and Roles"
+  },
+  {
+   "kind": "paragraph",
+   "text": "The [CLIENT] engagement was deliberately small: an\nengagement lead who had run four district implementations, a\nfinance-and-HR architect, and a conversion specialist, supplemented by the\ndistrict's own business office staff for validation. We named every\nindividual in the proposal with their district references rather than\noffering a staffing profile. Reference contact: [REFERENCE_NAME], Assistant\nSuperintendent for Business Services."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "8627544e6898b29624f9a1a5c4b44a45d07188ee6564ecf00645f2371f0f056e"
+}

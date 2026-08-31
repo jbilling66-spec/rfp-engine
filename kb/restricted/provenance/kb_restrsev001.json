@@ -1,0 +1,14 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "Harborlight Insurance Group": "CLIENT"
+  },
+  "ingested_by": "steward",
+  "sources": [
+    {
+      "date": "2026-06-01",
+      "source_client": "Harborlight Insurance Group",
+      "source_pursuit": "pur_curated_seed"
+    }
+  ]
+}

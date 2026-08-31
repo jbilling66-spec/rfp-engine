@@ -1,0 +1,54 @@
+{
+ "chunks": [
+  {
+   "chars": 626,
+   "doc_path": [
+    "Training and Change Management"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_965e907e20"
+  },
+  {
+   "chars": 566,
+   "doc_path": [
+    "Support and Hypercare"
+   ],
+   "elements": [
+    3,
+    4
+   ],
+   "kb_id": "kb_d0aea99b60"
+  }
+ ],
+ "doc_id": "cd_3b99354cb6f0",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Training and Change Management"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Our change program paired every department with a trained super-user before\nthe first classroom session. Training followed a teach-the-workflow model:\nrole-based curricula built from the client's own configured processes, not\nvendor screenshots, delivered in the two weeks before each go-live wave.\nAdoption was measured, not assumed \u2014 login rates, task completion inside\nthe new system, and help-desk ticket themes were reviewed weekly for six\nweeks after go-live, and departments below threshold received targeted\nrefresher sessions. [CLIENT]'s claims supervisors\nco-taught every session, which doubled voluntary attendance."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Support and Hypercare"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Hypercare for [CLIENT] ran four weeks per wave with a\ndedicated command center: floor-walkers in high-volume departments, a\nfifteen-minute triage SLA for payroll-impacting defects, and a daily\nstand-down that reviewed every severity-one and severity-two ticket.\nTransition to steady-state support required two consecutive weeks under\nagreed ticket thresholds, plus a signed knowledge-transfer checklist with\nthe client's application-support team. The hypercare package was included\nin the [FEE] program fee. Reference: [REFERENCE_NAME], VP of Finance\nTransformation."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "3b99354cb6f05006f5bdbd55076be819499d483aaa353fdcbc0912dd78d6b081"
+}

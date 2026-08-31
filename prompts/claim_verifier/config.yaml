@@ -1,0 +1,6 @@
+# Frontier tier; starved by design — one claim, one card, nothing else
+# (B34(1): starve the verifier of the motive and it has nothing to be
+# persuaded by). Independent lineage from the drafter and the extractor:
+# written refute-first, deliberately not derived from their prompts.
+tier: frontier
+tools: []

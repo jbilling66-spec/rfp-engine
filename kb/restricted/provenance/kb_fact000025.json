@@ -1,0 +1,14 @@
+{
+  "derived_from": [],
+  "identifiers": {
+    "Meridian Health Partners": "CLIENT"
+  },
+  "ingested_by": "steward",
+  "sources": [
+    {
+      "date": "2026-06-15",
+      "source_client": "Meridian Health Partners",
+      "source_pursuit": "pur_fact_sheet_seed"
+    }
+  ]
+}

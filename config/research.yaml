@@ -1,0 +1,7 @@
+# Research mode (spec R2): full_web | allowlist | airgapped.
+# Pre-production default is airgapped (B3 — deviation from spec R3's full_web
+# launch default; revert at A6). This file is loaded inside effective_config, so
+# flipping it changes config_digest on every subsequent run — the switch is
+# config-only and digest-visible (O4). The same loaded value populates the
+# run header's research_mode and the stage's mode parameter (B21).
+research_mode: airgapped

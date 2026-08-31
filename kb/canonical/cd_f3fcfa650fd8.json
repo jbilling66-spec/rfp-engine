@@ -1,0 +1,58 @@
+{
+ "chunks": [
+  {
+   "chars": 559,
+   "doc_path": [
+    "Change Communications Plan"
+   ],
+   "elements": [
+    1,
+    2
+   ],
+   "kb_id": "kb_b7268a151f"
+  },
+  {
+   "chars": 505,
+   "doc_path": [
+    "Q&A Highlights"
+   ],
+   "elements": [
+    3,
+    5
+   ],
+   "kb_id": "kb_24bfa6b766"
+  }
+ ],
+ "doc_id": "cd_f3fcfa650fd8",
+ "elements": [
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Change Communications Plan"
+  },
+  {
+   "kind": "paragraph",
+   "text": "For [CLIENT] we ran communications on a\nschool-year-aware calendar: nothing launched during state testing windows\nor the first two weeks of a semester. Each audience \u2014 principals, school\nsecretaries, central office, and payroll staff \u2014 had its own message\ntrack, and every communication answered three questions: what changes for\nyou, when, and who to call. Secretaries got a one-page quick-reference\ncard per process, laminated and delivered before training, which the\ndistrict still reprints. The change workstream sat inside the [FEE]\ntwo-year program fee."
+  },
+  {
+   "kind": "heading",
+   "level": 2,
+   "text": "Q&A Highlights"
+  },
+  {
+   "kind": "paragraph",
+   "text": "Q: How long does hypercare run after go-live?\nA: Four weeks per wave as the baseline, extended one week at a time if\nticket volumes stay above the agreed threshold \u2014 exit is criteria-based,\nnot calendar-based."
+  },
+  {
+   "kind": "paragraph",
+   "text": "Q: Will district staff need to be backfilled during the project?\nA: Plan for a 0.5 FTE backfill for the payroll lead and business manager\nduring parallel-testing months; other roles absorb the work within normal\nduties. Reference: [REFERENCE_NAME], Assistant Superintendent for Business\nServices."
+  }
+ ],
+ "extraction_fingerprint": "ext_38ba495d55b7b40c",
+ "extraction_status": "clean",
+ "extractor": "text",
+ "media": {
+  "images": 0
+ },
+ "source_hash": "f3fcfa650fd86a0fc122b5aa89f3e6a06d1b72da5d4112f812ab2e19509404c3"
+}

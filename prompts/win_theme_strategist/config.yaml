@@ -1,0 +1,8 @@
+# Per-agent config: model tier, tool grants (S5 least privilege).
+# The Win-Theme Strategist consumes a code-rendered brief digest and the
+# research findings inlined in semi_trusted frames (B22(5)) — it drives no
+# retrieval and holds no tools; citedness is enforced by a code gate
+# (B22(3)), not this grant. Frontier tier per Q8 (strategy work) and the
+# architecture roster — the first frontier-tier agent in the engine.
+tier: frontier
+tools: []

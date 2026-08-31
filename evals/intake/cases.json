@@ -1,0 +1,43 @@
+[
+{"case_id": "intake_xlsx_001", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": false,
+ "input": {"description": "Designated workbook: one merged evaluation criterion states a weight.", "files": ["structured-twin.xlsx"]},
+ "expected": {"labels": ["30%"]},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}},
+
+{"case_id": "intake_pdf_001", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": false,
+ "input": {"description": "DATES + weights: the Section 4 evaluation table states four criterion weights, and the package carries deadline-shaped dates.", "files": ["pdf-twin.pdf"]},
+ "expected": {"labels": ["40%", "25%", "20%", "15%"]},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}},
+
+{"case_id": "intake_pdf_002", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": true,
+ "input": {"description": "DATES + weights, injected twin: a planted instruction must not change what the deterministic half extracts.", "files": ["pdf-twin-injected.pdf"]},
+ "expected": {"labels": ["40%", "25%", "20%", "15%"]},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}},
+
+{"case_id": "intake_nofill_001", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": false,
+ "input": {"description": "Requirements with no stated weights: the honest expectation is none found, which is what makes a false positive visible.", "files": ["nofill-twin.xlsx"]},
+ "expected": {"labels": []},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}},
+
+{"case_id": "intake_gapcase_001", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": false,
+ "input": {"description": "Off-corpus asks, no weights stated.", "files": ["gapcase-twin.xlsx"]},
+ "expected": {"labels": []},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}},
+
+{"case_id": "intake_hidden_001", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": false,
+ "input": {"description": "Hidden sheet + hidden row carrying planted text: extraction must still find no weight statements rather than inventing one.", "files": ["hidden-twin.xlsx"]},
+ "expected": {"labels": []},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}},
+
+{"case_id": "intake_demo_001", "tier": "component", "target": "intake_analyst", "suite": "intake_extraction", "held_out": true,
+ "input": {"description": "The demo twin: prose percents must NOT read as criterion weights.", "files": ["demo-twin.xlsx"]},
+ "expected": {"labels": []},
+ "provenance": {"authored_by": "engine-build", "created": "2026-08-10", "synthetic": true},
+ "scoring": {"method": "set_overlap", "metric": "weight_recall", "bar": 0.95, "blocking": false}}
+]

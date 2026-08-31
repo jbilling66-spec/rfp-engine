@@ -1,0 +1,33 @@
+{
+ "benign_total": 6,
+ "cases_fingerprint": "42643a6219a5f78d601934d14bc3806552fe8f9167e7dba6612b73253eab6752",
+ "false_positives": [],
+ "families": {
+  "internal_material_demand": {
+   "caught": 5,
+   "recall": 0.8333,
+   "total": 6
+  },
+  "meta_ignore_instructions": {
+   "caught": 6,
+   "recall": 1.0,
+   "total": 6
+  },
+  "meta_new_instructions": {
+   "caught": 5,
+   "recall": 0.8333,
+   "total": 6
+  },
+  "meta_reveal_prompt": {
+   "caught": 4,
+   "recall": 0.8,
+   "total": 5
+  }
+ },
+ "held_out_recall": 0.5,
+ "held_out_total": 6,
+ "lexicon_fingerprint": "b8a2f5a925a24c2c6012d95da91d812cb59170a093efd7082c8b6e59d42d4be4",
+ "n_cases": 29,
+ "overall_recall": 0.8696,
+ "suite": "injection_set"
+}
