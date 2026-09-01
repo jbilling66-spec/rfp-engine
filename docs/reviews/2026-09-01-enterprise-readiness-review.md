@@ -272,6 +272,20 @@ call and a work package.
 | P3-7 | **Corpus freshness** — ingestion/outcome-date recency on corpus cards in curation and (post-calibration) ranking. |
 | P3-8 | **Sentence-grain provenance** — citation grain stops at the section; the enterprise pitch implies finer. The A_designated wire path already carries per-answer kb_ids; prose needs span markers. |
 
+### Minor findings and notes (M-series — on the record, below the register)
+
+| # | Finding | Evidence |
+|---|---|---|
+| M-1 | No consolidated per-pursuit decision-log view — fully reconstructable but scattered across `runs/`, `checkpoints/`, `events/`, `addenda/` | pursuit directory layout |
+| M-2 | Share-link secrets travel in the URL path (browser history, intermediary logs); web sessions never expire; no logout | `server.py:920-943`, `auth.py:36` |
+| M-3 | Live evidence thin and aging: ~3 recorded live baseline runs (all 2026-08-14), 7 intake eval packages vs the 15 the spec asked for, KB validated only on the 60-card synthetic corpus; no re-baseline cadence | `evals/poison/history.jsonl` |
+| M-4 | The extraction-gate eval runs only inside the Docker gate, not the offline CI suite — table-fidelity regressions invisible to a normal PR | `Makefile` gate targets |
+| M-5 | `server.py` is a 1,823-line monolith with every route a closure inside `create_app` — unnavigable, routes untestable in isolation | `engine/web/server.py` |
+| M-6 | Model pinning partial: only the Haiku id is date-pinned; other model ids float, so a provider-side update silently changes behavior under a "pinned" config digest | `config/models.yaml` |
+| M-7 | No coverage tooling, property-based tests, or load/concurrency stress tests; the two-process races (P0-3/P0-4) have no tests because the design assumes them away | `pyproject.toml` |
+| M-8 | B-number citations dangle in this public mirror — docstrings cite a decision register that doesn't ship; README flags it, but half the rationale trail is unreadable for adopters | README "Notes for adopters" |
+| M-9 | Product notes: generated (non-template) render unbranded **[deferred → A6]**; advisor help agent has no UI tab and a ~95-line corpus; UI hardcodes every actor's role to `pursuit_lead`, mis-attributing effort-cost metrics by role | `app.js:246`, `docx.py:12-13` |
+
 ---
 
 ## 3. What the feedback missed entirely (both directions)
