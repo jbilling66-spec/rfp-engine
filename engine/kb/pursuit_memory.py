@@ -28,6 +28,7 @@ from pathlib import Path
 
 from engine.kb.lanes import PURSUIT_PREFIX
 from engine.kb.store import KBStore, snapshot_id
+from engine.structure.zipguard import check_office_zip
 
 MEMORY_DIR = "memory"
 _TEXT_SUFFIXES = (".md", ".txt")
@@ -79,6 +80,7 @@ def _chunks_from_docx(path: Path, fallback_title: str) -> list[tuple[str, str]]:
     chunks: list[tuple[str, list[str]]] = []
     title = fallback_title
     lines: list[str] = []
+    check_office_zip(path)  # P0-8: the container before the parser
     for para in Document(str(path)).paragraphs:
         style = para.style.name if para.style else ""
         if style.startswith("Heading"):

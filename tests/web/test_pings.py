@@ -32,7 +32,7 @@ def gapped(tmp_path_factory):
         return TracedCaller(FakeCaller(revision_script()), log)
 
     app = create_app(ws, make_caller=make_caller, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Pat Pinger")
     client.post("/api/pursuits", json={"pursuit_id": "pur_ping"})

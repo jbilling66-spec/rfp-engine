@@ -28,7 +28,7 @@ def reviewed(tmp_path_factory):
     pursuit, report, _ = run_validation_package(tmp)
     assert report.status == "complete"
     app = create_app(tmp, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client)
         yield client, pursuit
 
@@ -175,7 +175,7 @@ def test_accept_refuses_blocked_packaging(tmp_path):
         tmp_path, script=make_validation_script(plant_unsupported=True))
     app = create_app(tmp_path, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client)
         r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept",
                         json={**ROLE})
@@ -190,3 +190,52 @@ def test_accept_requires_an_annotated_draft(offline_app):
     r = offline_app.post("/api/pursuits/pur_early/accept", json={**ROLE})
     assert r.status_code == 409
     assert "nothing to accept" in r.json()["detail"]
+
+
+
+def test_event_ids_mint_from_the_lane_max_under_concurrency(tmp_path):
+    """P25 item 3 (P1-20): ids are max(existing)+1 — a gap in the lane is
+    never refilled — and forty concurrent appends from two threads mint
+    forty DISTINCT ids into the append-only record."""
+    import json
+    import threading
+
+    from engine.web.events import EventsLane
+    from engine.workspace import PursuitDir
+    pursuit = PursuitDir(tmp_path, "pur_ev")
+    lane = EventsLane(pursuit)
+    lane.events_path.parent.mkdir(parents=True, exist_ok=True)
+    lane.events_path.write_text(
+        json.dumps({"event_id": "evt_0001", "kind": "accept"}) + "\n"
+        + json.dumps({"event_id": "evt_0003", "kind": "accept"}) + "\n")
+    first = lane.append("accept", at="2026-08-09T09:00:00", actor="a",
+                        actor_role="pursuit_lead")
+    assert first["event_id"] == "evt_0004"  # never evt_0003 again
+
+    def burst():
+        for _ in range(20):
+            EventsLane(pursuit).append("accept", at="2026-08-09T09:00:00",
+                                       actor="t", actor_role="pursuit_lead")
+
+    threads = [threading.Thread(target=burst) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    ids = [e["event_id"] for e in lane.read()]
+    assert len(ids) == 43 and len(set(ids)) == 43
+
+
+def test_mutating_event_and_share_routes_serialize_under_the_guard():
+    """Structural pin for P1-20/P1-22: the four routes that used to
+    append outside the job lane take `_mutate` — the behavioural half
+    (serialized ids) is the lane test above."""
+    import inspect
+
+    import engine.web.server as server
+    src = inspect.getsource(server)
+    for func in ("add_event", "record_outcome", "record_effort",
+                 "create_share"):
+        start = src.index(f"    def {func}(")
+        end = src.index("\n    @app.", start)
+        assert "with _mutate(pursuit_id):" in src[start:end], func

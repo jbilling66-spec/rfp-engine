@@ -5,6 +5,7 @@ byte-equal, created is stamped only here, and the gate is idempotent."""
 
 import pytest
 
+from engine.contracts import request_digest
 from engine.contracts import ContractError, validate
 from engine.runlog import RunLogger, read_run
 from engine.strategy import FROZEN_BRIEF, approve_gate1
@@ -30,7 +31,8 @@ def pending(tmp_path_factory):
 
 
 def _reopen_log(pursuit):
-    return RunLogger(pursuit.root, pursuit.latest_run_id(), pursuit.pursuit_id)
+    return RunLogger(pursuit.root, pursuit.latest_run_id(), pursuit.pursuit_id,
+                     resume=True)
 
 
 # ---------------------------------------------------------------- approval
@@ -41,8 +43,10 @@ def test_approval_recorded_in_brief(approved):
     brief = pursuit.read_artifact("brief.json")
     validate("bid_brief", brief)
     assert brief["status"] == "approved"
-    assert brief["gate1"] == {"approved_by": ACTOR, "at": GATE_AT,
-                              "notes": "strong angle set"}
+    assert brief["gate1"] == {
+        "approved_by": ACTOR, "at": GATE_AT, "notes": "strong angle set",
+        "request_sha256": request_digest(decision="approved",
+                                         notes="strong angle set")}
     candidates = brief["win_themes"]["candidates"]
     survivors = [c for c in candidates if c["status"] == "approved"]
     assert [candidates.index(c) + 1 for c in survivors] == list(KEEP_INDEXES)
@@ -168,8 +172,10 @@ def test_identical_reapproval_converges(approved):
     log_file = pursuit.root / "runs" / "run_0003" / "run.jsonl"
     before_bytes = (pursuit.root / "brief.json").read_bytes()
     before_lines = len(read_run(log_file))
+    # identical = the same REQUEST (notes included, P25 item 1) — a
+    # resubmit without the notes is a different decision and refuses
     result = approve_gate1(pursuit, _reopen_log(pursuit), decision="approved",
-                          actor=ACTOR, at=GATE_AT)
+                          actor=ACTOR, at=GATE_AT, notes="strong angle set")
     assert result.converged is True
     assert (pursuit.root / "brief.json").read_bytes() == before_bytes
     assert len(read_run(log_file)) == before_lines  # log untouched
@@ -180,6 +186,59 @@ def test_conflicting_decision_raises(approved):
     with pytest.raises(ContractError, match="already decided"):
         approve_gate1(pursuit, _reopen_log(pursuit), decision="rejected",
                       actor=ACTOR, at=GATE_AT)
+
+
+def test_resubmit_with_fresh_at_converges_and_keeps_original_at(approved):
+    """P0-5: the web door mints a new clock per request, so a resubmit
+    of the SAME decision must converge without a byte-identical `at`;
+    the record keeps the first attempt's clock."""
+    pursuit, _ = approved
+    before = (pursuit.root / "brief.json").read_bytes()
+    result = approve_gate1(pursuit, _reopen_log(pursuit), decision="approved",
+                          actor=ACTOR, at="2026-08-01T13:00:00Z",
+                          notes="strong angle set")
+    assert result.converged is True
+    assert (pursuit.root / "brief.json").read_bytes() == before
+    assert pursuit.checkpoint_payload("gate_1")["at"] == GATE_AT
+
+
+def test_different_edits_resubmit_is_refused(approved):
+    """(decision, actor) alone is too weak: a same-decision resubmit
+    carrying DIFFERENT edits is a different request and refuses."""
+    pursuit, _ = approved
+    with pytest.raises(ContractError, match="already decided"):
+        approve_gate1(pursuit, _reopen_log(pursuit), decision="approved",
+                      actor=ACTOR, at=GATE_AT, notes="a different note")
+
+
+def test_crash_after_stamp_completes_from_the_stamp_with_a_fresh_clock(
+        tmp_path):
+    """The mid-gate crash window (brief stamped; freeze, gate line and
+    checkpoint missing) recovers through a same-request resubmit whose
+    clock differs — the freeze lands, the checkpoint carries the STAMP's
+    clock, the resume run holds exactly one gate line — while a
+    different request in the same window refuses."""
+    pursuit, _ = run_strategy_package(tmp_path, notes="strong angle set")
+    (pursuit.root / "checkpoints" / "gate_1.json").unlink()
+    (pursuit.root / FROZEN_BRIEF).unlink()
+    from engine.runlog import RunLogger
+    log = RunLogger(pursuit.root, pursuit.new_run_id(), pursuit.pursuit_id)
+    with pytest.raises(ContractError, match="different decision"):
+        approve_gate1(pursuit, log, decision="approved", actor=ACTOR,
+                      at="2026-08-01T13:00:00Z", notes="something else")
+    assert not (pursuit.root / FROZEN_BRIEF).exists()
+    result = approve_gate1(pursuit, log, decision="approved", actor=ACTOR,
+                           at="2026-08-01T13:00:00Z", notes="strong angle set")
+    assert result.converged is True
+    assert result.frozen_path is not None and result.frozen_path.exists()
+    payload = pursuit.checkpoint_payload("gate_1")
+    assert (payload["decision"], payload["actor"], payload["at"]) == \
+        ("approved", ACTOR, GATE_AT)
+    assert pursuit.read_artifact("brief.json")["gate1"]["at"] == GATE_AT
+    gate_lines = [r for r in read_run(log.path) if r["record_type"] == "gate"]
+    assert len(gate_lines) == 1
+    # the freeze is verified against the checkpoint it just wrote
+    assert pursuit.read_frozen("bid_brief")["status"] == "approved"
 
 
 def test_auto_approved_consistency_guard(approved):

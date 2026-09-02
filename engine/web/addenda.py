@@ -19,7 +19,9 @@ by convention."""
 
 import hashlib
 import json
+import os
 import re
+from pathlib import Path
 
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{3,}")
 _STOP = frozenset(
@@ -127,14 +129,37 @@ class AddendumLane:
                 "kind": "pursuit_plan", "path": str(plan_path),
                 "sha256": hashlib.sha256(
                     plan_path.read_bytes()).hexdigest()})
-            frozen = self.pursuit.root / "plan.frozen.json"
-            if frozen.exists():
-                # archived intact — moved, never rewritten; the driver's
-                # skip predicate now re-opens the planning lane
-                frozen.rename(self.root / aid
-                              / "plan.frozen.superseded.json")
-            for stage in ("path_a_map", "path_b_outline", "pursuit_plan"):
+            if (self.pursuit.root / "plan.frozen.json").exists():
+                # archived intact — moved, never rewritten, through the
+                # one sanctioned move (P25 item 5); the sha lands in this
+                # addendum's meta so the archive is self-attesting; the
+                # driver's skip predicate now re-opens the planning lane
+                meta["archived_frozen_sha256"] = self.pursuit.archive_frozen(
+                    "pursuit_plan",
+                    f"addenda/{aid}/plan.frozen.superseded.json")
+            for stage in ("path_a_map", "path_b_outline", "pursuit_plan",
+                          "drafting", "validation"):
                 self.pursuit.clear_checkpoint(stage)
+            # P25 item 8 (P0-16): the pre-amendment draft pair is archived
+            # intact beside the freeze — never left where an existence
+            # check or a revision-number collision could mistake it for
+            # current — and attested by sha in this addendum's meta.
+            # TODO(spec-gap): revisions/ and the events lane's pending
+            # comments bind by revision number, not by sha; a replan does
+            # not archive them — closes at P26 with P1-14 (the revision-
+            # round convergence rider).
+            for name, key in (
+                    ("drafts/draft.json", "archived_draft_sha256"),
+                    ("drafts/annotated-draft.json",
+                     "archived_annotated_sha256")):
+                src = self.pursuit.root / name
+                if src.exists():
+                    meta[key] = self.pursuit.file_sha256(name)
+                    dest = (self.root / aid
+                            / Path(name).name.replace(".json",
+                                                      ".superseded.json"))
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(src, dest)
             # the redo-door carrier (gate.py's rejection pattern): the
             # replan reads this note as its feedback
             self.pursuit.checkpoint("gate_2", {

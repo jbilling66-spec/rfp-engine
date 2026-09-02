@@ -20,6 +20,7 @@ Vocabularies are read FROM the schema at import — one copy per rule
 
 import json
 import os
+import threading
 from pathlib import Path
 
 from engine.contracts import validate
@@ -36,6 +37,17 @@ EFFORT_SCOPES = tuple(
     _SCHEMA["properties"]["effort"]["properties"]["scope"]["enum"])
 EFFORT_GATES = tuple(
     _SCHEMA["properties"]["effort"]["properties"]["gate"]["enum"])
+
+
+_APPEND_LOCK = threading.Lock()  # one process; across processes: the workspace flock
+
+
+def _next_event_n(events: list[dict]) -> int:
+    """max(existing)+1 over real event ids — never a count (P1-20)."""
+    seen = [int(e["event_id"][4:]) for e in events
+            if str(e.get("event_id", "")).startswith("evt_")
+            and str(e["event_id"])[4:].isdigit()]
+    return (max(seen) + 1) if seen else 1
 
 
 class EventsError(ValueError):
@@ -70,17 +82,22 @@ class EventsLane:
                 f"actor_role must be one of {ACTOR_ROLES}, got "
                 f"{actor_role!r} — effort and cost aggregate by role, and "
                 "an invented role would pool silently")
-        event = {"event_id": f"evt_{len(self.read()) + 1:04d}",
-                 "pursuit_id": self.pursuit.pursuit_id, "kind": kind,
-                 "at": at, "actor": actor, "actor_role": actor_role,
-                 "revision": self.current_revision()}
-        event.update({k: v for k, v in fields.items() if v is not None})
-        validate("feedback_event", event)
-        self.events_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.events_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(event, sort_keys=True) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
+        # P25 item 3 (P1-20): the id is minted from the lane's MAX under a
+        # process-wide lock and written in the same critical section —
+        # `len(read())+1` from two request threads minted one id twice
+        # into an append-only record.
+        with _APPEND_LOCK:
+            event = {"event_id": f"evt_{_next_event_n(self.read()):04d}",
+                     "pursuit_id": self.pursuit.pursuit_id, "kind": kind,
+                     "at": at, "actor": actor, "actor_role": actor_role,
+                     "revision": self.current_revision()}
+            event.update({k: v for k, v in fields.items() if v is not None})
+            validate("feedback_event", event)
+            self.events_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.events_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event, sort_keys=True) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
         return event
 
     # -- the pending store (comments/edits await a round) ------------------

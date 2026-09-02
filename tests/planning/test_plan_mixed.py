@@ -17,6 +17,7 @@ from engine.planning import run_planning
 from engine.runlog import RunLogger
 from engine.version import engine_version
 from engine.workspace import PursuitDir
+from tests.helpers import plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -30,8 +31,7 @@ def _brief(structure="mixed"):
 def _run(tmp_path, *, targets, core_doc, structure="mixed"):
     pursuit = PursuitDir(tmp_path, "pur_mixed")
     pursuit.write_artifact("bid_brief", _brief(structure))
-    pursuit.write_artifact("bid_brief", _brief(structure),
-                           name="brief.frozen.json")
+    plant_freeze(pursuit, "bid_brief", _brief(structure), validate=True)
     store = KBStore(tmp_path / "kb")
     log = RunLogger(pursuit.root, pursuit.new_run_id(), pursuit.pursuit_id)
     caller = TracedCaller(FakeCaller({}), log)

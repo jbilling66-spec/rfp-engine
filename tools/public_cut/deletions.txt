@@ -1,0 +1,8 @@
+# Release-mode deletion acknowledgments (B92 §2b, P25 item 7).
+#
+# Release mode replaces the published mirror's tree wholesale. Any file
+# in the published HEAD that is ABSENT from the staged cut must be listed
+# here — one literal path per line — or the release refuses, naming each
+# surprise. A listed path that is not actually a deletion refuses too
+# (an acknowledgment of nothing is fiction). Empty this file in the
+# commit after each release: it is a per-release record, not a policy.

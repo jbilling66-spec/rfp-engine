@@ -29,7 +29,7 @@ def client(tmp_path):
     build_store(workspace)
     app = create_app(workspace, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Sam Steward")
         yield client
 
@@ -62,7 +62,7 @@ def test_mint_message_and_transcript_roundtrip(client):
 def test_guests_and_anonymous_refused(client):
     """P14 row: share-link guests refused — assistant routes demand the
     operator cookie a guest lane never issues."""
-    bare = TestClient(client.app)
+    bare = TestClient(client.app, base_url="http://127.0.0.1")
     assert bare.post("/api/assistant/session").status_code == 401
     assert bare.get("/api/assistant/session/sas_00000000").status_code == 401
     assert bare.post("/api/assistant/session/sas_00000000/message",

@@ -99,7 +99,7 @@ def compute_docx_facts(pursuit, *, at: str, confirmed_by: str,
     is the per-binding contract, not a silent drop: the other files'
     slots belong to the other files' records, and the union covers every
     slot — the named coverage test)."""
-    frozen_plan = pursuit.read_artifact("plan.frozen.json")
+    frozen_plan = pursuit.read_frozen("pursuit_plan")
     container = pursuit.read_artifact(
         frozen_plan.get("slots_ref", "slots.json"))
     envelope = pursuit.read_artifact("drafts/draft.json")

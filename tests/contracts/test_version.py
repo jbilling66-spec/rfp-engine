@@ -12,5 +12,5 @@ def test_version_carries_no_retired_vocabulary():
 
 
 def test_version_shape():
-    assert VERSION == "0.1.0"
+    assert VERSION == "0.2.0"  # P25 close: the pilot-2 / v0.2.0 line
     assert engine_version().startswith(VERSION)

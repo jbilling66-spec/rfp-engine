@@ -27,6 +27,7 @@ from engine.kb.read import read_source
 from engine.kb.store import KBStore
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
+from engine.workspace.pursuit import mint_run_id
 
 _META_LINE = re.compile(r"<!--\s*(.*?)\s*-->", re.DOTALL)
 
@@ -107,7 +108,7 @@ def evaluate_anonymization_set(cases_path: Path, workdir: Path,
         meta = doc_meta(text)
 
         store = KBStore(root / "kb")
-        log = RunLogger(store.root, "run_0001", "kb")
+        log = RunLogger(store.root, mint_run_id(store.root / "runs"), "kb")
         script = (script_factory or default_script)(meta)
         caller = (caller_factory(log) if caller_factory is not None
                   else TracedCaller(FakeCaller(script), log))

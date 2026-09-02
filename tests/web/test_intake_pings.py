@@ -39,7 +39,7 @@ def gapped_walk(tmp_path_factory):
     ws = tmp_path_factory.mktemp("web-intake-pings") / "ws"
     app = create_app(ws, make_caller=_starving_caller,
                      now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Pia Pinger")
     client.post("/api/pursuits", json={"pursuit_id": "pur_ig"})

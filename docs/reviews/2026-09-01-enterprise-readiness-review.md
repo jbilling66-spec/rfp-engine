@@ -354,3 +354,171 @@ call and a work package.
    the enterprise lift is tractable (est. 2–4 engineer-months to a defensible
    small-team deployment) *because* these exist. Protecting them (P2-2's
    read-path funneling especially) is cheap now and expensive later.
+
+## 5. Session-34 internal sweep — addendum to the register (2026-09-01, B95)
+
+*A second, independent pass over the canonical repo at `626522a` (suite 1446
+green), run after this register was adopted. Method: the six P25 findings were
+re-verified at their cited lines; then four scoped fresh-eyes sweeps ran — the
+gate/freeze/run-log control plane and the test suite completed; the web/CLI/
+assistant sweep and the parsers/LLM/mirror-tooling sweep were cut off by a
+usage limit and were covered at spot-check depth only (limits in §5.4). Every
+finding below was re-read at its cited lines before entry. Ids continue the
+register's numbering; each has exactly one ROADMAP home (the B94 door).*
+
+### 5.1 Confirmations
+
+- **P0-5, P0-4, P0-3, P0-7, P0-2, P0-8 all hold at HEAD** — the cited lines are
+  unchanged: `strategy/gate.py:148-152` still keys replay on the triple; no
+  `flock` exists outside `web/server.py`; `pursuit.py:92-96` still mints
+  `len+1`; no middleware or security header in `server.py`; `drafting/draft.py`
+  and `validation/validate.py` read the frozen brief with no digest check
+  against the checkpoint's `frozen_sha256`; `server.py:231` and `:598-612`
+  write request bodies with no size cap, and every parser opens the whole
+  workbook/document (`kb/xlsx.py:187`, `assembly/writeback.py:120`).
+- **The B92 §2a coverage gap is exactly one path:** `spec/observability/
+  RUN_LOG_DESIGN.md` is tracked but named by neither manifest nor deny list
+  (799 tracked paths; 32 manifest entries, 27 deny entries; zero overlaps). It
+  does not ship today only by implied exclusion — the case the coverage test
+  is for. The ship/don't-ship call is the first thing that test forces.
+- **Recorded after the first close (B96):** P2-14, P2-15 — surfaced by the test-integrity sub-report, missed at the first write, caught at the debrief.
+- **Citation errata (session 35, B97):** P1-12's evidence cites `driver.py:696,703`; the file is 334 lines — the discarded research and win-themes returns are at `driver.py:245` and `:252`. The register's driver line ranges for P0-16 (`:289-292`, `:320-321`) are correct.
+- **Solid, by reading:** `_atomic_write_json` (tmp + fsync + `os.replace`);
+  every run-log line schema-validated, fsynced, seq under lock; frozen files
+  written by exactly two sites and byte-equal by construction; draft→plan
+  hash binding enforced at validation; the tripwire's non-vacuity discipline;
+  the live caller's `RFP_LIVE=1` guard proven by a delete-detecting test
+  (`tests/llm/test_live_caller.py:83`) plus the serve and slice seams; zero
+  skips/xfails and no config-level exclusions beyond the roster-checked
+  docling deselection; web tests upload the committed binary twins through
+  the real parsers.
+
+### 5.2 New findings
+
+| # | Finding | Evidence | Home |
+|---|---|---|---|
+| P0-16 | **An addendum replan never voids the old draft on any path a user takes.** `addenda.py:17` promises "every existing draft voids by plan_sha256 mismatch", but the only verifier is `run_validation` (`validate.py:83-86`) and nothing re-invokes it: after re-approval the driver skips drafting because `draft.json` is `complete` (`driver.py:289-292`) and skips validation because the annotated file exists (`:320-321`); the submission export checks only `packaging.blocked` and owed pends (`assembly/docx.py:64-77`); the replan clears planning checkpoints but not drafting/validation (`addenda.py:137-143`). Scenario: buyer amends scope → firm replans and re-approves → advance says "nothing new" → export ships the pre-amendment response. `test_addenda.py:69` stops before re-approval. Register §1 calls the addendum lane "done right" — overstated. | `engine/web/addenda.py:17,137-143` · `engine/pipeline/driver.py:289-292,320-321` · `engine/assembly/docx.py:64-77` | **P25 item 8** |
+| P0-17 | **Gate-2 mid-gate crash + `advance` silently discards the human's dispositions.** Write order is plan → freeze → log → checkpoint (`planning/gate.py:398-407`). A crash between the plan write and the freeze leaves an approved, stamped `plan.json` with no frozen copy; `advance` then enters planning (its predicate is the freeze's existence), `run_planning` has no past-gate guard (`plan.py:116-133`), and replay-always assembly rewrites `plan.json` from the pre-gate checkpoint as `gate2_pending` (`plan.py:201-213`) — kills, waives, dispositions and stamp gone, no error, while the run log carries an artifact line for the approved sha. P0-5 says "unrecoverable via UI"; the truth is "recoverable via advance, with silent loss". | `engine/planning/gate.py:398-407` · `engine/planning/plan.py:116-133,201-213` · `engine/pipeline/driver.py:264` | **P25 item 1** (rider on P0-5) |
+| P1-12 | **`advance` while a pursuit awaits Gate 1 re-runs research and can mutate the brief under review.** The research block's only predicate is the frozen brief's absence (`driver.py:233-247`); `run_research` has no past-gate guard (`research/findings.py:142-160`) and `research_external` has no checkpoint — its "converges byte-identically" docstring is true only under `FakeCaller`; live or handoff, it is a second external call that replaces the findings. In the Gate-1 crash window it rewrites an already-approved brief, then the freeze copies the mutated content. The driver also ignores the research and win-themes stage returns (`driver.py:696,703`) while checking the other four. | `engine/pipeline/driver.py:233-247,696,703` · `engine/research/findings.py:11-17,142-160` | **P25 item 1** (rider on P0-5) |
+| P1-13 | **Purge authorization is skipped when the lane is empty, and the accounting guard is dead.** `purge_org` authorizes through the restricted door only `if all_ids:` (`kb/purge.py:344-345`) and then `rmtree`s the org tree unconditionally (`:350`) — an org with zero memory cards is deleted with no access-gate call; `purge_pursuit_memory` has the same shape (`:280`). The three "accounting IS the deliverable" `RuntimeError`s (`:225,:299,:381`) can never fire: the ids are appended to the report in the same loop that iterates them, so the control reads as proven and proves nothing. No test asserts either. | `engine/kb/purge.py:225,280,299,344-350,381` | **P26** (rider; before real data) |
+| P1-14 | **The revision round's "transactional commit (crash-convergent from the checkpoint)" is neither.** `round.py:376-546` writes archive (non-atomic `write_bytes`) → `draft.json` → annotated → finalize + `drop_pending` → round record → live plan. A crash after `draft.json` makes the next round refuse `stale_annotation` (`:90-93`), and a direct `run_validation` replays its completed checkpoint over the revised prose; a crash before `drop_pending` re-consumes the same comments; the round's checkpoint key is dead because `revision_n` already bumped (`:125-127`). No crash/resume test in `tests/revision/`. | `engine/revision/round.py:13-19,88-93,125-127,376-546` | **P26** (with P0-6) |
+| P1-15 | **Rejection rationale is not in the audit record.** The run-log `gate` payload has no `notes` field (`schemas/run-log.schema.json`, `additionalProperties:false`); Gate-0 rejection stamps and checkpoints nothing (`intake/gate.py:262-273`), so the mandatory notes are discarded on receipt; Gate-2 rejection notes live only in `checkpoints/gate_2.json`, overwritten by the next decision. Tests require notes; none tests they survive. | `schemas/run-log.schema.json` gate block · `engine/intake/gate.py:262-273` · `engine/planning/gate.py:431-448` | **P26** (with P0-10) |
+| P1-16 | **The live caller treats an internal exception as transient.** `live.py:200-202` classifies `status is None` as transient — a plain bug in `_request` (AttributeError, TypeError) is retried through the backoff ladder and then falls back to a second model: an internal defect becomes extra spend. Untested (`_status_error` always sets a code). Companion gap: the `RFP_LIVE=1` guard lives only on `LiveCaller.__init__`; no contract test forbids `import anthropic` outside `engine/llm/live.py`, so a second spend path added anywhere is caught by nothing. | `engine/llm/live.py:139-143,200-202` · `tests/contracts/test_graph_modules.py:158` | **P26** (with P0-1) |
+| P1-17 | **A torn last line aborts run-log resume.** `read_run` (`runlog/writer.py:42`) json-loads every line; a crash mid-append leaves a truncated final line, and `RunLogger.__init__` (`:79`) raises `JSONDecodeError` straight out — the resume path a real crash produces is untested (`test_writer.py:71` dies only at a clean boundary). Also: `run_id` is interpolated into the path unvalidated (`:56`), bounded only by the mint. | `engine/runlog/writer.py:42,56,79` | **P26** (with P0-14) |
+| P1-18 | **The public-cut orchestration guards are untested.** `tools/public_cut.py:173-176` (dirty tree), `:314-320` (overlay collision), `:325-328` (deny-in-staging), `:346-352` (engine imported from outside the tree), `:356-362` (suite must be green) are exercised only by live `make public-cut` runs; `tests/contracts/test_public_cut.py` covers the helpers and drift pins (strong) but never `_build_and_verify`/`main()` against a synthetic repo. Mirror safety is proven by the B90 dry-run, not by `make check`. | `tools/public_cut.py:173-176,314-362` · `tests/contracts/test_public_cut.py` | **P25 item 7** (rider: the guard pair's synthetic-repo harness proves these too) |
+| P2-11 | Gate 0 emits `gap` lines and KB proposals (`intake/gate.py:154-169`) before the brief write (`:309`); a crash between replays them — duplicate gap lines inflate `totals.gaps_opened` and `propose_gap_answer_card` runs twice. | `engine/intake/gate.py:154-169,309` | **P25 item 1** (rider) |
+| P2-12 | `RunLogger` accepts any `run_id` string in its path (`writer.py:56`); the invariant "ids come only from the mint" is asserted nowhere. | `engine/runlog/writer.py:56` | **P25 item 3** (rider on P0-3) |
+| P2-13 | P0-5's triple-key convergence and client-`at` trap apply identically to gate_0 (`intake/gate.py:242-258`) and gate_2 (`planning/gate.py:333-360`); the register names only `strategy/gate.py`. | `engine/intake/gate.py:242-258` · `engine/planning/gate.py:333-360` | **P25 item 1** (scope: all three gates) |
+| P2-14 | The handoff caller's response validation has type leaks: a non-dict payload, a missing/non-string `model`, a non-string `text` (`llm/handoff.py:147-166`) are untested, and a non-int `input_tokens` raises a bare `ValueError` from `int()` (`:172`) instead of a `HandoffError` refusal — in the pilot's own lane a hand-typed response file turns into a job traceback, not a refusal. | `engine/llm/handoff.py:147-172` | **P26** (with P1-16, the LLM boundary) |
+| P2-15 | Nothing pins the live transport stub's shape against the installed SDK: every `LiveCaller` test injects a stub client (`tests/llm/test_live_caller.py:46`), `_get_client` (`live.py:139-143`) has zero coverage, and SDK attribute drift (`stop_reason`, `usage.cache_read_input_tokens`, `content[].type`) would pass the suite; `SpendBudget` counters (`caller.py:130-133`) have no lock — harmless under the single job worker, a race once P2-1's per-pursuit workers land. | `engine/llm/live.py:139-143` · `engine/llm/caller.py:130-133` | **P26** (shape pin, with P0-1) · **A5** (the lock, with P2-1) |
+| P3-10 | **SharePoint as the end-user surface (owner question, 2026-09-01).** A5 names "Postgres/Blob behind the storage seams". Blob is the engine's system of record (machine-facing: atomic replace, locks, append-only logs, purge-by-deletion); SharePoint/OneDrive is where the firm's people already work. Recommendation on record: keep the workspace on Blob (or Azure Files); add SharePoint as an *integration seam* at A5 — buyer packages arrive from a document library, submissions land in one — via Graph, never as the workspace store. Named consequences: Graph throttling/latency, no lock or atomic-rename equivalent, and SharePoint's version history + recycle bin retain purged client material for months — the purge guarantee (R8) must extend to that tenant, which is an A1 data-governance question, not a UI one. | `ROADMAP.md` A5 row | **A5** — decided 2026-09-01 (B96): SharePoint enters as the integration seam, Blob stays the store; the A1 governance call stands for the day real client material transits the tenant |
+| M-10 | Suite weak spots, none of which fake a result: order-coupled module fixtures in `tests/web/test_share.py:179` and `test_gates.py:164-166` (a setup 4xx would be masked); a conditional assertion at `test_gates.py:275-280`; `tests/llm/test_spend_budget.py:106` asserts source text (`inspect.getsource`) instead of behavior; `tests/runlog/test_run_totals.py:59-68` asserts `wall_ms >= 0`; `tests/kb/test_purge.py:39` uses `>=` on a deterministic fixture and `:101`'s comment claims more than its assertion; every `purge_client` test asserts a clean sweep (the dirty verdict is proven only in the lane variants). | as listed | **Opportunistic** — next touch of each file; the purge rows ride P1-13 |
+| M-11 | `PursuitDir.__init__` materialises all eleven subdirs on every construction, read paths included (`workspace/pursuit.py:41-42`); `driver.py:243` copies the research pack with a non-atomic `write_bytes` (P0-6's class — rides P0-6). | `engine/workspace/pursuit.py:41-42` · `engine/pipeline/driver.py:243` | **Opportunistic** (mkdir) · **P26** (pack copy, with P0-6) |
+
+### 5.3 Foundation verdict from the sweep
+
+The primitives are sound and worth keeping: atomic single-file writes, a
+validated append-only log, replay-always assembly from checkpoints, a real
+hash binding from draft to frozen plan, a spend guard proven by deletion, a
+tripwire that cannot pass vacuously. The one structural gap sits a level up
+and repeats across P0-16, P0-17, P1-12 and P1-14: **there is no transaction
+concept for multi-file transitions, and every skip predicate is a file-
+existence or status check that never re-verifies the hash bindings the design
+relies on.** The system converges only when identical inputs replay. That is
+patchable in days inside the existing seams — verify bindings instead of
+existence, refuse past-gate reruns, checkpoint the one unguarded external
+call, key gate convergence on (decision, actor) at all three gates, land each
+fix with a crash test at its exact write boundary — and does not warrant a
+rebuild or a fork (B92 §3 stands). The honest caveat on "1446 green": it
+proves the properties the suite *names*, over real files and real HTTP; it
+does not name tamper-evidence of frozen files (P0-2), multi-file crash
+convergence, or the public-cut orchestration (P1-18).
+
+### 5.4 Coverage limits of this sweep (what was NOT reviewed)
+
+- `engine/web/server.py` beyond the input-validation, upload, gate, and
+  export doors (roughly half of its 72 routes unverified by reading);
+  `engine/assistant/` beyond its tool catalog (read-only tools + proposal
+  doors; the negative-surface test pins that it can never purge);
+  `engine/cli/` beyond the command inventory.
+- Parsers (`intake/`, `structure/`, `kb/ingest.py`, `assembly/`) beyond
+  confirming whole-document loads (P0-8's case); XML-entity exposure in
+  python-docx/openpyxl not assessed; `.github/workflows/` pins not re-read
+  (P0-12 stands as written).
+- Reopen trigger: **these two scopes get their fresh-eyes pass at the start
+  of P25, before code** — their findings enter through the same door (id +
+  home, same commit) and may re-order P25's items.
+
+### 5.5 Session-35 step-0 sweeps — the two cut-off scopes, at full depth (2026-09-01, B97)
+
+*The §5.4 reopen trigger, executed: two read-only agents (web/assistant/CLI;
+parsers/assembly/CI) ran at P25 kickoff, before code, against `3e43d29`
+(1447 green). Every line below was re-read by the session at its cited
+site before entry; two agent items were duplicates of P1-13 and P0-8 and
+were not entered. Ids continue the numbering; every id has exactly one
+ROADMAP home (the B94 door). Coverage now complete for: all 72 `server.py`
+routes (enumerated), `engine/assistant/`, `engine/cli/`, `engine/intake/`,
+`engine/structure/`, `engine/kb/{ingest,read,xlsx,curation}.py`,
+`engine/assembly/`, `.github/workflows/check.yml`.*
+
+| # | Finding | Evidence | Home |
+|---|---|---|---|
+| P0-18 | **A share-link guest supplies the clock the expiry check uses** — `?at=` (and the comment payload's `at`) is caller-controlled, so an expired link is reusable forever and the access log records the guest's chosen timestamp. `tests/web/test_share.py:70-73` drives expiry through `?at=`: the test's mechanism is the bypass. | `engine/web/server.py:921-922,944-945` (`when = at or now()`) · `engine/web/share.py:119` | **P25 item 4** rider — guest routes ignore any caller `at`; tests inject through the app's `now` seam |
+| P0-19 | **`GET /api/pursuits/{id}/review` serves the FULL internal review model unauthenticated** — pending internal comments, waiver identities, red-team findings — while the guest route strips exactly those server-side (`state.py:150-153`). The guest split is defeated at the door. | `engine/web/server.py:1093-1096` (no `Depends(operator)`, no `include_internal=False`) | **P25 item 4** rider — operator dependency on the internal review surface |
+| P0-20 | **The packaging block is enforced on ONE exit door only.** `render_submission` refuses under `packaging.blocked`/owed pends; the three write-back lanes — including `template_fill`, whose output IS `exports/submission/response.docx` for a firm-default pursuit — check neither, and the writeback confirm door runs all three. A blocked response ships through the lane the pilot demonstrates. | `engine/assembly/docx.py:63-77` vs `template_fill.py:273-290` (`OUTPUT_NAME = "exports/submission/response.docx"`), `writeback.py:151-165`, `docx_writeback.py:218`; `server.py:799-805` `_run_one` | **P25 item 8** rider — one `assert_current` at both exit doors carries the block/pends refusal for every buyer-facing lane |
+| P1-19 | xlsx write-back re-saves the buyer's workbook through openpyxl with no post-write round-trip proof (its docx twin has `_assert_roundtrip`); openpyxl drops images, charts and cached formula values on load/save — the buyer's form comes back with content silently missing. | `engine/assembly/writeback.py:160-165` | **P26** rider (part-inventory round-trip assert; refuse on drift) |
+| P1-20 | `event_id` is minted `len(read())+1` with no lock, and three mutating event routes (`add_event`, `record_outcome`, `record_effort`) take no `_mutate` — two concurrent appends mint the same id into an append-only record, and an outcome/effort can interleave with a revise job finalizing events. | `engine/web/events.py:73` · `engine/web/server.py:1622,1677,1691` | **P25 item 3** rider (count-derived ids under the pursuit guard; the three routes take `_mutate`) |
+| P1-21 | `merge_batch` is not atomic: a mid-batch refusal leaves earlier cards rewritten and marked `accepted`, and the curation-log line — the record of what changed — is written only after the loop. The route turns it into a 409 that hides the partial apply. | `engine/kb/curation.py:329-352` · `server.py:583` | **P26** rider (validate the whole batch, then apply; log what was applied on any exit) |
+| P1-22 | The same `len()+1`/read-modify-write class elsewhere: share `link_id` (`sl_NN`) minted without a lock and `create_share` takes no `_mutate` (two creates fold into one, orphaning a token); `org_id` minted by scan with no lock; `inbox/roles.json` read-modify-write outside `_mutate`. | `engine/web/share.py:85` + `server.py:880` · `engine/workspace/orgs.py:77-81` · `server.py:238-243` | **P25 item 3** rider (with P1-20) |
+| P1-23 | The workbook and docx structure parsers have no warnings channel: `ParsedWorkbook` carries no `warnings`; every row that falls through classification is dropped with zero record (`# Everything else: furniture.`); pre-filled answer rows are skipped silently. The P10-F16 class (lessons.md line 19). | `engine/structure/parse.py:28-40` · `classify.py:326` · `docx_buyer.py:118-122` | **P26** rider — parser fidelity group |
+| P1-24 | A buyer question authored as a formula (`='Instructions'!A5`, common) produces NO slot and NO warning: formula cells are excluded from slot text and `data_only=False` reads no cached value. | `engine/structure/facts.py:81` · `classify.py:222` | **P26** rider — parser fidelity group |
+| P1-25 | Intake renders formula SOURCE text into the brief and the model prompt unwarned (`=B2&" "&C2` where the human sees a date); the KB import lane refuses formula cells by name for exactly this reason, intake does not. Formula evaluation is correctly absent. | `engine/intake/extract.py:88` vs `engine/kb/xlsx.py:145-149` | **P26** rider — parser fidelity group |
+| P1-26 | Hidden-content marking is narrower than the stated contract: hidden sheets and rows are marked, hidden COLUMNS are extracted unmarked (`column_dimensions` never consulted) and cannot fire the `hidden_content` flag; the module docstring says "hidden workbook content is extracted AND marked" — a stated property stronger than the implemented one (lessons.md line 11). Unsure, same class: docx `w:vanish` hidden text. | `engine/intake/extract.py:11,94,112` (0 hits for `column_dimensions`) | **P26** rider — parser fidelity group; **the docstring is corrected in P25 item 6's commit** (the file is touched there) |
+| P1-27 | Firm-template authoring scaffolding ships to the buyer: `template_fill` strips only the guidance boxes of filled sections; the "How to Use This Template" front matter, its `Field` table and every `[ Replace with the drafted section. ]` placeholder of an unfilled section survive into `exports/submission/response.docx`; `remaining_guidance` does not list the front matter and nothing blocks the download. | `engine/structure/docx_default.py:76-161` (front matter skipped by the parser, so the fill never sees it) · `engine/assembly/template_fill.py:169,273` | **P26** rider — **owner's call whether it pulls forward** (see B97 §5) |
+| P2-16 | The download door serves `root / entry["path"]` straight from the on-disk bundle record with no containment re-check; `output_name` is engine-derived today, so unreachable — but the door verifies nothing about the record it trusts. | `engine/web/server.py:751-754` | **P25 item 4** rider (one `is_relative_to` line) |
+| P2-17 | `PURSUIT_ID` is applied only at creation; every other route joins `pursuit_id` into `workspace / pursuit_id` unvalidated — `_pursuit_root("..")` passes `is_dir()` and the following `PursuitDir(workspace, "..")` mkdirs eleven subdirectories in the workspace's PARENT. | `engine/web/server.py:103-107` · `engine/workspace/pursuit.py:40-42` | **P25 item 4** rider (validate in `_pursuit_root`, 422) |
+| P2-18 | The waiver door writes `run_end(status="completed")` before checking the result — a refused waiver gets a mini-run footer claiming success; `approve_waiver` is also uncaught. | `engine/web/server.py:1525-1535` | **P25 item 4** rider |
+| P2-19 | Schema violations on the four event doors surface as 500s: `EventsLane.append` raises `ContractError`, the routes catch only `EventsError` (sibling `ValueError` subclasses). | `engine/web/events.py:41,78` · `server.py:986,1002,1013,1244,1593` | **P25 item 4** rider |
+| P2-20 | A crashed job leaves a footerless run that the runs read model reports as `in_flight` forever, disagreeing with the job journal's `error`; nothing reconciles the two records. | `engine/web/jobs.py:157-162` · `server.py:152-156` | **P26** rider (with P0-14/P1-17, the run-log recovery group) |
+| P2-21 | `engine slice --fresh` `rmtree`s whatever `--workspace` names — no confirmation, no path sanity: `--workspace ~` deletes it. | `engine/cli/slice.py:260-261` | **P25 item 2** rider (refuse unless under the pursuits root and carrying a workspace marker) |
+| P2-22 | `kb purge` is destructive with a self-asserted actor: authorization goes through the restricted door, but `--actor` is free text, so anyone with shell access types an authorized name. Honor-system until A5's SSO reaches the CLI. | `engine/cli/kb.py:112-114,202-203` · `engine/kb/provenance.py:82` | **A5** (auth) — SECURITY.md states the declared-actor posture now (this commit) |
+| P2-23 | `kb_id` and `proposal_id` reach path construction unvalidated from JSON payloads; existence checks bound reads, but an accepted proposal WRITES to the resolved path; `proposal_ids` elements are not type-checked (`TypeError` 500). | `engine/kb/store.py:87-88` · `engine/flywheel/proposals.py:40-41` · `server.py:549,585` | **P26** rider (id regexes at the store boundary) |
+| P2-24 | Prompt-frame delimiters are not escaped in the assistant loop: card/doc content containing the retrieved-frame closing tag or a `\n\n[USER n]` line start forges a frame; the injection screen and the frame are tested, the delimiter is not. Content is firm-authored and steward-gated. | `engine/assistant/loop.py:80-93` · `engine/assistant/frames.py:41-44` | **A4** (with P1-5, the injection posture eval) |
+| P2-25 | openpyxl parses worksheet bodies with stdlib `iterparse` and `defusedxml` is not installed, so INTERNAL entity expansion is live (billion-laughs) — a small, low-ratio xlsx blows memory; distinct from the size/zip-ratio caps. External entities are off on both lanes (verified). | `.venv/…/openpyxl/xml/functions.py:40-42` (`DEFUSEDXML False`) · `requirements.lock` (absent) | **P25 item 6** rider (add `defusedxml` to the lock — openpyxl switches parsers with no code change) |
+| P2-26 | `pypdf` runs at `strict=False` with its warnings on the `pypdf` logger that nothing captures; a partially-recovered PDF looks identical to a clean one in the run log. | `engine/intake/extract.py:126-129` | **P26** rider — parser fidelity group |
+| P2-27 | Body-only docx walks: headers, footers and text boxes are never read by intake extraction, buyer-docx structure parsing, or KB ingestion — buyer instructions in a header are absent from the brief, the slots and the injection screen's input. | `engine/intake/extract.py:138-147` · `engine/structure/docx_buyer.py:99` · `engine/kb/read.py` | **P26** rider — parser fidelity group |
+| P2-28 | CI: `pull_request` from a same-repo branch runs PR-authored `Makefile`/tests with `secrets.TRIPWIRE_TOKENS` on disk (per-line masking covers verbatim echoes only); `setup-uv` `enable-cache: true` on PR runs lets a branch seed the cache `main` restores; `actions/checkout` keeps `persist-credentials` at its default. Bounded: the private repo has no forks and `permissions: contents: read`. Pins themselves are sound (full SHAs, version comments, no `pull_request_target`). | `.github/workflows/check.yml` | **Opportunistic, next CI touch** (with the Node 20→24 pin bump — long-lead) |
+| P2-29 | A control character in prose (reachable from buyer text through the drafting lane) makes python-docx raise `ValueError`, which neither exit door catches — the request 500s and the gate run is left without a footer. Verified: `add_paragraph("bad\x0bchar")` raises. | `engine/assembly/docx_writeback.py:230` · `template_fill.py` `add_paragraph` · `server.py:713-716,846-865` | **P25 item 8** rider (both doors close the run on ANY exception) · **P26** (typed refusal of control characters at the envelope boundary) |
+| P2-30 | Ragged buyer tables crash instead of refusing: `row.cells[answer_col]` and `row[i]` index by the header width, an OOXML row with fewer cells raises `IndexError` untyped past `parse_buyer_docx`. | `engine/structure/docx_buyer.py:118-122` and the grid/fill-in helpers | **P26** rider — parser fidelity group |
+| P3-11 | `AuthSeam._sessions` is an unbounded in-memory dict fed by an unauthenticated POST — any local client mints sessions indefinitely, each with an arbitrary 2–60-char operator name that lands in gate actor and `waived_by` fields. | `engine/web/auth.py:36,48-49` · `server.py:114` | **A5** (auth rework, with M-2) |
+| P3-12 | Share tokens are compared with `==` (non-constant-time) and `expires_at` has no upper bound. | `engine/web/share.py:110,80-81` | **P25 item 4** rider (`compare_digest`; cap at now+30d) |
+| P3-13 | Payload fields are read with `.get()` and no type check across the route surface — a wrong-typed field is a 500, not a 422 (`dict(effort)` on a string; `PURSUIT_ID.match` on a non-str). | `engine/web/server.py:1236-1237,175` | **P26** rider (with P2-14, the type-leak class); the post-commit `effort` case closes with P25 item 1's validate-before-decision |
+| P3-14 | A guest's `slot_id` is passed into the pending record unvalidated (only `section_id` is checked against the plan), so a guest comment can be tagged to a foreign slot a later revision round targets. | `engine/web/server.py:963,982` | **P26** rider |
+| P3-15 | Output documents carry the generator's identity and pass through source metadata: nothing sets `core_properties`; the bundled template's `docProps/core.xml` names python-docx as creator; tracked changes and comments in a real firm template would round-trip unflagged (both verifiers compare text/style only). | `config/templates/firm-default-template.docx` `docProps/core.xml` · 0 hits for `core_properties` in `engine/` | **P26** rider (metadata hygiene on every buyer-facing output) |
+| M-12 | `plan_import`'s `unchanged` count subtracts errors from rows; a row can produce several errors, so the number a steward reads can understate or go negative. | `engine/kb/xlsx.py:318` | **Opportunistic** — next touch of the file |
+| M-13 | A non-ISO guest `at` raises an uncaught `ValueError` (500) on the unauthenticated share routes — moot once P0-18 removes caller-supplied clocks. | `engine/web/share.py:34-35` | **Closed by P0-18** (P25 item 4) |
+
+**Verified sound at full depth (no finding):** the job lane's check→guard→re-check and typed error lanes; share-token secrecy and the revoke kill switch; the one guest write door (screened, pending, `external` provenance); server-derived `revision` on events; the assistant's 14-tool catalog (12 reads, 2 proposals, zero writers), strict per-tool argument schemas, bounded results and a triple-bounded loop, citation gate, session-id-as-traversal-guard, derived spend under a preflighted ceiling, lane unmixability; every assistant route operator-gated; no shell injection anywhere (list-form subprocess only); `serve` host not an argument; the evals rebaseline arm triple-gated; XXE off on both XML lanes (python-docx `resolve_entities=False`; openpyxl `fromstring` hardened) and no engine code parses document XML directly; no parser follows external references; formulas never evaluated; all buyer text inside the untrusted frame; one injection-screen registry over the full text including hidden segments; encrypted/unparseable documents refuse loudly before spend; model output whitelisted; docx write-back and template fill prove their change sets; no buyer string can reach a docx field or attribute unescaped; write-back digest- and plan-bound; downloads record-gated; honesty rules clean (no test-only branch, env switch or hard-coded success path in the swept modules); workflow pins are full SHAs with version comments, `permissions: contents: read`, no `pull_request_target`.
+
+**Still unreviewed by any pass (named, with its trigger):** `engine/extraction/` beyond the sandbox seam (the docling lane), `engine/evals/`, `engine/metrics/`, `engine/flywheel/` beyond `proposals.py`, `engine/kb/` beyond ingest/read/xlsx/curation/purge, `engine/web/state.py` and `pings.py` beyond their read paths. Trigger: **P26 kickoff** — one sweep, two agents at a time, same door.
+
+### 5.6 P25 closure (2026-09-02, B98)
+
+Closed by P25, each with a named test in the suite: **P0-2** (`read_frozen`
++ the freeze door; `tests/workspace/test_pursuit.py`, `tests/planning/
+test_plan_refusals.py`, `tests/web/test_export.py`) · **P0-3, P2-12**
+(`tests/workspace/test_run_mint.py`, `tests/runlog/test_run_id_guard.py`) ·
+**P0-4, P2-21** (`tests/workspace/test_workspace_lock.py`, `tests/cli/
+test_cli_lock.py`) · **P0-5, P2-13, P0-17, P1-12, P2-11** (`tests/contracts/
+test_gate_key.py`, the three gate test files, `tests/pipeline/test_driver.py`,
+`tests/research/test_research_resume.py`, `tests/web/test_gates.py`) ·
+**P0-7, P0-18, P0-19, P2-16, P2-17, P2-18, P2-19, P3-12, M-13** (`tests/web/
+test_security_headers.py`, `test_share.py`, `test_gates.py`,
+`test_foundation.py`) · **P0-8, P2-25** (`tests/web/test_upload_caps.py`,
+`tests/intake/test_zipguard.py`) · **P0-16, P0-20, P2-29a** (`tests/pipeline/
+test_driver.py`, `tests/drafting/test_draft_resume.py`, `tests/web/
+test_export.py`, `tests/web/test_addenda.py`) · **P1-18** + the B92 guard pair
+(`tests/contracts/test_public_cut.py`, `test_public_cut_orchestration.py`) ·
+**P1-20, P1-22** (`tests/web/test_events.py`, `test_share.py`,
+`test_org_routes.py`) · **P1-26** (docstring half; the hidden-column marking
+itself stays in P26). Ids remain permanent labels; nothing here renumbers.

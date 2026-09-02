@@ -30,7 +30,7 @@ def advised(tmp_path_factory):
     pursuit, report, _ = run_validation_package(tmp)
     assert report.status == "complete"
     app = create_app(tmp, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Avery Asker")
         yield client, pursuit
 
@@ -112,7 +112,7 @@ def test_advisor_guards(advised):
         workspace / "support" / "traces.jsonl").read_text().splitlines()]
     assert lines[-1]["outcome"] == "error"  # the failed call still counts
     # no session -> 401 (the advisor is firm-side, never guest-facing)
-    bare = TestClient(client.app)
+    bare = TestClient(client.app, base_url="http://127.0.0.1")
     assert bare.post("/api/advisor",
                      json={"question": "hello there"}).status_code == 401
     # the raw question text never lands in the lane — digest only

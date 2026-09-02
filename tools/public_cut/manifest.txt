@@ -19,6 +19,7 @@ docs/milestones/p11-diagnostic/cost-actuals.md
 docs/milestones/p11-diagnostic/runs
 docs/milestones/p8-live-run/runs
 docs/pilot
+docs/reviews
 docs/steward
 engine
 evals

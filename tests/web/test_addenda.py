@@ -23,7 +23,7 @@ def amendable(tmp_path_factory):
     pursuit, report, _ = run_validation_package(tmp)
     assert report.status == "complete"
     app = create_app(tmp, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Ada Amender")
         yield client, pursuit
 
@@ -75,7 +75,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
     from engine.web.fake_script import revision_script
     app = create_app(ws, make_caller=lambda log: TracedCaller(
         FakeCaller(revision_script()), log), now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Ada Amender")
         client.post("/api/pursuits", json={"pursuit_id": "pur_amend"})
         for name, path in (("demo-twin.xlsx", DEMO_WORKBOOK),
@@ -108,6 +108,9 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
         old_envelope = json.loads(
             (ws / "pur_amend" / "drafts" / "draft.json").read_text())
         assert old_envelope["plan_sha256"] == old_frozen_sha
+        old_draft_sha = hashlib.sha256(
+            (ws / "pur_amend" / "drafts" / "draft.json").read_bytes()
+        ).hexdigest()
         client.post("/api/pursuits/pur_amend/addenda?filename=a2.md",
                     content=b"AMENDMENT: scope change to the timeline.")
         r = client.post("/api/pursuits/pur_amend/addenda/addm_01/decide",
@@ -135,3 +138,55 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
         # the old draft is void by MISMATCH: no live freeze carries its
         # plan_sha256 anymore
         assert not (ws / "pur_amend" / "plan.frozen.json").exists()
+
+        # --- P25 item 8 (P0-16): the pre-amendment draft pair is archived
+        # intact and attested, the drafting/validation checkpoints are
+        # cleared, a re-approved replan refuses the stale export, and the
+        # next advance drafts anew against the current plan.
+        from engine.pipeline.driver import validation_is_current
+        from engine.workspace import PursuitDir
+        pursuit = PursuitDir(ws, "pur_amend")
+        root = pursuit.root
+        meta = json.loads((root / "addenda" / "addm_01" / "meta.json")
+                          .read_text(encoding="utf-8"))
+        assert meta["archived_draft_sha256"] == old_draft_sha
+        assert not (root / "drafts" / "draft.json").exists()
+        archived_draft = root / "addenda" / "addm_01" / "draft.superseded.json"
+        assert hashlib.sha256(archived_draft.read_bytes()).hexdigest() \
+            == old_draft_sha
+        assert not {"drafting", "validation"} & pursuit.completed_stages()
+        g2 = client.get("/api/pursuits/pur_amend/gate2").json()
+        dispose = [{"section_id": s["section_id"], "gap_id": g["gap_id"],
+                    "action": "draft_flagged", "note": "Best effort."}
+                   for s in g2["sections"] for g in s["gaps"]
+                   if g["status"] == "open"]
+        r = client.post("/api/pursuits/pur_amend/gate2", json={
+            "decision": "approved_with_edits",
+            "edits": {"dispose": dispose}, **ROLE})
+        assert r.status_code == 200, r.text
+        new_frozen_sha = pursuit.file_sha256("plan.frozen.json")
+        assert new_frozen_sha
+        # Under FakeCaller the replan can reproduce the plan BYTE-FOR-BYTE
+        # (same script, same clock) — the old draft's plan_sha256 would
+        # then match the new freeze, which is exactly why the replan
+        # ARCHIVES the draft pair instead of trusting the hash alone.
+        # the stale export is REFUSED (no current draft for this plan)
+        r = client.post("/api/pursuits/pur_amend/export",
+                        json={"lane": "submission", "at": FIXED_AT})
+        assert r.status_code == 409, r.text
+        assert not (root / "exports" / "submission").exists() or not any(
+            (root / "exports" / "submission").iterdir())
+        # the next advance drafts and validates against the CURRENT plan
+        done = wait_job(client, client.post(
+            "/api/pursuits/pur_amend/jobs",
+            json={"kind": "advance", "at": FIXED_AT}).json()["id"],
+            timeout=240)
+        assert done["state"] == "done", done
+        new_envelope = json.loads((root / "drafts" / "draft.json").read_text())
+        assert new_envelope["plan_sha256"] == new_frozen_sha
+        assert validation_is_current(pursuit)
+        # whatever the export door says now, it is no longer staleness
+        r = client.post("/api/pursuits/pur_amend/export",
+                        json={"lane": "submission", "at": FIXED_AT})
+        assert "different frozen plan" not in r.text
+        assert "does not match" not in r.text

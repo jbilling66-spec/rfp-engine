@@ -160,7 +160,7 @@ def compose_bundle(pursuit, log, *, at: str, composed_by: str,
     `refusals` is the calling door's record of lanes that ran and
     refused THIS pass: [{lane, file, reason}] — a refusal is an event
     the filesystem cannot show, so the door that saw it carries it in."""
-    frozen_plan = pursuit.read_artifact("plan.frozen.json")
+    frozen_plan = pursuit.read_frozen("pursuit_plan")
     container = pursuit.read_artifact(
         frozen_plan.get("slots_ref", "slots.json"))
     bindings = declared_deliverables(pursuit, container)

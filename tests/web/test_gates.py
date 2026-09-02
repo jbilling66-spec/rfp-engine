@@ -34,7 +34,7 @@ def walked(tmp_path_factory):
     advance -> drafting + validation -> review."""
     ws = tmp_path_factory.mktemp("web-gates") / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Ash Approver")
     client.post("/api/pursuits", json={"pursuit_id": "pur_walk"})
@@ -182,7 +182,7 @@ def test_gate_refusals_surface_as_409(walked):
 def test_gate2_rejection_is_the_redo_door_over_http(tmp_path):
     ws = tmp_path / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Ray Redo")
         client.post("/api/pursuits", json={"pursuit_id": "pur_redo"})
         for name, path in (("demo-twin.xlsx", DEMO_WORKBOOK),
@@ -219,7 +219,7 @@ def test_collapse_stops_honest_when_gaps_exist(tmp_path):
     auto-approve gate 2 — B24: a human decision is never preselected."""
     ws = tmp_path / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client)
         client.post("/api/pursuits", json={"pursuit_id": "pur_clp"})
         for name, path in (("demo-twin.xlsx", DEMO_WORKBOOK),
@@ -244,7 +244,7 @@ def test_waiver_reaches_the_annotated_draft_with_its_event(tmp_path):
         tmp_path, script=make_validation_script(plant_unsupported=True))
     app = create_app(tmp_path, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Wren Waiver")
         pid = pursuit.pursuit_id
         annotated = pursuit.read_artifact("drafts/annotated-draft.json")
@@ -278,3 +278,92 @@ def test_waiver_reaches_the_annotated_draft_with_its_event(tmp_path):
                 "reason": "waived", **ROLE})
             assert r2.status_code == 200
             assert any("boilerplate" in w for w in r2.json()["warnings"])
+
+
+# --- P25 item 1: the door converges under a REAL clock -----------------
+
+def _walk_to_gate1(ws, client, pursuit_id):
+    client.post("/api/pursuits", json={"pursuit_id": pursuit_id})
+    for name, path in (("demo-twin.xlsx", DEMO_WORKBOOK),
+                       ("ramble.md", DEMO_RAMBLE),
+                       ("research-pack.md", DEMO_PACK)):
+        client.put(f"/api/pursuits/{pursuit_id}/inbox/{name}",
+                   content=path.read_bytes())
+    done = advance_past_gate0(client, pursuit_id)
+    assert "awaiting_gate at gate_1" in done["message"], done
+
+
+def test_resubmit_over_http_with_a_real_clock_converges_once(tmp_path):
+    """P0-5 as the pilot would hit it: no injected clock, the browser
+    sends no `at`, the operator clicks twice — the second click converges
+    (200, converged) instead of 409, and the events lane holds exactly
+    ONE review_session for the gate."""
+    from engine.web.events import EventsLane
+    from engine.workspace import PursuitDir
+    ws = tmp_path / "ws"
+    app = create_app(ws)  # the real clock — deliberately no now=
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Ash Approver")
+        _walk_to_gate1(ws, client, "pur_clock")
+        body = {"decision": "approved", "effort": {
+            "active_ms": 90000, "confirmed_minutes": 2}, **ROLE}
+        first = client.post("/api/pursuits/pur_clock/gate1", json=body)
+        assert first.status_code == 200, first.text
+        assert first.json()["converged"] is False
+        second = client.post("/api/pursuits/pur_clock/gate1", json=body)
+        assert second.status_code == 200, second.text
+        assert second.json()["converged"] is True
+        events = EventsLane(PursuitDir(ws, "pur_clock")).read()
+        assert [e["kind"] for e in events].count("review_session") == 1
+
+
+def test_bad_effort_refuses_before_the_decision_commits(tmp_path):
+    """A malformed effort payload 422s BEFORE the gate decision lands —
+    the gate stays decidable, so the corrected resubmit is a first
+    decision, not a refusal of an already-decided gate."""
+    ws = tmp_path / "ws"
+    app = create_app(ws, now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Ash Approver")
+        _walk_to_gate1(ws, client, "pur_effort")
+        r = client.post("/api/pursuits/pur_effort/gate1", json={
+            "decision": "approved",
+            "effort": {"measurement": "confirmed", "active_ms": 1}, **ROLE})
+        assert r.status_code == 422, r.text
+        assert client.get("/api/pursuits/pur_effort/gate1").json()[
+            "decidable"] is True
+        r = client.post("/api/pursuits/pur_effort/gate1", json={
+            "decision": "approved", **ROLE})
+        assert r.status_code == 200 and r.json()["converged"] is False
+
+
+
+def test_internal_review_surface_requires_an_operator(walked):
+    """P25 item 4 (P0-19): the FULL internal review model is operator-only;
+    a bare client gets 401, exactly like every other internal door."""
+    client, _ = walked
+    bare = TestClient(client.app, base_url="http://127.0.0.1")
+    assert bare.get("/api/pursuits/pur_walk/review").status_code == 401
+    assert client.get("/api/pursuits/pur_walk/review").status_code in (200, 400)
+
+
+def test_refused_waiver_writes_a_failed_footer(walked):
+    """P25 item 4 (P2-18): a refused waiver's mini-run says failed, and an
+    unknown claim is a typed 409, never a traceback."""
+    client, ws = walked
+    r = client.post("/api/pursuits/pur_walk/waivers", json={
+        "claim_id": "claim_nope", "reason": "no such claim", **ROLE})
+    assert r.status_code == 409, r.text
+    runs = sorted((ws / "pur_walk" / "runs").glob("*/run.jsonl"))
+    footer = read_run(runs[-1])[-1]
+    assert footer["record_type"] == "run_end"
+    assert footer["run"]["status"] == "failed"
+
+
+def test_event_door_schema_violation_is_a_422(walked):
+    """P25 item 4 (P2-19): a wrong enum on an event door is a 422, not a
+    500 — ContractError and EventsError are both refusals."""
+    client, _ = walked
+    r = client.post("/api/pursuits/pur_walk/outcome", json={
+        "result": "banana", **ROLE})
+    assert r.status_code == 422, r.text

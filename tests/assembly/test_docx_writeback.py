@@ -30,6 +30,7 @@ from engine.structure import (
 )
 from engine.version import engine_version
 from engine.workspace import PursuitDir
+from tests.helpers import plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 AT = "2026-08-28T12:00:00Z"
@@ -52,11 +53,11 @@ def _workspace(tmp_path, source_name: str, *, template=False):
 
     planned = [s["slot_id"] for s in parsed.slots
                if s["slot_id"] != "s-t01-r02"]  # one slot left UNplanned
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": "pur_docxwb", "path": "A_designated",
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "all", "slot_ids": planned}],
-    }), encoding="utf-8")
+    })
     answers = [{"slot_id": "s-t00-r01", "status": "drafted", "prose": PROSE},
                {"slot_id": "s-t01-r01", "status": "awaiting_disposition"}]
     (pursuit.root / "drafts").mkdir(exist_ok=True)
@@ -187,11 +188,11 @@ def two_docx(tmp_path):
     pursuit.write_artifact("target_slots", container, name="slots.json")
     planned = [s["slot_id"] for s in container["slots"]
                if not s.get("is_header")]
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": "pur_docxwb", "path": "A_designated",
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "all", "slot_ids": planned}],
-    }), encoding="utf-8")
+    })
     (pursuit.root / "drafts").mkdir(exist_ok=True)
     (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
         "plan_sha256": "0" * 64, "revision_n": 1,

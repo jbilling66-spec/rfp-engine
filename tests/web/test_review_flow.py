@@ -33,7 +33,7 @@ def reviewing(tmp_path_factory):
         return TracedCaller(FakeCaller(script), log)
 
     app = create_app(tmp, make_caller=make_caller, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Remy Reviewer")
     yield client, pursuit

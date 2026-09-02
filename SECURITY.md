@@ -37,3 +37,9 @@ restricted tokens (`tests/tripwire/` — public clones ship a committed
 attestation of the empty-list posture), zero network access from the suite, and
 zero-spend-by-default model calls. A clone that weakens those tests has
 left the supported configuration.
+
+One posture to know before real data: the command-line tools take an
+`--actor` name that is declared, not authenticated. Authorization for
+destructive operations (purge) is checked against that declared name, so
+shell access to the host is the actual trust boundary until the SSO seam
+reaches the CLI (a planned phase, tracked in the maintainers' roadmap).

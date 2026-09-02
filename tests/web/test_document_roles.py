@@ -24,7 +24,7 @@ PDF_TWIN = FIXTURES / "pdf-twin.pdf"
 def role_client(tmp_path_factory):
     ws = tmp_path_factory.mktemp("web-roles") / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Rae Roles")
     yield client, ws

@@ -39,7 +39,7 @@ def ping_client(tmp_path_factory):
     (ws / "kb").mkdir(parents=True)  # the app's kb_root → this workspace
     KBStore(ws / "kb")
     app = create_app(ws, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Astrid Answerer")
     client.post("/api/pursuits", json={"pursuit_id": "pur_pingcard"})

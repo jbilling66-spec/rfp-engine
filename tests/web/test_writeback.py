@@ -15,6 +15,7 @@ from openpyxl import Workbook, load_workbook
 from engine.web.server import create_app
 from engine.workspace import PursuitDir
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
+from tests.helpers import plant_annotated, plant_freeze
 
 ROLE = {"actor_role": "pursuit_lead"}
 
@@ -71,8 +72,7 @@ def wired(tmp_path):
                                    "s_empty"]}],
     }
     pursuit.write_artifact("pursuit_plan", plan, name="plan.json")
-    frozen = pursuit.write_artifact("pursuit_plan", plan,
-                                    name="plan.frozen.json")
+    frozen, _ = plant_freeze(pursuit, "pursuit_plan", plan, validate=True)
     envelope = {
         "pursuit_id": "pur_wb",
         "plan_sha256": hashlib.sha256(frozen.read_bytes()).hexdigest(),
@@ -89,8 +89,9 @@ def wired(tmp_path):
             ]}],
     }
     pursuit.write_artifact("draft", envelope, name="drafts/draft.json")
+    plant_annotated(pursuit)
     app = create_app(ws, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Wren Writer")
         yield client, pursuit, source
 
@@ -149,7 +150,7 @@ def test_writeback_refuses_pricing_cells(wired):
 
 def test_unconfirmed_writeback_refuses(wired):
     client, pursuit, _ = wired
-    bare = TestClient(client.app)  # no operator session: S7 unconfirmed
+    bare = TestClient(client.app, base_url="http://127.0.0.1")  # no operator session: S7 unconfirmed
     assert bare.post("/api/pursuits/pur_wb/writeback/confirm",
                      json={"at": FIXED_AT, **ROLE}).status_code == 401
     assert not (pursuit.root / "exports" / "writeback").exists()

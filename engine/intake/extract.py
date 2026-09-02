@@ -8,7 +8,7 @@ explicit warning for PDF pages that yield no text (a half-scanned document
 must not silently thin), and datetime cells rendered via isoformat (never
 str(cell) → "2026-03-01 00:00:00").
 
-Hidden workbook content is extracted AND marked (v1 iterated hidden sheets
+Hidden workbook SHEETS and ROWS are extracted AND marked — hidden COLUMNS are extracted but not yet marked (register P1-26, closes at P26); the original claim read broader than the code (v1 iterated hidden sheets
 and rows silently — exactly the surface an injection screen must see).
 """
 
@@ -29,6 +29,7 @@ from engine.extraction.fingerprint import (
     stack_fingerprint,
 )
 from engine.extraction.media import media_findings
+from engine.structure.zipguard import check_office_zip
 
 
 class UnreadableRfp(Exception):
@@ -85,6 +86,7 @@ def _cell_text(value) -> str:
 
 def _extract_xlsx(path: Path, doc: ExtractedDoc) -> None:
     try:
+        check_office_zip(path)  # P0-8: the container before the parser
         wb = load_workbook(path, data_only=False)  # hidden state + formula TEXT
     except Exception as exc:  # openpyxl raises a zoo of types on bad bytes
         raise UnreadableRfp(path, f"unparseable xlsx: {exc}") from exc
@@ -141,6 +143,7 @@ def _extract_docx(path: Path, doc: ExtractedDoc) -> None:
     from docx.text.paragraph import Paragraph
 
     try:
+        check_office_zip(path)  # P0-8: the container before the parser
         document = Document(path)
     except Exception as exc:
         raise UnreadableRfp(path, f"unparseable docx: {exc}") from exc

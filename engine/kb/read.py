@@ -22,6 +22,7 @@ from pathlib import Path
 
 from engine.extraction.fingerprint import stack_fingerprint
 from engine.kb.canonical import Element, elements_from_markdown
+from engine.structure.zipguard import check_office_zip
 
 
 @dataclass
@@ -45,6 +46,7 @@ def _read_docx(path: Path) -> SourceText:
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
+    check_office_zip(path)  # P0-8: the container before the parser
     document = docx.Document(str(path))
     lines: list[str] = []
     elements: list[Element] = []

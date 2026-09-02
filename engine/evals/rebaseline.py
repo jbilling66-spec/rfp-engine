@@ -34,6 +34,7 @@ from engine.evals import claim_extraction as _claim_extraction
 from engine.kb import KBStore
 from engine.runlog import RunLogger
 from engine.validation import poison as _poison
+from engine.workspace.pursuit import mint_run_id
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_WORKSPACE = ROOT / "pursuits" / "eval-live"
@@ -60,12 +61,7 @@ SUITES = {
 
 
 def _next_run_id(workspace: Path) -> str:
-    runs = workspace / "runs"
-    existing = {p.name for p in runs.glob("run_*")} if runs.exists() else set()
-    n = 1
-    while f"run_{n:04d}" in existing:
-        n += 1
-    return f"run_{n:04d}"
+    return mint_run_id(workspace / "runs")  # the ONE mint (P25 item 3)
 
 
 def history_path(baseline_path: Path) -> Path:

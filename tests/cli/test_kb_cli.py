@@ -48,3 +48,18 @@ def test_kb_where_used_denied_for_unknown_actor(tmp_path, capsys):
     assert main(["kb", "where-used", "Aaron Tuck", "--kb", str(kb),
                  "--actor", "owner"]) == 0
     assert "kb_" in capsys.readouterr().out
+
+
+
+def test_kb_cli_runs_mint_through_the_one_mint(tmp_path):
+    """P25 item 3: the KB store's run ids come from the shared mint — a
+    deleted middle run never recycles an id (the CLI used to count)."""
+    import types
+
+    from engine.cli.kb import _new_log
+    store = types.SimpleNamespace(root=tmp_path / "kb")
+    for name in ("run_0001", "run_0002", "run_0003"):
+        (store.root / "runs" / name).mkdir(parents=True)
+    (store.root / "runs" / "run_0002").rmdir()
+    log = _new_log(store)
+    assert log.run_id == "run_0004"

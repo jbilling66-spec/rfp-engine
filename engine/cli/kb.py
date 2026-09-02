@@ -9,6 +9,7 @@ arrives P8, RFP_LIVE-gated).
 """
 
 import json
+from engine.workspace.pursuit import mint_run_id
 import sys
 from pathlib import Path
 
@@ -23,9 +24,7 @@ def _store(args):
 
 def _new_log(store):
     from engine.runlog import RunLogger
-    runs = store.root / "runs"
-    existing = sorted(p.name for p in runs.iterdir()) if runs.exists() else []
-    return RunLogger(store.root, f"run_{len(existing) + 1:04d}", "kb")
+    return RunLogger(store.root, mint_run_id(store.root / "runs"), "kb")
 
 
 def _cmd_kb_seed(args) -> int:
@@ -110,8 +109,18 @@ def _cmd_kb_snapshot(args) -> int:
 
 def _cmd_kb_purge(args) -> int:
     from engine.kb import purge_client
-    report = purge_client(_store(args), args.client, actor=args.actor,
-                          pursuits_root=Path(args.pursuits))
+    from engine.workspace.lock import WorkspaceLocked, workspace_lock
+    # The purge cascades into every pursuit under --pursuits — that root
+    # IS a served workspace, so it takes the server's lock (P25 item 2,
+    # P0-4) and refuses beside a live server rather than racing it.
+    try:
+        lock = workspace_lock(Path(args.pursuits), holder="engine kb purge")
+    except WorkspaceLocked as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    with lock:
+        report = purge_client(_store(args), args.client, actor=args.actor,
+                              pursuits_root=Path(args.pursuits))
     acct = report.accounting or {}
     print(f"purged: {len(report.purged)} cards; held (legal_hold): "
           f"{report.held or 'none'}")

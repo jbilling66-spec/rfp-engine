@@ -16,6 +16,7 @@ from engine.structure import merge_parsed, parse_default_template
 from engine.web.server import create_app
 from engine.workspace import PursuitDir
 from tests.web.conftest import FIXED_AT, sign_in
+from tests.helpers import plant_annotated, plant_freeze
 
 PARA = "A synthetic executive summary paragraph."
 
@@ -24,7 +25,7 @@ PARA = "A synthetic executive summary paragraph."
 def fill_client(tmp_path_factory):
     ws = tmp_path_factory.mktemp("web-fill") / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Fiona Filler")
     client.post("/api/pursuits", json={"pursuit_id": "pur_fill"})
@@ -35,15 +36,16 @@ def fill_client(tmp_path_factory):
     pursuit.checkpoint("path_b_outline", {
         "reference_sha256": hashlib.sha256(
             REFERENCE_DEFAULT.read_bytes()).hexdigest()})
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": "pur_fill", "path": "B_free_flow",
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "sec-exec",
-                      "slot_ids": ["s-h02-hdr", "s-h02"]}]}))
+                      "slot_ids": ["s-h02-hdr", "s-h02"]}]})
     (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": "0" * 64, "revision_n": 0,
+        "plan_sha256": pursuit.file_sha256("plan.frozen.json"), "revision_n": 0,
         "sections": [{"section_id": "sec-exec", "status": "drafted",
                       "prose": PARA}]}))
+    plant_annotated(pursuit)
     yield client, ws
     client.__exit__(None, None, None)
 

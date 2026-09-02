@@ -50,7 +50,7 @@ def test_header_mode_is_the_sso_seam(tmp_path):
                    encoding="utf-8")
     app = create_app(tmp_path / "ws", make_caller=raising_caller,
                      auth_config=cfg, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         # identity comes from the proxy header
         r = client.post("/api/pursuits", json={"pursuit_id": "pur_h"},
                         headers={"X-Auth-User": "Proxy Person"})
@@ -120,3 +120,37 @@ def test_shell_is_neutral_and_self_contained(offline_app):
         "http-equiv", "")  # no CDN/external fetch in the head
     js = offline_app.get("/static/app.js").text
     assert "esc(" in js  # the XSS discipline is present, pinned
+
+
+
+def test_every_door_checks_the_pursuit_id_shape(offline_app):
+    """P25 item 4 (P2-17): the id regex guards every door, not only
+    creation — a malformed id is 422 and creates nothing."""
+    client = offline_app
+    ws = client.app.state.workspace
+    before = sorted(p.name for p in ws.parent.iterdir())
+    for bad in ("not-an-id", "pur_UPPER", "pur_a b"):
+        r = client.get(f"/api/pursuits/{bad}/downloads")
+        assert r.status_code == 422, (bad, r.status_code)
+    # a traversal segment is normalized away by the client or refused by
+    # the shape check — either way nothing is created below
+    r = client.get("/api/pursuits/%2E%2E/downloads")
+    assert r.status_code in (404, 422)
+    assert sorted(p.name for p in ws.parent.iterdir()) == before
+    assert not (ws.parent / "drafts").exists()
+
+
+def test_download_door_refuses_a_bundle_path_outside_the_pursuit(offline_app):
+    """P25 item 4 (P2-16): the download door trusts the bundle RECORD for
+    the path, so it re-checks containment before serving."""
+    import json
+    client = offline_app
+    sign_in(client, "Dora Downloader")
+    client.post("/api/pursuits", json={"pursuit_id": "pur_dl"})
+    root = client.app.state.workspace / "pur_dl"
+    (root / "exports").mkdir(parents=True, exist_ok=True)
+    (root / "exports" / "submission-bundle.json").write_text(json.dumps({
+        "deliverables": [{"name": "x.docx", "status": "produced",
+                          "path": "../../escape.docx"}]}))
+    r = client.get("/api/pursuits/pur_dl/download/x.docx")
+    assert r.status_code == 403

@@ -163,7 +163,7 @@ outside this table, and the drift test pins that set closed.
 | weights-verify | Verify `models/` against the COMMITTED manifest — a mismatch is a finding, never a refreeze |
 | gate-tests | Container test leg without re-rendering the gate verdict |
 | gate | The §A2 extraction gate: network-disabled container, verdict written to the milestone record |
-| public-cut | Build + verify the public mirror in a staging dir — fresh single-commit history by default; with `PUBLIC_CUT_RELEASE=<published repo>` the verified tree is committed onto the existing public history instead (the update path, B89 §4a); the push stays a manual, owner-gated act in both modes |
+| public-cut | Build + verify the public mirror in a staging dir — fresh single-commit history by default; with `PUBLIC_CUT_RELEASE=<published repo>` the verified tree is committed onto the existing public history instead (the update path, B89 §4a); the push stays a manual, owner-gated act in both modes. Two guards (B92, P25 item 7): every tracked path must be classified by exactly one manifest/deny entry, and release mode refuses any published file absent from the cut unless `tools/public_cut/deletions.txt` acknowledges it |
 
 ## CLI commands (`python -m engine …`)
 

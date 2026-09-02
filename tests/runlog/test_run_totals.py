@@ -85,7 +85,7 @@ def test_totals_survive_a_reopened_logger(tmp_path):
     spent = sum(r.get("duration_ms", 0) for r in first
                 if r["record_type"] == "agent_call")
 
-    reopened = RunLogger(tmp_path / "pur_x", run_id="run_0001",
+    reopened = RunLogger(tmp_path / "pur_x", run_id="run_0001", resume=True,
                          pursuit_id="pur_x")
     reopened.emit("gate", stage="gate_2",
                   gate={"which": "gate_2_plan", "decision": "approved",

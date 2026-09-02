@@ -52,6 +52,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOL_DIR = ROOT / "tools" / "public_cut"
 MANIFEST = TOOL_DIR / "manifest.txt"
 DENY = TOOL_DIR / "deny.txt"
+DELETIONS = TOOL_DIR / "deletions.txt"  # release-mode deletion acknowledgments
 OVERLAY = TOOL_DIR / "overlay"
 
 DEFAULT_AUTHOR = "RFP Engine Maintainers <rfp-engine@invalid>"
@@ -176,6 +177,40 @@ def run(*args: str, cwd: Path, env: dict | None = None,
     return result
 
 
+def covers(entry: str, path: str) -> bool:
+    """The ONE matcher for manifest and deny entries: a literal path, or
+    a directory prefix. Globs are refused at validation, so this is the
+    whole semantics."""
+    return path == entry or path.startswith(entry + "/")
+
+
+def validate_manifest(entries: list[str]) -> None:
+    """Mirror of validate_deny's glob rule for the allowlist: `git archive`
+    would accept a glob pathspec, but the coverage matcher would not see
+    it — the two must agree, so globs are refused on both lists."""
+    for entry in entries:
+        if any(ch in entry for ch in "*?["):
+            sys.exit(f"FAILED: manifest entry {entry!r} uses glob characters "
+                     "— name the real path or directory")
+
+
+def coverage(tracked: list[str], manifest: list[str],
+             deny: list[str]) -> tuple[list[str], list[str]]:
+    """B92 §2a: every tracked path is classified by EXACTLY ONE entry of
+    manifest ∪ deny. Returns (uncovered, covered_more_than_once). An
+    uncovered path is an implied exclusion — the silent-non-ship state
+    that bit at P23 and nearly at B91; it no longer exists as a state."""
+    entries = list(manifest) + list(deny)
+    uncovered, multi = [], []
+    for path in tracked:
+        hits = sum(1 for e in entries if covers(e, path))
+        if hits == 0:
+            uncovered.append(path)
+        elif hits > 1:
+            multi.append(path)
+    return uncovered, multi
+
+
 def validate_deny(entries: list[str], tracked: list[str]) -> None:
     """Every deny entry must cover at least one TRACKED file: `.exists()`
     was satisfied by an empty working-tree dir no clone ever has (the p14
@@ -186,7 +221,7 @@ def validate_deny(entries: list[str], tracked: list[str]) -> None:
             sys.exit(f"FAILED: deny entry {entry!r} uses glob characters — "
                      "the deny check matches literal paths only; name the "
                      "real path or directory")
-        if not any(t == entry or t.startswith(entry + "/") for t in tracked):
+        if not any(covers(entry, t) for t in tracked):
             sys.exit(f"FAILED: deny entry {entry!r} covers no tracked file "
                      "— an exclusion of nothing is fiction; prune it "
                      "deliberately (the p14 lesson, B87 §5)")
@@ -228,23 +263,51 @@ def fresh_history(staging: Path) -> str:
     return author
 
 
+def staged_paths(staging: Path) -> set[str]:
+    return {p.relative_to(staging).as_posix() for p in staging.rglob("*")
+            if p.is_file() and ".git" not in p.relative_to(staging).parts}
+
+
 def release_commit(staging: Path, target: str,
-                   release_dir: Path | None = None) -> tuple[Path, str]:
+                   release_dir: Path | None = None,
+                   acknowledged: set[str] | None = None) -> tuple[Path, str]:
     """The update path (B89 §4a): commit the verified staging tree ONTO
     the existing public history — clone the published repo, replace its
-    tracked content wholesale, one neutral release commit. Deletions
-    propagate (git rm before the copy); an unchanged tree refuses loudly
-    rather than minting an empty release."""
+    tracked content wholesale, one neutral release commit. An unchanged
+    tree refuses loudly rather than minting an empty release.
+
+    The deletion guard (B92 §2b, P25 item 7): every file in the published
+    HEAD that is absent from the staged cut must be ACKNOWLEDGED in
+    tools/public_cut/deletions.txt (or `acknowledged`), else the release
+    refuses naming each surprise path — a contributor's merged work that
+    was never back-ported used to vanish silently under the wholesale
+    replace. An acknowledged path that is NOT a deletion refuses too (the
+    p14 fiction rule): the list is emptied after each release."""
     author, base_env, env = release_identity()
     if release_dir is None:
         release_dir = Path(tempfile.mkdtemp(prefix="rfp-public-release-"))
     run(*_NEUTRAL, "clone", "-q", target, str(release_dir), cwd=ROOT,
         env=base_env)
-    if not run("git", "ls-files", cwd=release_dir,
-               env=base_env).stdout.strip():
+    published = set(run("git", "ls-files", cwd=release_dir,
+                        env=base_env).stdout.splitlines())
+    if not published:
         sys.exit(f"FAILED: PUBLIC_CUT_RELEASE target {target!r} has no "
                  "tracked files — release mode updates a PUBLISHED mirror; "
                  "the initial release is the default fresh-history cut")
+    if acknowledged is None:
+        acknowledged = set(read_list(DELETIONS)) if DELETIONS.exists() else set()
+    deletions = published - staged_paths(staging)
+    surprise = sorted(deletions - acknowledged)
+    fiction = sorted(acknowledged - deletions)
+    if surprise:
+        sys.exit("FAILED: the published mirror holds files absent from "
+                 "this cut and NOT acknowledged in "
+                 f"{DELETIONS.name}: {surprise} — back-port them or list "
+                 "each one deliberately (B92 §2b)")
+    if fiction:
+        sys.exit(f"FAILED: {DELETIONS.name} acknowledges paths that are "
+                 f"not deletions in this cut: {fiction} — an "
+                 "acknowledgment of nothing is fiction; prune it")
     run(*_NEUTRAL, "rm", "-rq", ".", cwd=release_dir, env=base_env)
     shutil.copytree(staging, release_dir, dirs_exist_ok=True)
     run(*_NEUTRAL, "add", "-A", cwd=release_dir, env=base_env)
@@ -267,7 +330,15 @@ def main() -> None:
     # Refusals that need no staging happen BEFORE any export work.
     patterns = RESIDUE + machine_patterns()
     tracked = run("git", "ls-files", cwd=ROOT).stdout.splitlines()
+    validate_manifest(read_list(MANIFEST))
     validate_deny(read_list(DENY), tracked)
+    uncovered, multi = coverage(tracked, read_list(MANIFEST), read_list(DENY))
+    if uncovered or multi:
+        sys.exit("FAILED: every tracked path must be classified by exactly "
+                 "one manifest/deny entry (B92 §2a)\n"
+                 + ("  unclassified (ship or deny — decide): "
+                    f"{uncovered}\n" if uncovered else "")
+                 + (f"  classified twice: {multi}\n" if multi else ""))
 
     override = os.environ.get("PUBLIC_CUT_DIR")
     if override:
@@ -292,6 +363,30 @@ def main() -> None:
         print(f"NOTE: staging left for inspection at {staging}",
               file=sys.stderr)
         raise
+
+
+def _verify_suite(verify_dir: Path) -> None:
+    """The suite-green gate, as its own seam (P1-18): the orchestration
+    tests stub THIS function, never subprocess — the import-provenance
+    probe and the pytest run stay exactly what a live cut runs."""
+    probe = run(sys.executable, "-c",
+                "import engine; print(engine.__file__)", cwd=verify_dir)
+    probe_path = Path(probe.stdout.strip()).resolve()
+    if not probe_path.is_relative_to(verify_dir.resolve()):
+        sys.exit("FAILED: the verification suite would import engine from "
+                 f"outside the cut tree ({probe.stdout.strip()}) — refusing "
+                 "to verify the wrong tree")
+
+    print("running the full suite in the cut tree (this takes a few "
+          "minutes)…")
+    suite = subprocess.run([sys.executable, "-m", "pytest", "-q"],
+                           cwd=verify_dir, capture_output=True, text=True)
+    tail = "\n".join(suite.stdout.splitlines()[-3:])
+    print(tail)
+    if suite.returncode != 0:
+        sys.exit("FAILED: the cut tree's suite is not green — the mirror "
+                 "does not ship red")
+
 
 
 def _build_and_verify(staging: Path,
@@ -343,24 +438,7 @@ def _build_and_verify(staging: Path,
         author = fresh_history(staging)
         print(f"fresh history: 1 commit as {author}")
 
-    probe = run(sys.executable, "-c",
-                "import engine; print(engine.__file__)", cwd=verify_dir)
-    probe_path = Path(probe.stdout.strip()).resolve()
-    if not probe_path.is_relative_to(verify_dir.resolve()):
-        sys.exit("FAILED: the verification suite would import engine from "
-                 f"outside the cut tree ({probe.stdout.strip()}) — refusing "
-                 "to verify the wrong tree")
-
-    print("running the full suite in the cut tree (this takes a few "
-          "minutes)…")
-    suite = subprocess.run([sys.executable, "-m", "pytest", "-q"],
-                           cwd=verify_dir, capture_output=True, text=True)
-    tail = "\n".join(suite.stdout.splitlines()[-3:])
-    print(tail)
-    if suite.returncode != 0:
-        sys.exit("FAILED: the cut tree's suite is not green — the mirror "
-                 "does not ship red")
-
+    _verify_suite(verify_dir)
     # An annotated tag records a TAGGER identity from the local git
     # config — outside this script's scrubbed env. The printed steps
     # carry the neutral identity so following them verbatim cannot leak

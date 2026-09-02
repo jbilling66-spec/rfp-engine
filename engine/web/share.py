@@ -21,7 +21,14 @@ decide-and-log deviation from D23's "shared schema" sketch.
 import json
 import os
 import secrets
-from datetime import datetime
+import threading
+from datetime import datetime, timedelta
+
+
+_MINT_LOCK = threading.Lock()  # P1-22: link ids mint under a process lock
+
+
+MAX_LINK_DAYS = 30  # P25 item 4 (P3-12): no century-long guest links
 
 
 class ShareDenied(Exception):
@@ -79,15 +86,20 @@ class ShareLane:
         try:
             if _parse(expires_at) <= _parse(at):
                 raise ShareDenied(422, "expires_at must be in the future")
+            if _parse(expires_at) > _parse(at) + timedelta(days=MAX_LINK_DAYS):
+                raise ShareDenied(422, f"expires_at may be at most "
+                                       f"{MAX_LINK_DAYS} days out (P3-12)")
         except ValueError:
             raise ShareDenied(422, f"expires_at must be ISO 8601, got "
                                    f"{expires_at!r}")
-        record = {"link_id": f"sl_{len(self._folded()) + 1:02d}",
-                  "token": token_factory(),
-                  "pursuit_id": self.pursuit.pursuit_id,
-                  "created_by": created_by, "label": label,
-                  "created_at": at, "expires_at": expires_at}
-        self._append(self.links_path, record)
+        with _MINT_LOCK:  # P1-22: max(existing)+1, minted and appended together
+            seen = [int(k[3:]) for k in self._folded() if k[3:].isdigit()]
+            record = {"link_id": f"sl_{(max(seen) + 1) if seen else 1:02d}",
+                      "token": token_factory(),
+                      "pursuit_id": self.pursuit.pursuit_id,
+                      "created_by": created_by, "label": label,
+                      "created_at": at, "expires_at": expires_at}
+            self._append(self.links_path, record)
         return record
 
     def revoke(self, *, link_id: str, by: str, at: str) -> dict:
@@ -107,7 +119,8 @@ class ShareLane:
 
     def resolve(self, token: str, *, at: str, action: str) -> dict:
         record = next((r for r in self._folded().values()
-                       if r.get("token") == token), None)
+                       if secrets.compare_digest(str(r.get("token", "")),
+                                                 str(token))), None)
         if record is None:
             self.log_access(at=at, link_id=None, action=action,
                             granted=False, detail="unknown token")

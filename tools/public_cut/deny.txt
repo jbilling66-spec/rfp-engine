@@ -30,6 +30,7 @@ docs/milestones/p12-extraction-gate
 # The vendored design pack stays history except its two shipped files
 # (spec/CLAUDE.md, spec/observability/sample-run.jsonl — allowlisted):
 spec/README.md
+spec/observability/RUN_LOG_DESIGN.md
 spec/DECISION_LOG.md
 spec/ENTERPRISE_READINESS.md
 spec/architecture

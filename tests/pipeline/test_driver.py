@@ -150,3 +150,114 @@ def test_gate0_rejection_is_the_redo_door(tmp_path):
     adv2 = _advance(pursuit, decide_gate1=None)
     assert adv2.ran_stages[0] == "intake"  # intake genuinely re-ran
     assert (adv2.status, adv2.stopped_at) == ("awaiting_gate", "gate_1")
+
+
+
+def test_driver_stops_on_research_and_win_themes_refusal(tmp_path, monkeypatch):
+    """P1-12: in the Gate-1 crash window (brief approved, freeze missing)
+    the driver used to re-run research over the approved brief and drop
+    win_themes' refusal on the floor. Now the first refusal ends the
+    advance and the brief is byte-identical after."""
+    pursuit = PursuitDir(tmp_path, "pur_demo")
+    adv = _advance(pursuit)
+    assert (adv.status, adv.stopped_at) == ("awaiting_gate", "gate_2")
+    (pursuit.root / "brief.frozen.json").unlink()
+    (pursuit.root / "checkpoints" / "gate_1.json").unlink()
+    before = (pursuit.root / "brief.json").read_bytes()
+    adv2 = _advance(pursuit, decide_gate1=None)
+    assert (adv2.status, adv2.stopped_at) == ("failed", "research")
+    assert adv2.problems == ["research refused"]
+    assert (pursuit.root / "brief.json").read_bytes() == before
+    # the win_themes refusal is honored too (research stubbed complete)
+    import engine.pipeline.driver as driver_mod
+    from engine.research.findings import ResearchReport
+    monkeypatch.setattr(driver_mod, "run_research",
+                        lambda *a, **k: ResearchReport(pursuit_id="pur_demo"))
+    adv3 = _advance(pursuit, decide_gate1=None)
+    assert (adv3.status, adv3.stopped_at) == ("failed", "win_themes")
+    assert (pursuit.root / "brief.json").read_bytes() == before
+
+
+def test_crash_between_plan_write_and_freeze_keeps_dispositions(tmp_path):
+    """P0-17: after a crash between the Gate-2 plan write and its freeze,
+    `advance` used to re-enter planning and rewrite plan.json from the
+    pre-gate checkpoint — dispositions, waives and stamp gone, no error.
+    Now planning refuses, plan.json is byte-identical, and the human's
+    same-decision resubmit under a fresh clock completes the gate with a
+    freeze byte-equal to the one the crash lost. The crash is staged at
+    the gate itself: nothing later has run, exactly the real window."""
+    from engine.llm import effective_config
+    from engine.planning import approve_gate2
+    from engine.runlog import RunLogger
+    from engine.version import engine_version
+
+    def gate_log():
+        log = RunLogger(pursuit.root, pursuit.new_run_id(),
+                        pursuit.pursuit_id)
+        log.run_start(mode="dry_run", engine_version=engine_version(),
+                      config=effective_config(), kb_snapshot="kb@empty")
+        return log
+
+    pursuit = PursuitDir(tmp_path, "pur_demo")
+    adv = _advance(pursuit)
+    assert (adv.status, adv.stopped_at) == ("awaiting_gate", "gate_2")
+    log = gate_log()
+    approve_gate2(pursuit, log, decision="approved", actor=ACTOR, at=DEFAULT_AT)
+    log.run_end(status="completed")
+    plan_before = (pursuit.root / "plan.json").read_bytes()
+    frozen_before = (pursuit.root / "plan.frozen.json").read_bytes()
+    # the crash window: plan stamped approved, freeze and checkpoint gone
+    (pursuit.root / "plan.frozen.json").unlink()
+    (pursuit.root / "checkpoints" / "gate_2.json").unlink()
+    adv2 = _advance(pursuit, decide_gate2=None)
+    assert (adv2.status, adv2.stopped_at) == ("failed", "planning")
+    assert adv2.problems == ["planning refused"]
+    assert (pursuit.root / "plan.json").read_bytes() == plan_before
+    # recovery: the SAME decision under a fresh clock
+    log = gate_log()
+    result = approve_gate2(pursuit, log, decision="approved", actor=ACTOR,
+                           at="2026-08-10T09:00:00")
+    log.run_end(status="completed")
+    assert result.converged is True
+    assert (pursuit.root / "plan.frozen.json").read_bytes() == frozen_before
+    assert pursuit.checkpoint_payload("gate_2")["at"] == DEFAULT_AT
+    assert (pursuit.root / "plan.json").read_bytes() == plan_before
+    assert pursuit.read_frozen("pursuit_plan")["status"] == "approved"
+    adv3 = _advance(pursuit, decide_gate2=None)
+    assert adv3.status == "awaiting_gap" and adv3.stopped_at == "drafting", (
+        adv3.status, adv3.stopped_at, adv3.problems)
+
+
+
+def test_skip_predicates_verify_bindings_not_existence(tmp_path):
+    """P0-16: drafting and validation skip only on a VERIFIED binding —
+    a complete envelope bound to the live freeze, an annotated draft
+    bound to the live envelope — never on the files merely existing."""
+    import json
+
+    from engine.pipeline.driver import draft_is_current, validation_is_current
+    from tests.helpers import plant_annotated, plant_freeze
+    pursuit = PursuitDir(tmp_path, "pur_pred")
+    plan = {"pursuit_id": "pur_pred", "path": "A_designated",
+            "sections": [], "status": "approved"}
+    pursuit.write_artifact("pursuit_plan", plan)
+    _, sha = plant_freeze(pursuit, "pursuit_plan", plan, validate=True)
+    draft = pursuit.root / "drafts" / "draft.json"
+    assert draft_is_current(pursuit) is False  # nothing drafted
+    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 0,
+                                 "status": "complete", "sections": []}))
+    assert draft_is_current(pursuit) is True
+    draft.write_text(json.dumps({"plan_sha256": "0" * 64, "revision_n": 0,
+                                 "status": "complete", "sections": []}))
+    assert draft_is_current(pursuit) is False  # exists, bound elsewhere
+    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 0,
+                                 "status": "in_progress", "sections": []}))
+    assert draft_is_current(pursuit) is False
+    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 0,
+                                 "status": "complete", "sections": []}))
+    assert validation_is_current(pursuit) is False  # not validated
+    plant_annotated(pursuit)
+    assert validation_is_current(pursuit) is True
+    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 1,
+                                 "status": "complete", "sections": []}))
+    assert validation_is_current(pursuit) is False  # envelope moved on

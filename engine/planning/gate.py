@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from engine.contracts.gate_key import request_digest, same_request
 from engine.contracts import ContractError
 
 FROZEN_PLAN = "plan.frozen.json"
@@ -327,12 +328,18 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
     plan_path = pursuit.root / "plan.json"
     frozen_path = pursuit.root / FROZEN_PLAN
 
-    # --- idempotency / conflict (B22(10), adapted for the redo door) ----
+    # --- idempotency / conflict (B22(10), adapted for the redo door;
+    # P25 item 1: keyed on WHAT was decided — (decision, actor, request
+    # digest) against the SAME plan (the checkpoint's plan_sha256 still
+    # matches the live plan) — never on the clock. After a replan the
+    # live plan differs, so a same-notes rejection is a NEW decision.
+    digest = request_digest(decision=decision, notes=notes, edits=edits,
+                            gates_collapsed=gates_collapsed)
     if "gate_2" in pursuit.completed_stages():
         prior = pursuit.checkpoint_payload("gate_2")
-        if (prior.get("decision"), prior.get("actor"), prior.get("at")) == (
-            decision, actor, at,
-        ):
+        if same_request(prior, decision=decision, actor=actor, digest=digest,
+                        actor_key="actor") and prior.get(
+                            "plan_sha256") == pursuit.file_sha256("plan.json"):
             return Gate2Result(
                 decision=decision, plan_path=plan_path,
                 frozen_path=frozen_path if frozen_path.exists() else None,
@@ -350,14 +357,14 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
     stamped_already = False
     if plan.get("status") == "approved" and plan.get("gate2"):
         gate2 = plan["gate2"]
-        if (status, gate2.get("approved_by"), gate2.get("at")) != (
-            "approved", actor, at,
-        ):
+        if status != "approved" or not same_request(
+                gate2, actor=actor, digest=digest, actor_key="approved_by"):
             raise ContractError(
                 "gate_2: the plan is already past the gate with a different "
                 "decision"
             )
         stamped_already = True  # mid-gate crash window: complete convergently
+        at = gate2.get("at", at)  # with the STAMP's clock (P0-5)
     elif decision == "rejected":
         if plan.get("status") not in ("gate2_pending", "draft"):
             raise ContractError(
@@ -386,7 +393,8 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
                 log.emit("gap", stage="gate_2", gap=gap, target=target)
         _recount_coverage(plan)
         if status == "approved":
-            gate2: dict = {"approved_by": actor, "at": at}
+            gate2: dict = {"approved_by": actor, "at": at,
+                           "request_sha256": digest}
             if notes:
                 gate2["notes"] = notes
             if gates_collapsed:
@@ -402,13 +410,13 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
         "kind": "pursuit_plan", "path": str(plan_path), "sha256": plan_sha,
     })
     frozen_out: Path | None = None
+    frozen_sha: str | None = None
     if status == "approved":
-        frozen_out = pursuit.write_artifact("pursuit_plan", plan,
-                                            name=FROZEN_PLAN)
+        frozen_out, frozen_sha = pursuit.freeze_artifact("pursuit_plan", plan)
         log.emit("artifact", stage="gate_2", artifact={
             "kind": "pursuit_plan",
             "path": str(frozen_out),
-            "sha256": hashlib.sha256(frozen_out.read_bytes()).hexdigest(),
+            "sha256": frozen_sha,
         })
 
     gate_payload = {
@@ -430,16 +438,14 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
             pursuit.clear_checkpoint(stage)
         pursuit.checkpoint("gate_2", {
             "decision": decision, "actor": actor, "at": at, "notes": notes,
-            "plan_sha256": plan_sha,
+            "plan_sha256": plan_sha, "request_sha256": digest,
         })
     else:
         payload = {
             "decision": decision, "actor": actor, "at": at,
             "plan_sha256": plan_sha,
-            "frozen_sha256": (
-                hashlib.sha256(frozen_out.read_bytes()).hexdigest()
-                if frozen_out else None
-            ),
+            "frozen_sha256": frozen_sha,
+            "request_sha256": digest,
         }
         if section_kills:
             # The kill reasons' durable detail; the gate line carries the
@@ -448,4 +454,5 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
         pursuit.checkpoint("gate_2", payload)
     log.emit("stage_end", stage="gate_2")
     return Gate2Result(decision=decision, plan_path=plan_path,
-                       frozen_path=frozen_out, plan_sha256=plan_sha)
+                       frozen_path=frozen_out, plan_sha256=plan_sha,
+                       converged=stamped_already)

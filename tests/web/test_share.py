@@ -49,7 +49,7 @@ def shared(tmp_path_factory):
         return TracedCaller(spy, log)
 
     app = create_app(tmp, make_caller=make_caller, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Skye Sharer")
     pid = pursuit.pursuit_id
@@ -65,18 +65,43 @@ def _section_id(pursuit):
     return plan["sections"][0]["section_id"]
 
 
-def test_share_link_expires(shared):
-    client, pursuit, link, _ = shared
-    ok = client.get(f"/share/{link['token']}?at={FIXED_AT}")
-    assert ok.status_code == 200
-    assert ok.json()["share"]["link_id"] == link["link_id"]
-    gone = client.get(f"/share/{link['token']}?at={AFTER_EXPIRY}")
-    assert gone.status_code == 410
-    # a guest comment on the expired link refuses too, and is logged
-    r = client.post(f"/share/{link['token']}/comments", json={
-        "display_name": "Guest", "section_id": _section_id(pursuit),
-        "text": "late thought", "at": AFTER_EXPIRY})
-    assert r.status_code == 410
+def test_share_link_expires_on_the_server_clock_never_the_guests(tmp_path):
+    """P25 item 4 (P0-18): expiry runs on the SERVER's clock. A guest's
+    `?at=` or payload `at` used to be the clock the check read — an
+    expired link was reusable forever with an early timestamp, and the
+    access log recorded the guest's chosen time. The clock moves through
+    the app's `now` seam here, the only place a test may move it."""
+    pursuit, report, _ = run_validation_package(tmp_path)
+    assert report.status == "complete"
+    clock = {"now": FIXED_AT}
+    app = create_app(tmp_path, make_caller=lambda log: TracedCaller(
+        SpyFake(round_script()), log), now=lambda: clock["now"])
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Skye Sharer")
+        pid = pursuit.pursuit_id
+        link = client.post(f"/api/pursuits/{pid}/share", json={
+            "label": "buyer-side counsel", "expires_at": EXPIRES,
+            "at": FIXED_AT}).json()
+        ok = client.get(f"/share/{link['token']}?at={FIXED_AT}")
+        assert ok.status_code == 200
+        assert ok.json()["share"]["link_id"] == link["link_id"]
+        clock["now"] = AFTER_EXPIRY
+        # the guest's early clock is ignored on both doors
+        gone = client.get(f"/share/{link['token']}?at={FIXED_AT}")
+        assert gone.status_code == 410
+        r = client.post(f"/share/{link['token']}/comments", json={
+            "display_name": "Guest", "section_id": _section_id(pursuit),
+            "text": "late thought", "at": FIXED_AT})
+        assert r.status_code == 410
+        access = [json.loads(l) for l in (
+            pursuit.root / "share" / "access.jsonl").read_text().splitlines()]
+        assert access[-1]["at"] == AFTER_EXPIRY  # the server's clock
+        assert access[-1]["granted"] is False
+        # and a link may not be minted a century out (P3-12)
+        r = client.post(f"/api/pursuits/{pid}/share", json={
+            "label": "forever", "expires_at": "2099-01-01T00:00:00",
+            "at": FIXED_AT})
+        assert r.status_code == 422 and "30 days" in r.text
     access = [json.loads(l) for l in (
         pursuit.root / "share" / "access.jsonl").read_text().splitlines()]
     assert any(a["granted"] is False and a["detail"] == "expired"
@@ -203,7 +228,7 @@ def test_guest_token_reaches_no_other_mutation(shared):
     client, pursuit, link, _ = shared
     pid = pursuit.pursuit_id
     # a share token is NOT an operator session: every operator door 401s
-    fresh = TestClient(client.app)  # no cookie jar
+    fresh = TestClient(client.app, base_url="http://127.0.0.1")  # no cookie jar
     for method, path, body in (
             ("post", f"/api/pursuits/{pid}/revise", {}),
             ("post", f"/api/pursuits/{pid}/accept", {**ROLE}),
@@ -231,3 +256,24 @@ def test_revoke_is_the_kill_switch(shared):
     assert client.post(f"/share/{link['token']}/comments", json={
         "display_name": "Guest", "section_id": _section_id(pursuit),
         "text": "too late", "at": FIXED_AT}).status_code == 410
+
+
+
+def test_link_ids_mint_from_the_lane_max_not_a_count(tmp_path):
+    """P25 item 3 (P1-22): a link id is max(existing)+1 — two creates can
+    no longer fold into one record and orphan a token."""
+    import json
+
+    from engine.web.share import ShareLane
+    from engine.workspace import PursuitDir
+    pursuit = PursuitDir(tmp_path, "pur_sl")
+    lane = ShareLane(pursuit)
+    lane.links_path.parent.mkdir(parents=True, exist_ok=True)
+    lane.links_path.write_text(
+        json.dumps({"link_id": "sl_01", "token": "t1", "label": "a",
+                    "expires_at": EXPIRES}) + "\n"
+        + json.dumps({"link_id": "sl_03", "token": "t3", "label": "c",
+                      "expires_at": EXPIRES}) + "\n")
+    made = lane.create(created_by="me", label="new", expires_at=EXPIRES,
+                       at=FIXED_AT)
+    assert made["link_id"] == "sl_04"

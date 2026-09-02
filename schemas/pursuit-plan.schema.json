@@ -121,7 +121,8 @@
         "approved_by": { "type": "string" },
         "at": { "type": "string", "format": "date-time" },
         "gates_collapsed": { "type": "boolean", "description": "True when Gates 1+2 were approved on one screen (small-deal toggle)." },
-        "notes": { "type": "string" }
+        "notes": { "type": "string" },
+        "request_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Digest of the semantic decision request (decision, notes, edits/answers/corrections/skips, org, gates_collapsed — never the clock or per-submission transport). Written at the stamp so a mid-gate crash resubmit converges on the SAME request and refuses a different one (P25 item 1, register P0-5). Optional: a stamp without it converges on (status, actor) alone." }
       }
     }
   }

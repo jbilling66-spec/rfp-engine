@@ -21,6 +21,7 @@ from engine.runlog import RunLogger
 from engine.structure import merge_parsed, parse_buyer_docx, parse_workbook
 from engine.version import engine_version
 from engine.workspace import PursuitDir
+from tests.helpers import plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 AT = "2026-08-29T12:00:00Z"
@@ -48,11 +49,11 @@ def multi(tmp_path):
     pursuit.write_artifact("target_slots", container, name="slots.json")
     planned = [s["slot_id"] for s in container["slots"]
                if not s.get("is_header")]
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": "pur_wbmulti", "path": "A_designated",
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "all", "slot_ids": planned}],
-    }), encoding="utf-8")
+    })
     answers = [
         {"slot_id": "f00-s-t00-r01", "status": "drafted", "prose": PROSE},
         {"slot_id": "f01-slot_01_r002", "status": "drafted",
@@ -120,7 +121,6 @@ def test_path_guard_states_its_invariant_role(multi):
     pursuit, binding = multi
     plan = json.loads((pursuit.root / "plan.frozen.json").read_text())
     plan["path"] = "B_outline"
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps(plan),
-                                                  encoding="utf-8")
+    plant_freeze(pursuit, "pursuit_plan", plan)
     with pytest.raises(ContractError, match="B74§3a"):
         preview_writeback(pursuit, at=AT, binding=binding)

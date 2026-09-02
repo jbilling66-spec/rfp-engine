@@ -47,7 +47,7 @@ _TBL_TAG = "}tbl"
 
 
 def _template_source(pursuit):
-    frozen = pursuit.read_artifact("plan.frozen.json")
+    frozen = pursuit.read_frozen("pursuit_plan")
     container = pursuit.read_artifact(frozen.get("slots_ref", "slots.json"))
     if container.get("source_mode") != "firm_default":
         raise ContractError(
@@ -157,11 +157,8 @@ def compute_fill_facts(pursuit, *, confirmed_by: str, at: str) -> dict:
 
     facts = {
         "pursuit_id": pursuit.pursuit_id,
-        "plan_sha256": hashlib.sha256(
-            (pursuit.root / "plan.frozen.json").read_bytes()).hexdigest(),
-        "draft_sha256": hashlib.sha256(
-            (pursuit.root / "drafts" / "draft.json").read_bytes()
-        ).hexdigest(),
+        "plan_sha256": pursuit.file_sha256("plan.frozen.json"),
+        "draft_sha256": pursuit.file_sha256("drafts/draft.json"),
         "revision_n": int(envelope.get("revision_n", 0)),
         "confirmed_by": confirmed_by,
         "at": at,

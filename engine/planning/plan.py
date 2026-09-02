@@ -22,6 +22,7 @@ import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from engine.contracts import ContractError
 from engine.contracts import validate
 from engine.kb.manifest import load_manifest
 from engine.planning.mapper import map_sections
@@ -131,8 +132,28 @@ def run_planning(pursuit, caller, log, store, *, workbook: Path | None = None,
             message="plan.frozen.json exists — an approved plan may not be "
                     "rebuilt (T7 analog); Gate-2 rejection is the redo door",
         )
+    try:
+        live_plan = pursuit.read_artifact("plan.json")
+    except FileNotFoundError:
+        live_plan = None
+    if live_plan is not None and live_plan.get("status") == "approved":
+        # P25 item 1 (P0-17): a plan stamped approved with no freeze is the
+        # Gate-2 crash window — a rebuild would silently discard the
+        # human's dispositions, waives and kills. Refuse; the recovery is
+        # resubmitting the Gate-2 decision, which completes convergently.
+        return _refuse(
+            log, report, stage="pursuit_plan", code="plan_past_gate",
+            message="plan.json is stamped approved by Gate 2 but its freeze "
+                    "is missing (a crash between the plan write and the "
+                    "freeze) — resubmit the Gate-2 decision to complete it; "
+                    "planning never rebuilds an approved plan",
+        )
 
-    frozen = pursuit.read_artifact("brief.frozen.json")  # content authority
+    try:  # content authority — verified against the gate_1 record (P0-2)
+        frozen = pursuit.read_frozen("bid_brief")
+    except ContractError as exc:
+        return _refuse(log, report, stage="pursuit_plan",
+                       code="frozen_verification_failed", message=str(exc))
     structure = frozen.get("procurement", {}).get("response_structure")
     if not structure:
         return _refuse(

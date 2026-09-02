@@ -114,7 +114,7 @@ def client(tmp_path):
     ws = tmp_path / "ws"
     build_store(ws)
     app = create_app(ws, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Sam Steward")
         yield client
 
@@ -138,5 +138,5 @@ def test_usage_route_reports_after_a_turn(client):
 
 
 def test_usage_route_is_operator_gated(client):
-    assert TestClient(client.app).get(
+    assert TestClient(client.app, base_url="http://127.0.0.1").get(
         "/api/assistant/usage").status_code == 401

@@ -98,6 +98,36 @@ def test_essentials_are_allowlisted():
     assert missing == [], f"essentials missing from the allowlist: {missing}"
 
 
+def test_every_tracked_path_is_classified_exactly_once():
+    """B92 §2a: an unclassified tracked path is an implied exclusion —
+    the silent non-ship state that bit at P23 and nearly at B91. It
+    REDS the suite until the ship/don't-ship call is made, and a path
+    classified twice reds too (the matcher would export it and the deny
+    assert would then refuse the cut)."""
+    git = shutil.which("git")
+    if git is None or not (REPO / ".git").exists():
+        pytest.fail("this contract requires a git checkout — refusing to "
+                    "pass vacuously")
+    tracked = subprocess.run([git, "ls-files"], cwd=REPO, capture_output=True,
+                             text=True, check=True).stdout.splitlines()
+    assert tracked
+    mod = _load_tool()
+    uncovered, multi = mod.coverage(tracked, _read_list(TOOL / "manifest.txt"),
+                                    _read_list(TOOL / "deny.txt"))
+    assert uncovered == [], (
+        f"unclassified tracked paths — decide ship (manifest) or don't "
+        f"(deny), same commit: {uncovered}")
+    assert multi == [], f"paths classified twice: {multi}"
+
+
+def test_manifest_refuses_globs_like_the_deny_list():
+    mod = _load_tool()
+    with pytest.raises(SystemExit, match="glob"):
+        mod.validate_manifest(["docs/*"])
+    mod.validate_manifest(["docs", "README.md"])
+    assert mod.covers("docs", "docs/a.md") and not mod.covers("docs", "docs2/a.md")
+
+
 def test_no_allowlist_entry_covers_a_deny_entry():
     allow = _read_list(TOOL / "manifest.txt")
     deny = _read_list(TOOL / "deny.txt")
@@ -347,7 +377,8 @@ def test_release_commit_appends_onto_the_existing_history(tmp_path,
     (staging / "engine.txt").write_text("new file\n")     # added
     # stale.txt intentionally absent                      # deleted
     rel, author = mod.release_commit(staging, str(pub),
-                                     release_dir=tmp_path / "rel")
+                                     release_dir=tmp_path / "rel",
+                                     acknowledged={"stale.txt"})  # B92 §2b
     assert author == mod.DEFAULT_AUTHOR
     assert _git(mod, rel, "rev-parse", "HEAD^") == prior_head
     assert set(_git(mod, rel, "ls-files").splitlines()) == {"README.md",
@@ -357,6 +388,40 @@ def test_release_commit_appends_onto_the_existing_history(tmp_path,
     assert _git(mod, rel, "log", "-1",
                 "--format=%s").startswith("Public release: ")
     assert _git(mod, rel, "remote", "get-url", "origin") == str(pub)
+
+
+def test_release_refuses_an_unacknowledged_deletion(tmp_path, monkeypatch):
+    """B92 §2b: a published file absent from the cut is a loud stop unless
+    acknowledged by name; the acknowledgment file is the record."""
+    monkeypatch.delenv("PUBLIC_CUT_AUTHOR", raising=False)
+    mod = _load_tool()
+    pub = _seed_public(mod, tmp_path)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "README.md").write_text("release one\n")
+    with pytest.raises(SystemExit) as exc:
+        mod.release_commit(staging, str(pub), release_dir=tmp_path / "rel1")
+    assert "NOT acknowledged" in str(exc.value) and "stale.txt" in str(exc.value)
+    assert _git(mod, pub, "rev-list", "--count", "HEAD") == "1"  # untouched
+    # the committed list is the default source of acknowledgments
+    monkeypatch.setattr(mod, "DELETIONS", tmp_path / "deletions.txt")
+    (tmp_path / "deletions.txt").write_text("# ack\nstale.txt\n")
+    rel, _ = mod.release_commit(staging, str(pub), release_dir=tmp_path / "rel2")
+    assert not (rel / "stale.txt").exists()
+
+
+def test_release_refuses_a_fictional_acknowledgment(tmp_path, monkeypatch):
+    monkeypatch.delenv("PUBLIC_CUT_AUTHOR", raising=False)
+    mod = _load_tool()
+    pub = _seed_public(mod, tmp_path)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    (staging / "README.md").write_text("release one\n")
+    (staging / "stale.txt").write_text("to be deleted\n")  # NOT deleted
+    with pytest.raises(SystemExit) as exc:
+        mod.release_commit(staging, str(pub), release_dir=tmp_path / "rel",
+                           acknowledged={"stale.txt"})
+    assert "fiction" in str(exc.value)
 
 
 def test_release_commit_refuses_empty_delta_and_unpublished_target(

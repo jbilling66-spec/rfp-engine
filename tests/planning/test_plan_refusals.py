@@ -10,6 +10,7 @@ from engine.planning import run_planning
 from engine.runlog import RunLogger, read_run
 from engine.version import engine_version
 from engine.workspace import PursuitDir
+from tests.helpers import plant_freeze
 
 
 def _workspace(tmp_path, *, brief=None, frozen=None, plan_frozen=False):
@@ -17,12 +18,12 @@ def _workspace(tmp_path, *, brief=None, frozen=None, plan_frozen=False):
     if brief is not None:
         pursuit.write_artifact("bid_brief", brief)
     if frozen is not None:
-        pursuit.write_artifact("bid_brief", frozen, name="brief.frozen.json")
+        plant_freeze(pursuit, "bid_brief", frozen, validate=True)
     if plan_frozen:
-        pursuit.write_artifact("pursuit_plan", {
+        plant_freeze(pursuit, "pursuit_plan", {
             "pursuit_id": "pur_refusal", "path": "A_designated",
             "sections": [], "status": "approved",
-        }, name="plan.frozen.json")
+        }, validate=True)
     store = KBStore(tmp_path / "kb")
     log = RunLogger(pursuit.root, pursuit.new_run_id(), pursuit.pursuit_id)
     caller = TracedCaller(FakeCaller({}), log)
@@ -96,10 +97,13 @@ def test_mixed_routes_to_designated_and_wants_targets(tmp_path):
     _assert_refused(pursuit, log, caller, store, "missing_structure_doc")
 
 
-def test_out_of_vocab_structure_still_refuses(tmp_path):
-    """The schema enum blocks this at the writer; plan.py's own check is
-    the second net for a hand-edited frozen file — so the corrupt copy
-    is planted RAW, past the validating writer."""
+def test_hand_edited_frozen_brief_refuses_at_verification(tmp_path):
+    """The schema enum blocks an out-of-vocab structure at the writer;
+    a hand-edited frozen file planted RAW, past the validating writer,
+    used to reach plan.py's own enum check as the second net. Since P25
+    item 5 the sha verification is the earlier, stronger net: a freeze
+    no gate checkpoint vouches for (or whose bytes changed after the
+    gate) never becomes the planning authority at all."""
     import json
 
     pursuit, store, log, caller = _workspace(tmp_path, brief=_brief())
@@ -107,7 +111,18 @@ def test_out_of_vocab_structure_still_refuses(tmp_path):
     (pursuit.root / "brief.frozen.json").write_text(
         json.dumps(corrupt), encoding="utf-8")
     _assert_refused(pursuit, log, caller, store,
-                    "unsupported_response_structure")
+                    "frozen_verification_failed")
+
+
+def test_refuses_frozen_brief_without_gate1_checkpoint(tmp_path):
+    """The Gate-1 crash-after-freeze state (freeze on disk, no gate_1
+    checkpoint) blocks planning until the gate decision is resubmitted —
+    the acceptance's "every frozen-brief read verifies" clause."""
+    pursuit, store, log, caller = _workspace(tmp_path, brief=_brief(),
+                                             frozen=_brief())
+    (pursuit.root / "checkpoints" / "gate_1.json").unlink()
+    _assert_refused(pursuit, log, caller, store,
+                    "frozen_verification_failed")
 
 
 def test_declared_target_contradicts_free_flow(tmp_path):
@@ -155,3 +170,24 @@ def test_empty_parse_refuses_after_parsing(tmp_path):
     )
     _assert_refused(pursuit, log, caller, store, "empty_parse",
                     workbook=slotless)
+
+
+
+def test_planning_refuses_an_approved_plan_without_freeze(tmp_path):
+    """P0-17: a plan stamped approved with no freeze is the Gate-2 crash
+    window. Planning refuses (`plan_past_gate`) instead of rebuilding —
+    the human's dispositions live only in plan.json, and it is
+    byte-identical after."""
+    pursuit, store, log, caller = _workspace(tmp_path, brief=_brief(),
+                                             frozen=_brief())
+    pursuit.write_artifact("pursuit_plan", {
+        "pursuit_id": "pur_refusal", "path": "A_designated", "sections": [],
+        "status": "approved",
+        "gate2": {"approved_by": "Pat Lead", "at": "2026-08-09T09:00:00"}})
+    before = (pursuit.root / "plan.json").read_bytes()
+    report = run_planning(pursuit, caller, log, store)
+    log.run_end(status="completed")
+    assert report.status == "refused"
+    assert (pursuit.root / "plan.json").read_bytes() == before
+    assert [r["error"]["code"] for r in read_run(log.path)
+            if r["record_type"] == "error"] == ["plan_past_gate"]

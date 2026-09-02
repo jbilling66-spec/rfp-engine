@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from engine.contracts.gate_key import request_digest, same_request
 from engine.contracts import ContractError
 
 FROZEN_BRIEF = "brief.frozen.json"
@@ -143,11 +144,13 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
 
     status = DECISION_TO_STATUS[decision]
 
-    # ---- idempotency / conflict (B22(10))
+    # ---- idempotency / conflict (B22(10); P25 item 1: keyed on WHAT was
+    # decided — (decision, actor, request digest) — never on the clock)
+    digest = request_digest(decision=decision, notes=notes, edits=edits)
     if "gate_1" in pursuit.completed_stages():
         prior = pursuit.checkpoint_payload("gate_1")
-        if (prior.get("decision"), prior.get("actor"), prior.get("at")) == \
-                (decision, actor, at):
+        if same_request(prior, decision=decision, actor=actor, digest=digest,
+                        actor_key="actor"):
             frozen = pursuit.root / FROZEN_BRIEF
             return GateResult(decision=decision,
                               brief_path=pursuit.root / "brief.json",
@@ -161,11 +164,12 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
         # mid-gate crash window: brief stamped, checkpoint missing — a
         # same-args call completes freeze/log/checkpoint convergently
         gate1 = brief.get("gate1", {})
-        if not (brief["status"] == status and gate1.get("approved_by") == actor
-                and gate1.get("at") == at):
+        if not (brief["status"] == status and same_request(
+                gate1, actor=actor, digest=digest, actor_key="approved_by")):
             raise ContractError(
                 "gate_1: the brief is already past the gate with a different "
                 "decision")
+        at = gate1.get("at", at)  # complete with the STAMP's clock (P0-5)
     elif brief.get("status") != "gate1_pending":
         raise ContractError(f"gate_1: brief status must be gate1_pending, "
                             f"got {brief.get('status')!r}")
@@ -183,7 +187,7 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
                 candidate["theme"]
                 for candidate in brief["win_themes"]["candidates"]
                 if candidate["status"] == "approved"]
-        gate1 = {"approved_by": actor, "at": at}
+        gate1 = {"approved_by": actor, "at": at, "request_sha256": digest}
         if notes:
             gate1["notes"] = notes
         brief["gate1"] = gate1
@@ -200,9 +204,7 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
     if status == "approved":
         # T7: the frozen copy P7 drafters read — same dict, same serializer,
         # byte-equal to brief.json; no freeze on rejection
-        frozen_path = pursuit.write_artifact("bid_brief", brief,
-                                             name=FROZEN_BRIEF)
-        frozen_sha = hashlib.sha256(frozen_path.read_bytes()).hexdigest()
+        frozen_path, frozen_sha = pursuit.freeze_artifact("bid_brief", brief)
         log.emit("artifact", stage="gate_1", artifact={
             "kind": "bid_brief", "path": str(frozen_path), "sha256": frozen_sha,
         })
@@ -215,7 +217,9 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
     pursuit.checkpoint("gate_1", {
         "decision": decision, "actor": actor, "at": at,
         "brief_sha256": brief_sha, "frozen_sha256": frozen_sha,
+        "request_sha256": digest,
     })
     log.emit("stage_end", stage="gate_1")
     return GateResult(decision=decision, brief_path=path,
-                      frozen_path=frozen_path, brief_sha256=brief_sha)
+                      frozen_path=frozen_path, brief_sha256=brief_sha,
+                      converged=stamped_already)

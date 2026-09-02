@@ -35,7 +35,7 @@ def test_handoff_serve_wires_the_pipeline_seam(tmp_path, monkeypatch):
     args = _parse(["serve", "--workspace", str(workspace), "--handoff"])
     assert run_serve(args) == 0
     assert (workspace / "pending-calls").is_dir()
-    with TestClient(captured["app"]) as client:
+    with TestClient(captured["app"], base_url="http://127.0.0.1") as client:
         assert client.get("/api/health").json()["mode"] == "handoff"
 
 

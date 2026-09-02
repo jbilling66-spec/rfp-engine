@@ -49,7 +49,7 @@ def _raising_make_caller(log):
 
 def test_route_table_equals_app_routes(tmp_path):
     app = create_app(tmp_path / "ws", make_caller=_raising_make_caller)
-    with TestClient(app):
+    with TestClient(app, base_url="http://127.0.0.1"):
         live = {
             (m, r.path)
             for r in app.routes

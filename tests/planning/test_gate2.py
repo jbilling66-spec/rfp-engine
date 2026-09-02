@@ -4,6 +4,7 @@ replan consumes (recorded decision, 2026-08-02)."""
 
 import pytest
 
+from engine.contracts import request_digest
 from engine.contracts import ContractError
 from engine.kb import KBStore
 from engine.llm import FakeCaller, TracedCaller, effective_config
@@ -16,11 +17,18 @@ from tests.planning.fixtures.plans import (
     GATE2_AT,
     make_architect_script,
     planning_extras,
+    open_gate_run,
     run_planning_package,
 )
 
 _SPECIAL = "2-special-requirements"
 _GAP1, _GAP2 = "gap_pur_gapcase_plan_01", "gap_pur_gapcase_plan_02"
+_APPROVED_EDITS = {"dispose": [
+    {"section_id": _SPECIAL, "gap_id": _GAP1, "action": "answered",
+     "answer": "We hold the relevant certifications; see appendix."},
+    {"section_id": _SPECIAL, "gap_id": _GAP2, "action": "reframed",
+     "note": "Reframe onto our platform-reliability track record."},
+]}
 
 
 @pytest.fixture(scope="module")
@@ -28,13 +36,7 @@ def approved(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("gate2-approved")
     pursuit, report = run_planning_package(
         tmp, package_id="gapcase", gate2="approved_with_edits",
-        notes="strong plan",
-        edits={"dispose": [
-            {"section_id": _SPECIAL, "gap_id": _GAP1, "action": "answered",
-             "answer": "We hold the relevant certifications; see appendix."},
-            {"section_id": _SPECIAL, "gap_id": _GAP2, "action": "reframed",
-             "note": "Reframe onto our platform-reliability track record."},
-        ]},
+        notes="strong plan", edits=_APPROVED_EDITS,
     )
     return pursuit, report
 
@@ -45,7 +47,8 @@ def pending(tmp_path_factory):
     must fail validation BEFORE any write, leaving this reusable."""
     tmp = tmp_path_factory.mktemp("gate2-pending")
     pursuit, _ = run_planning_package(tmp, package_id="gapcase", gate2=None)
-    log = RunLogger(pursuit.root, pursuit.latest_run_id(), pursuit.pursuit_id)
+    log = RunLogger(pursuit.root, pursuit.latest_run_id(), pursuit.pursuit_id,
+                    resume=True)
     return pursuit, log
 
 
@@ -63,8 +66,11 @@ def test_approval_stamps_gate2_and_created(approved):
     pursuit, _ = approved
     plan = pursuit.read_artifact("plan.json")
     assert plan["status"] == "approved"
-    assert plan["gate2"] == {"approved_by": ACTOR, "at": GATE2_AT,
-                             "notes": "strong plan"}
+    assert plan["gate2"] == {
+        "approved_by": ACTOR, "at": GATE2_AT, "notes": "strong plan",
+        "request_sha256": request_digest(decision="approved_with_edits",
+                                         notes="strong plan",
+                                         edits=_APPROVED_EDITS)}
     assert plan["created"] == GATE2_AT
     assert "gates_collapsed" not in plan["gate2"]  # False is omitted
 
@@ -120,11 +126,14 @@ def test_identical_reapproval_converges(approved):
     pursuit, _ = approved
     log_path = pursuit.root / "runs" / "run_0004" / "run.jsonl"
     before = log_path.read_bytes()
-    log = RunLogger(pursuit.root, "run_0004", pursuit.pursuit_id)
+    log = RunLogger(pursuit.root, "run_0004", pursuit.pursuit_id,
+                    resume=True)
+    # identical = the same REQUEST, dispositions included (P25 item 1):
+    # the pre-P25 key ignored edits, so a replay carrying NO dispositions
+    # converged onto the recorded ones — the silent-loss shape B95 named
     result = approve_gate2(
         pursuit, log, decision="approved_with_edits", actor=ACTOR,
-        at=GATE2_AT, notes="strong plan",
-        edits={"dispose": []},
+        at=GATE2_AT, notes="strong plan", edits=_APPROVED_EDITS,
     )
     assert result.converged is True
     assert log_path.read_bytes() == before  # no new lines, no rewrites
@@ -132,10 +141,53 @@ def test_identical_reapproval_converges(approved):
 
 def test_conflicting_decision_raises(approved):
     pursuit, _ = approved
-    log = RunLogger(pursuit.root, "run_0004", pursuit.pursuit_id)
+    log = RunLogger(pursuit.root, "run_0004", pursuit.pursuit_id,
+                    resume=True)
     with pytest.raises(ContractError, match="already decided"):
         approve_gate2(pursuit, log, decision="rejected", actor=ACTOR,
                       at="2026-08-03T09:00:00Z", notes="changed my mind")
+
+
+def test_resubmit_with_fresh_at_converges_and_keeps_original_at(approved):
+    """P0-5/P2-13 at Gate 2: the same request under a different clock
+    converges on the recorded decision; different dispositions refuse."""
+    pursuit, _ = approved
+    log = RunLogger(pursuit.root, "run_0004", pursuit.pursuit_id,
+                    resume=True)
+    result = approve_gate2(
+        pursuit, log, decision="approved_with_edits", actor=ACTOR,
+        at="2026-08-03T09:00:00Z", notes="strong plan", edits=_APPROVED_EDITS)
+    assert result.converged is True
+    assert pursuit.checkpoint_payload("gate_2")["at"] == GATE2_AT
+    with pytest.raises(ContractError, match="already decided"):
+        approve_gate2(
+            pursuit, log, decision="approved_with_edits", actor=ACTOR,
+            at=GATE2_AT, notes="strong plan",
+            edits={"dispose": [_APPROVED_EDITS["dispose"][0]]})
+
+
+def test_same_rejection_resubmit_converges_and_a_different_one_refuses(
+        tmp_path):
+    """A rejection is a decision too: its identical resubmit converges on
+    the checkpoint (same request, same plan), a different rejection on
+    the SAME plan refuses; the replanned plan's fresh decision is the
+    redo door's existing overwrite branch (proven over HTTP in
+    tests/web/test_gates.py)."""
+    pursuit, _ = run_planning_package(tmp_path, package_id="gapcase",
+                                      gate2=None)
+    log = open_gate_run(tmp_path, pursuit)
+    first = approve_gate2(pursuit, log, decision="rejected", actor=ACTOR,
+                          at=GATE2_AT, notes="tighten the discriminators")
+    assert first.converged is False
+    again = approve_gate2(pursuit, log, decision="rejected", actor=ACTOR,
+                          at="2026-08-03T09:00:00Z",
+                          notes="tighten the discriminators")
+    assert again.converged is True
+    assert pursuit.checkpoint_payload("gate_2")["at"] == GATE2_AT
+    with pytest.raises(ContractError, match="already decided"):
+        approve_gate2(pursuit, log, decision="rejected", actor=ACTOR,
+                      at="2026-08-03T09:00:00Z", notes="a different reason")
+    log.run_end(status="completed")
 
 
 def test_fork_unlocked_for_p7(approved):

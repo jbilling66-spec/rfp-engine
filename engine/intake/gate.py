@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from engine.contracts.gate_key import request_digest, same_request
 from engine.contracts import ContractError
 from engine.intake.brief import parse_weight
 
@@ -127,7 +128,7 @@ def _apply_corrections(brief: dict, corrections: list, actor: str) -> int:
 
 def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
                        actor: str, at: str, kb_root=None,
-                       pursuit_id: str = "") -> tuple[int, int, list]:
+                       pursuit_id: str = "") -> tuple[int, int, list, list]:
     gaps = {g["gap_id"]: g for g in
             brief.get("intake", {}).get("gaps", [])}
 
@@ -142,6 +143,7 @@ def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
         return gap
 
     proposals: list = []
+    gap_lines: list[dict] = []  # emitted by the caller AFTER the brief write
     for item in answers:
         gap = _open_gap(item.get("gap_id"))
         if not str(item.get("answer", "")).strip():
@@ -151,7 +153,7 @@ def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
         gap["answer"] = item["answer"]
         gap["answered_by"] = actor
         gap["answered_at"] = at
-        log.emit("gap", stage="gate_0", gap={
+        gap_lines.append({
             "gap_id": gap["gap_id"], "reason": gap["reason"],
             "question_to_human": gap["question_to_human"],
             "answered_at": at, "resolution": "answered"})
@@ -170,11 +172,11 @@ def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
     for gap_id in skips:
         gap = _open_gap(gap_id)
         gap["status"] = "skipped"
-        log.emit("gap", stage="gate_0", gap={
+        gap_lines.append({
             "gap_id": gap["gap_id"], "reason": gap["reason"],
             "question_to_human": gap["question_to_human"],
             "resolution": "descoped"})
-    return len(answers), len(skips), proposals
+    return len(answers), len(skips), proposals, gap_lines
 
 
 def _resolve_org(pursuit, brief, org: dict, actor: str, at: str) -> str:
@@ -236,11 +238,15 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
         raise ContractError(
             "gate_0: no brief.json — nothing to review") from None
 
-    # ---- idempotency / conflict (B22(10))
+    # ---- idempotency / conflict (B22(10); P25 item 1: keyed on WHAT was
+    # decided — (decision, actor, request digest) — never on the clock)
+    digest = request_digest(decision=decision, notes=notes,
+                            corrections=corrections, answers=answers,
+                            skips=skips, org=org)
     if "gate_0" in pursuit.completed_stages():
         prior = pursuit.checkpoint_payload("gate_0")
-        if (prior.get("decision"), prior.get("actor"), prior.get("at")) == \
-                (decision, actor, at):
+        if same_request(prior, decision=decision, actor=actor, digest=digest,
+                        actor_key="actor"):
             return Gate0Result(decision=decision,
                                brief_path=pursuit.root / "brief.json",
                                brief_sha256=prior["brief_sha256"],
@@ -252,10 +258,12 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
         # mid-gate crash window: brief stamped, checkpoint missing — a
         # same-args call completes log/checkpoint convergently
         gate0 = brief["gate0"]
-        if not (gate0.get("approved_by") == actor and gate0.get("at") == at):
+        if not same_request(gate0, actor=actor, digest=digest,
+                            actor_key="approved_by"):
             raise ContractError(
                 "gate_0: the brief is already past the gate with a "
                 "different decision")
+        at = gate0.get("at", at)  # complete with the STAMP's clock (P0-5)
 
     log.emit("stage_start", stage="gate_0")
 
@@ -274,6 +282,7 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
 
     summary_parts = []
     spawned: list = []
+    gap_lines: list = []
     if not stamped_already:
         if org is not None:
             # The org link stamps PRE-FREEZE, so buyer.org_id rides into
@@ -283,7 +292,7 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
             brief["buyer"]["org_id"] = org_id
             summary_parts.append(f"org:{org_id}")
         applied = _apply_corrections(brief, corrections, actor)
-        answered, skipped, spawned = _apply_gap_actions(
+        answered, skipped, spawned, gap_lines = _apply_gap_actions(
             brief, log, answers=answers, skips=skips, actor=actor, at=at,
             kb_root=kb_root, pursuit_id=pursuit.pursuit_id)
         if applied:
@@ -301,7 +310,7 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
             for entry in brief.get("intake", {}).get("assumptions", []):
                 if entry["status"] == "unconfirmed":
                     entry["status"] = "confirmed"
-        gate0 = {"approved_by": actor, "at": at}
+        gate0 = {"approved_by": actor, "at": at, "request_sha256": digest}
         if notes:
             gate0["notes"] = notes
         brief["gate0"] = gate0
@@ -311,6 +320,11 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
     log.emit("artifact", stage="gate_0", artifact={
         "kind": "bid_brief", "path": str(path), "sha256": brief_sha,
     })
+    for gap in gap_lines:
+        # P25 item 1 (P2-11): gap lines land AFTER the brief write, so a
+        # crash before the write replays none of them (the KB proposals
+        # are content-keyed and replay to the same id)
+        log.emit("gap", stage="gate_0", gap=gap)
     gate = {"which": "gate_0_intake", "decision": decision, "actor": actor,
             "auto_approved": auto_approved, "wait_ms": wait_ms}
     if summary_parts:
@@ -318,8 +332,9 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
     log.emit("gate", stage="gate_0", gate=gate)
     pursuit.checkpoint("gate_0", {
         "decision": decision, "actor": actor, "at": at,
-        "brief_sha256": brief_sha,
+        "brief_sha256": brief_sha, "request_sha256": digest,
     })
     log.emit("stage_end", stage="gate_0")
     return Gate0Result(decision=decision, brief_path=path,
-                       brief_sha256=brief_sha, proposals=spawned)
+                       brief_sha256=brief_sha, proposals=spawned,
+                       converged=stamped_already)

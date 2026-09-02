@@ -26,6 +26,7 @@ from engine.runlog import RunLogger
 from engine.structure import merge_parsed, parse_buyer_docx
 from engine.version import engine_version
 from engine.workspace import PursuitDir
+from tests.helpers import plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 AT = "2026-08-29T12:00:00Z"
@@ -41,11 +42,11 @@ def _log(pursuit):
 
 def _finish(pursuit, container, *, planned=(), answers=()):
     pursuit.write_artifact("target_slots", container, name="slots.json")
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": pursuit.pursuit_id, "path": "A_designated",
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "all", "slot_ids": list(planned)}],
-    }), encoding="utf-8")
+    })
     (pursuit.root / "drafts").mkdir(exist_ok=True)
     (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
         "plan_sha256": "0" * 64, "revision_n": 1,

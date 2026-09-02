@@ -76,7 +76,8 @@ def test_resume_continues_seq_and_totals(tmp_path):
     first.emit("agent_call", agent="intake_analyst", model="fake-frontier-1",
                tokens={"input": 10, "output": 5}, cost_usd=0.001)
     # process dies here; a new logger reopens the same run
-    resumed = RunLogger(pursuit, run_id="run_0001", pursuit_id="pur_demo")
+    resumed = RunLogger(pursuit, run_id="run_0001", pursuit_id="pur_demo",
+                        resume=True)
     resumed.emit("agent_call", agent="section_drafter", model="fake-mid-1",
                  tokens={"input": 20, "output": 8}, cost_usd=0.002)
     resumed.run_end(status="completed")

@@ -23,6 +23,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from engine.contracts import ContractError
 from engine.drafting import route
 from engine.drafting.compose import VOICE_DEFAULT, load_voice_spec
 from engine.kb import UseRestrictedCard, targeted_open
@@ -79,14 +80,15 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
     try:
         envelope = pursuit.read_artifact("drafts/draft.json")
         annotated = pursuit.read_artifact(annotate.VALIDATION_NAME)
-        frozen_plan = pursuit.read_artifact("plan.frozen.json")
+        frozen_plan = pursuit.read_frozen("pursuit_plan")
         live_plan = pursuit.read_artifact("plan.json")
-        frozen_brief = pursuit.read_artifact("brief.frozen.json")
+        frozen_brief = pursuit.read_frozen("bid_brief")
     except FileNotFoundError as exc:
         return _refuse(log, report, "missing_artifact",
                        f"the review loop starts after validation: {exc}")
-    draft_sha = hashlib.sha256(
-        (pursuit.root / "drafts" / "draft.json").read_bytes()).hexdigest()
+    except ContractError as exc:
+        return _refuse(log, report, "frozen_verification_failed", str(exc))
+    draft_sha = pursuit.file_sha256("drafts/draft.json")
     if annotated.get("draft_sha256") != draft_sha:
         return _refuse(log, report, "stale_annotation",
                        "annotated draft does not match the envelope — "

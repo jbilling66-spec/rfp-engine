@@ -13,7 +13,7 @@ from tests.web.conftest import FIXED_AT, sign_in
 def org_client(tmp_path_factory):
     ws = tmp_path_factory.mktemp("web-orgs") / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Ollie Operator")
     yield client, ws
@@ -48,3 +48,25 @@ def test_note_refusals_are_409s(org_client):
     assert client.post("/api/orgs/org_9999/notes",
                        json={"title": "t", "body": "b"}).status_code == 409
     assert client.post("/api/orgs", json={"name": " "}).status_code == 409
+
+
+
+def test_org_ids_mint_distinctly_under_concurrency(tmp_path):
+    """P25 item 3 (P1-22): concurrent org creation mints distinct ids."""
+    import threading
+
+    from engine.workspace.orgs import create_org, list_orgs
+    ws = tmp_path / "ws"
+    ws.mkdir()
+
+    def make(n):
+        create_org(ws, f"Synthetic Org {n}", created_by="t",
+                   at="2026-08-09T09:00:00")
+
+    threads = [threading.Thread(target=make, args=(i,)) for i in range(12)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    ids = [o["org_id"] for o in list_orgs(ws)]
+    assert len(ids) == 12 and len(set(ids)) == 12

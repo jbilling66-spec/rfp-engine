@@ -26,7 +26,7 @@ OUTLINE_TWIN = Path(__file__).resolve().parents[1] / "fixtures" / "outline-twin.
 def matrix_client(tmp_path_factory):
     ws = tmp_path_factory.mktemp("web-matrix") / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1")
     client.__enter__()
     sign_in(client, "Max Matrix")
     yield client, ws

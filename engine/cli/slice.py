@@ -19,6 +19,7 @@ pending-calls/ request/response files, mode="handoff", zero spend.
 import hashlib
 import json
 import shutil
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -40,6 +41,7 @@ from engine.runlog import assert_seq_gapless, read_run
 from engine.validation import consume_annotated
 from engine.validation.validate import ANCHORS_DEFAULT
 from engine.workspace import PursuitDir
+from engine.workspace.lock import WorkspaceLocked, workspace_lock
 
 ROOT = Path(__file__).resolve().parents[2]
 DEMO_DIR = ROOT / "tests" / "fixtures"  # committed demo package (data, not code)
@@ -255,12 +257,54 @@ def verify_slice(pursuit) -> tuple[bool, list[str]]:
     return (not problems), problems
 
 
+def fresh_is_safe(workspace: Path) -> tuple[bool, str]:
+    """P25 item 2 (P2-21): `--fresh` wipes only a workspace UNDER the
+    pursuits root (cwd-relative, like the default `pursuits/slice-ci`),
+    never the root itself, and — when the directory exists — only one
+    that carries a workspace marker (a lock, a job journal, or a pursuit
+    directory). `--workspace ~` used to delete the home directory."""
+    resolved = workspace.resolve()
+    root = Path("pursuits").resolve()
+    if resolved == root or not resolved.is_relative_to(root):
+        return False, (f"--fresh only wipes a workspace under {root}, "
+                       f"not {resolved}")
+    if resolved.exists():
+        markers = any((resolved / m).exists()
+                      for m in ("serve.lock", "jobs.jsonl"))
+        pursuits = any(p.is_dir() and p.name.startswith("pur_")
+                       for p in resolved.iterdir())
+        if not (markers or pursuits):
+            return False, (f"{resolved} carries no workspace marker "
+                           "(serve.lock, jobs.jsonl, or a pur_* directory) "
+                           "— refusing to wipe it")
+    return True, ""
+
+
 def run_slice_cli(args) -> int:
     workspace = Path(args.workspace)
     if args.fresh and workspace.exists():
-        shutil.rmtree(workspace)
-    result = run_slice(workspace, live=args.live, handoff=args.handoff,
-                       handoff_timeout=args.handoff_timeout, at=args.at)
+        ok, why = fresh_is_safe(workspace)
+        if not ok:
+            print(f"refused: {why}", file=sys.stderr)
+            return 2
+    # the workspace lock (P25 item 2, P0-4): `make slice` beside a live
+    # server on the same workspace refuses instead of racing its run
+    # minting and artifact writes
+    try:
+        lock = workspace_lock(workspace, holder="engine slice")
+    except WorkspaceLocked as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    with lock:
+        if args.fresh:
+            lock.release()  # the wipe removes the lock file with the tree
+            shutil.rmtree(workspace)
+            lock = workspace_lock(workspace, holder="engine slice")
+        try:
+            result = run_slice(workspace, live=args.live, handoff=args.handoff,
+                               handoff_timeout=args.handoff_timeout, at=args.at)
+        finally:
+            lock.release()
     return 0 if result.status == "ok" else 1
 
 

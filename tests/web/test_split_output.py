@@ -18,6 +18,7 @@ from engine.structure import merge_parsed, parse_buyer_docx, parse_workbook
 from engine.web.server import create_app
 from engine.workspace import PursuitDir
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
+from tests.helpers import plant_annotated, plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 PROSE = "Cutover completes inside the rehearsal-validated window."
@@ -39,14 +40,14 @@ def split(tmp_path):
     pursuit.write_artifact("target_slots", container, name="slots.json")
     planned = [s["slot_id"] for s in container["slots"]
                if not s.get("is_header")]
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": "pur_split", "path": "A_designated",
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "all", "slot_ids": planned}],
-    }), encoding="utf-8")
+    })
     (pursuit.root / "drafts").mkdir(exist_ok=True)
     (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": "0" * 64, "revision_n": 1,
+        "plan_sha256": pursuit.file_sha256("plan.frozen.json"), "revision_n": 1,
         "sections": [{"section_id": "all", "answers": [
             {"slot_id": "f00-s-t00-r01", "status": "drafted",
              "prose": PROSE},
@@ -54,8 +55,9 @@ def split(tmp_path):
              "prose": PROSE},
         ]}],
     }), encoding="utf-8")
+    plant_annotated(pursuit)
     app = create_app(ws, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Sam Splitter")
         yield client, pursuit
 

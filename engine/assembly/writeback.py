@@ -45,7 +45,7 @@ def _writable(slot: dict) -> tuple[bool, str]:
 
 
 def _cells(pursuit) -> tuple[dict, dict, dict, dict]:
-    frozen_plan = pursuit.read_artifact("plan.frozen.json")
+    frozen_plan = pursuit.read_frozen("pursuit_plan")
     if frozen_plan.get("path") != "A_designated":
         raise ContractError(
             "write-back fills a buyer workbook, and a non-designated plan "

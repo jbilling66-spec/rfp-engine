@@ -21,7 +21,7 @@ def raising_caller(_log):
 def offline_app(tmp_path):
     app = create_app(tmp_path / "ws", make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         yield client
 
 

@@ -12,6 +12,7 @@ and tool arguments pass through digest().
 import hashlib
 import json
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +43,9 @@ def read_run(run_jsonl: Path) -> list[dict]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
+RUN_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
 class RunLogger:
     """Writer for <pursuit>/runs/<run_id>/run.jsonl.
 
@@ -50,12 +54,26 @@ class RunLogger:
     the same run).
     """
 
-    def __init__(self, pursuit_dir: Path, run_id: str, pursuit_id: str):
+    def __init__(self, pursuit_dir: Path, run_id: str, pursuit_id: str,
+                 *, resume: bool = False):
+        # P25 item 3 (P2-12): a run id is ONE path-safe segment — the ids
+        # come only from a mint (pursuit runs: workspace.mint_run_id; the
+        # assistant: its session-id regex), never from a caller's string.
+        if not RUN_SEGMENT.fullmatch(run_id or ""):
+            raise ContractError(
+                f"run id {run_id!r} is not a plain minted name (one "
+                "path-safe segment) — ids come only from the mint")
         self.run_id = run_id
         self.pursuit_id = pursuit_id
         self.run_dir = Path(pursuit_dir) / "runs" / run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.path = self.run_dir / "run.jsonl"
+        if self.path.exists() and not resume:
+            # P25 item 3 (P0-3): a NEW run never reopens another run's log
+            # — a colliding id used to merge two audit traces silently.
+            raise ContractError(
+                f"{self.path} already exists — a new run never appends to "
+                "another run's log; pass resume=True to continue a run")
         self._lock = threading.Lock()
         self._seq = 0
         self._totals = {

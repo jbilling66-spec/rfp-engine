@@ -30,6 +30,7 @@ import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from engine.contracts import ContractError
 from engine.drafting import compose, route, verify, wire
 from engine.drafting.compose import VOICE_DEFAULT, load_voice_spec
 from engine.kb import UseRestrictedCard, as_lanes, targeted_open
@@ -94,7 +95,12 @@ def run_drafting(pursuit, caller, log, store, *,
             message="brief.frozen.json is missing — the frozen brief is the "
                     "drafting context (T7/B22(9))")
 
-    frozen_plan = pursuit.read_artifact(FROZEN_PLAN)  # content authority
+    try:  # content authority — verified against the gate record (P0-2)
+        frozen_plan = pursuit.read_frozen("pursuit_plan")
+        frozen_brief = pursuit.read_frozen("bid_brief")
+    except ContractError as exc:
+        return _refuse(log, report, code="frozen_verification_failed",
+                       message=str(exc))
     path = frozen_plan.get("path")
     slots_by_id: dict[str, dict] = {}
     if path == "A_designated":
@@ -108,9 +114,7 @@ def run_drafting(pursuit, caller, log, store, *,
         slots_by_id = {s["slot_id"]: s for s in container["slots"]}
 
     voice_text = load_voice_spec(voice_path)  # malformed firm config raises
-    frozen_brief = pursuit.read_artifact(FROZEN_BRIEF)
-    plan_sha256 = hashlib.sha256(
-        (pursuit.root / FROZEN_PLAN).read_bytes()).hexdigest()
+    plan_sha256 = pursuit.file_sha256(FROZEN_PLAN)
 
     # --- routing prepass (pure) -----------------------------------------
     routing: dict[str, dict] = {}
@@ -127,6 +131,13 @@ def run_drafting(pursuit, caller, log, store, *,
     ckpt = (pursuit.checkpoint_payload(STAGE)
             if STAGE in pursuit.completed_stages()
             else {"sections": {}, "complete": False})
+    if ckpt.get("plan_sha256") != plan_sha256:
+        # P25 item 8 (P0-16): a checkpoint built against ANOTHER freeze
+        # (or one that never recorded its binding) is discarded, never
+        # resumed — resuming would re-bind the old prose to the new plan
+        # hash with zero model calls.
+        ckpt = {"sections": {}, "complete": False}
+    ckpt["plan_sha256"] = plan_sha256
 
     # --- prepass: the complete outcome set, durable before any spend ----
     _write_envelope(pursuit, log, frozen_plan, routing, ckpt, plan_sha256,

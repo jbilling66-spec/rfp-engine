@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from openpyxl import load_workbook
+from engine.structure.zipguard import check_office_zip
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ def fill_signature(cell) -> str | None:
 def collect_workbook_facts(path: Path) -> WorkbookFacts:
     """Read every interesting cell (text, fill, or formula) with
     byte-exact sheet names. data_only=False so formulas stay formulas."""
+    check_office_zip(path)  # P0-8: the container before the parser
     wb = load_workbook(path, data_only=False, read_only=False)
     facts = WorkbookFacts(file=path.name)
     for index, ws in enumerate(wb.worksheets):

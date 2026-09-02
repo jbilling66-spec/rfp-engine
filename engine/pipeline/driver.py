@@ -150,6 +150,30 @@ def _draft_awaiting_sections(pursuit) -> list[str]:
                    for a in s.get("answers", []))]
 
 
+def draft_is_current(pursuit) -> bool:
+    """Drafting's skip predicate (P25 item 8, P0-16): a COMPLETE envelope
+    bound to the LIVE freeze — never bare existence, so a replanned
+    pursuit's old draft can never skip drafting."""
+    if not (pursuit.root / "drafts" / "draft.json").exists():
+        return False
+    envelope = pursuit.read_artifact("drafts/draft.json")
+    return (envelope.get("status") == "complete"
+            and envelope.get("plan_sha256")
+            == pursuit.file_sha256("plan.frozen.json"))
+
+
+def validation_is_current(pursuit) -> bool:
+    """Validation's skip predicate (P25 item 8, P0-16): an annotated draft
+    bound to the LIVE envelope, which is itself bound to the LIVE freeze."""
+    if not (pursuit.root / "drafts" / "annotated-draft.json").exists():
+        return False
+    annotated = pursuit.read_artifact("drafts/annotated-draft.json")
+    return (annotated.get("draft_sha256")
+            == pursuit.file_sha256("drafts/draft.json")
+            and annotated.get("plan_sha256")
+            == pursuit.file_sha256("plan.frozen.json"))
+
+
 def advance(pursuit, *, make_caller, mode, kb_root, at,
             extras=None, intake_package=None, research_pack=None,
             workbook=None, targets=None, core_doc=None,
@@ -242,14 +266,28 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
             if pack_path != research_pack:
                 pack_path.write_bytes(research_pack.read_bytes())
         cfg_mode = effective_config()["research_mode"]
-        run_research(pursuit, stage.caller, stage.log, stage.lanes,
-                     mode=cfg_mode, pack=pack_path)
+        research = run_research(pursuit, stage.caller, stage.log, stage.lanes,
+                                mode=cfg_mode, pack=pack_path)
+        if research.status == "refused":
+            # P25 item 1 (P1-12): every stage refusal ends the advance —
+            # a dropped return used to let the chain walk past it.
+            stage.end()
+            result.status = "failed"
+            result.stopped_at = "research"
+            result.problems.append("research refused")
+            return result
         stage.end()
         result.ran_stages.append("research")
 
         stage = StageRun(pursuit, make_caller, mode, "strategy",
                          kb_root=kb_root, extras=extras)
-        run_win_themes(pursuit, stage.caller, stage.log)
+        themes = run_win_themes(pursuit, stage.caller, stage.log)
+        if themes.status == "refused":
+            stage.end()
+            result.status = "failed"
+            result.stopped_at = "win_themes"
+            result.problems.append("win_themes refused")
+            return result
         if decide_gate1 is None:
             stage.end(status="awaiting_gate")
             result.status = "awaiting_gate"
@@ -284,14 +322,7 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
         stage.end()
         result.ran_stages.append("planning+gate_2")
 
-    envelope_path = root / "drafts" / "draft.json"
-
-    def _draft_complete():
-        return (envelope_path.exists()
-                and pursuit.read_artifact("drafts/draft.json")["status"]
-                == "complete")
-
-    if not _draft_complete():
+    if not draft_is_current(pursuit):
         stage = StageRun(pursuit, make_caller, mode, "drafting",
                          kb_root=kb_root, extras=extras)
         report = run_drafting(pursuit, stage.caller, stage.log, stage.lanes)
@@ -317,8 +348,7 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
         stage.end()
         result.ran_stages.append("drafting")
 
-    annotated_path = root / "drafts" / "annotated-draft.json"
-    if not annotated_path.exists():
+    if not validation_is_current(pursuit):
         stage = StageRun(pursuit, make_caller, mode, "validation",
                          kb_root=kb_root, extras=extras)
         report = run_validation(pursuit, stage.caller, stage.log, stage.store,

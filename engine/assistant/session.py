@@ -28,14 +28,15 @@ class UnknownSession(KeyError):
 
 
 class AssistantSession:
-    def __init__(self, workspace: Path, session_id: str):
+    def __init__(self, workspace: Path, session_id: str, *,
+                 resume: bool = False):
         if not _SESSION_RX.match(session_id):
             raise UnknownSession(session_id)  # also the traversal guard
         self.workspace = Path(workspace)
         self.session_id = session_id
         root = self.workspace / "support" / "assistant"
         self.run_dir = root / "runs" / session_id
-        self.logger = RunLogger(root, session_id, "assistant")
+        self.logger = RunLogger(root, session_id, "assistant", resume=resume)
         self.transcript_path = self.run_dir / "transcript.jsonl"
 
     # -- lifecycle ---------------------------------------------------------
@@ -56,7 +57,7 @@ class AssistantSession:
                     / session_id / "run.jsonl")
         if not run_file.exists():
             raise UnknownSession(session_id)
-        return cls(workspace, session_id)
+        return cls(workspace, session_id, resume=True)
 
     # -- transcript --------------------------------------------------------
 

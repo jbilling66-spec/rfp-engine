@@ -13,7 +13,6 @@ when absent the server computes now() EXACTLY ONCE per request at this
 boundary — no wall clock below it, tests always inject.
 """
 
-import fcntl
 import json
 import re
 from contextlib import asynccontextmanager
@@ -23,6 +22,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from engine.cli.slice import KB_ROOT, _extras  # the shared digest extras
 from engine.web.fake_script import revision_script
@@ -33,9 +33,13 @@ from engine.runlog import read_run
 from engine.version import engine_version
 from engine.web import state as state_models
 from engine.web.auth import AuthSeam
+from engine.contracts import ContractError
 from engine.web.events import EventsError, EventsLane
+from engine.web import limits
+from engine.web.headers import SecurityHeadersMiddleware
 from engine.web.jobs import JobConflict, JobNotFound, JobRunner
 from engine.workspace import PursuitDir, orgs as org_registry
+from engine.workspace.lock import WorkspaceLocked, workspace_lock
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -55,34 +59,38 @@ def _now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
 def create_app(workspace: Path, *, make_caller=_default_make_caller,
                mode: str = "dry_run", auth_config: Path | None = None,
-               now=_now_utc) -> FastAPI:
+               now=_now_utc,
+               allowed_hosts: tuple[str, ...] = LOOPBACK_HOSTS) -> FastAPI:
     workspace = Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
 
     # serve.lock: flock-held for app life — a second server on this
-    # workspace refuses, a dead one releases (v1 keeper design).
-    lock_file = open(workspace / "serve.lock", "a+")
+    # workspace refuses, a dead one releases (v1 keeper design). Since
+    # P25 item 2 the SAME lock is taken by every mutating CLI command
+    # (engine.workspace.lock), so a CLI cannot race a live server.
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        lock_file.close()
-        raise RuntimeError(
-            f"another server already holds {workspace / 'serve.lock'} — "
-            "one server per workspace")
-    lock_file.seek(0)
-    lock_file.truncate()
-    lock_file.write(f"{id(lock_file)}\n")
-    lock_file.flush()
+        lock = workspace_lock(workspace, holder="server")
+    except WorkspaceLocked as exc:
+        raise RuntimeError(f"{exc}; one server per workspace") from exc
 
     @asynccontextmanager
     async def lifespan(app):
         yield
-        fcntl.flock(lock_file, fcntl.LOCK_UN)
-        lock_file.close()
+        lock.release()
 
     app = FastAPI(title="RFP Engine", lifespan=lifespan)
+    # P25 item 4 (P0-7): the Host header must be one the operator serves
+    # (DNS rebinding closes here; A5's proxy adds its host through the
+    # parameter), and every response carries the baseline headers — the
+    # headers middleware is outermost so even a host refusal carries them.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(allowed_hosts),
+                       www_redirect=False)
+    app.add_middleware(SecurityHeadersMiddleware)
     seam = AuthSeam(auth_config)
     runner = JobRunner(workspace)
     # A workspace carrying its own kb/ owns its store (the fixture-chain
@@ -102,6 +110,12 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         return (payload or {}).get("at") or now()
 
     def _pursuit_root(pursuit_id: str) -> Path:
+        # P25 item 4 (P2-17): the id shape is checked at every door, not
+        # only at creation — `..` used to pass is_dir() and PursuitDir's
+        # mkdirs then landed eleven directories in the workspace's parent
+        if not PURSUIT_ID.match(pursuit_id or ""):
+            raise HTTPException(422, f"pursuit id {pursuit_id!r} is not a "
+                                     "pursuit id")
         root = workspace / pursuit_id
         # existence check BEFORE PursuitDir — its __init__ mkdirs, and a
         # GET must never create a phantom pursuit (v1 trap 1).
@@ -228,19 +242,22 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             raise HTTPException(
                 422, "role must be core, supplemental, or target (B67 §3: "
                      "the role is declared, never inferred)")
-        body = await request.body()
+        body = await limits.read_body_capped(
+            request, limits.MAX_INBOX_UPLOAD_BYTES)  # P0-8: capped, streamed
         if not body:
             raise HTTPException(400, "empty upload")
-        target = root / "inbox" / clean
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(body)
-        if role is not None:
-            roles_path = root / "inbox" / "roles.json"
-            roles = (json.loads(roles_path.read_text(encoding="utf-8"))
-                     if roles_path.exists() else {})
-            roles[clean] = role
-            roles_path.write_text(json.dumps(roles, indent=2, sort_keys=True),
-                                  encoding="utf-8")
+        with _mutate(pursuit_id):  # P1-22: the inbox write + roles RMW
+            target = root / "inbox" / clean
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(body)
+            if role is not None:
+                roles_path = root / "inbox" / "roles.json"
+                roles = (json.loads(roles_path.read_text(encoding="utf-8"))
+                         if roles_path.exists() else {})
+                roles[clean] = role
+                roles_path.write_text(
+                    json.dumps(roles, indent=2, sort_keys=True),
+                    encoding="utf-8")
         out = {"stored": f"inbox/{clean}", "bytes": len(body), "by": who}
         if role is not None:
             out["role"] = role
@@ -601,7 +618,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         import tempfile
 
         from engine.kb.xlsx import WorkbookError, submit_import
-        body = await request.body()
+        body = await limits.read_body_capped(
+            request, limits.MAX_XLSX_IMPORT_BYTES)  # P0-8
         with tempfile.TemporaryDirectory() as workdir:
             path = Path(workdir) / "upload.xlsx"
             path.write_bytes(body)
@@ -646,7 +664,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                               filename: str = "addendum.md",
                               who: str = Depends(operator)):
         lane = _addendum_lane(pursuit_id)
-        body = await request.body()
+        body = await limits.read_body_capped(
+            request, limits.MAX_ADDENDUM_BYTES)  # P0-8
         pursuit = PursuitDir(workspace, pursuit_id)
         slots_by_id = None
         slots_path = pursuit.root / "slots.json"
@@ -689,6 +708,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     # -- export + downloads (D20; c16; bundle P18/C6) ----------------------
 
     from engine.assembly.bundle import compose_bundle, declared_deliverables
+    from engine.assembly.bindings import assert_current
     from engine.assembly.docx import render_review, render_submission
 
     @app.post("/api/pursuits/{pursuit_id}/export")
@@ -702,6 +722,12 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "export")
             try:
+                # P25 item 8: the bindings verify ONCE at the door (P0-2,
+                # P0-16); the submission lane also carries the block and
+                # the owed pends (P0-20)
+                assert_current(pursuit, lane=(
+                    "submission" if lane in ("both", "submission")
+                    else "review"))
                 if lane in ("both", "submission"):
                     out["submission"] = render_submission(pursuit, log,
                                                           at=at)
@@ -711,7 +737,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 # render just changed the to-the-buyer set's state
                 out["bundle"] = compose_bundle(pursuit, log, at=at,
                                                composed_by=who)
-            except (ContractError, FileNotFoundError) as exc:
+            except (ContractError, FileNotFoundError, ValueError) as exc:
+                # ValueError: python-docx refuses XML-incompatible text
+                # (P2-29a) — a typed 409 with the run closed, never a 500
+                # over a footerless run
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
@@ -750,6 +779,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             for entry in bundle["deliverables"]:
                 if entry["name"] == clean and entry["status"] == "produced":
                     path = root / entry["path"]  # served by the RECORD's
+                    if not path.resolve().is_relative_to(root.resolve()):
+                        raise HTTPException(403, "the bundle record names a "
+                                                 "path outside the pursuit")
                     if path.is_file():           # path, never a name scan
                         return FileResponse(path, filename=clean)
         review = root / "exports" / "review" / clean
@@ -783,7 +815,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         declares, not the first suffix match, and the identity is still
         the container's own (source_mode + sources[] digests), never
         inbox state."""
-        frozen_plan = pursuit.read_artifact("plan.frozen.json")
+        frozen_plan = pursuit.read_frozen("pursuit_plan")
         container = pursuit.read_artifact(
             frozen_plan.get("slots_ref", "slots.json"))
         return declared_deliverables(pursuit, container)
@@ -842,6 +874,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "writeback")
             try:
+                # P25 item 8: every write-back lane is buyer-facing — the
+                # bindings and the packaging block verify at the door
+                # (P0-16, P0-20); per-slot pends are recorded in the facts
+                assert_current(pursuit, lane="writeback")
                 bindings = _writeback_bindings(pursuit)
             except (ContractError, FileNotFoundError) as exc:
                 log.run_end(status="failed")
@@ -850,7 +886,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             for binding in bindings:
                 try:
                     files.append(_run_one(pursuit, log, binding, at, who))
-                except (ContractError, FileNotFoundError) as exc:
+                except (ContractError, FileNotFoundError, ValueError) as exc:
+                    # ValueError: python-docx/openpyxl refuse XML-incompatible
+                    # text (P2-29a) — a RECORDED lane refusal, not a 500
                     refused.append({"lane": binding["lane"],
                                     "file": binding["file"],
                                     "reason": str(exc)})
@@ -880,14 +918,15 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/pursuits/{pursuit_id}/share")
     def create_share(pursuit_id: str, payload: dict,
                      who: str = Depends(operator)):
-        lane = _share_lane(pursuit_id)
-        try:
-            return lane.create(created_by=who,
-                               label=payload.get("label", ""),
-                               expires_at=payload.get("expires_at", ""),
-                               at=_at(payload))
-        except ShareDenied as exc:
-            raise HTTPException(exc.status, exc.reason)
+        with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
+            lane = _share_lane(pursuit_id)
+            try:
+                return lane.create(created_by=who,
+                                   label=payload.get("label", ""),
+                                   expires_at=payload.get("expires_at", ""),
+                                   at=_at(payload))
+            except ShareDenied as exc:
+                raise HTTPException(exc.status, exc.reason)
 
     @app.get("/api/pursuits/{pursuit_id}/share")
     def list_shares(pursuit_id: str, who: str = Depends(operator)):
@@ -918,8 +957,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         raise ShareDenied(404, "unknown share link")
 
     @app.get("/share/{token}")
-    def share_view(token: str, at: str | None = None):
-        when = at or now()
+    def share_view(token: str):
+        when = now()  # P25 item 4 (P0-18): a guest never supplies the clock
         try:
             lane, record = _resolve_share(token, when, "view")
         except ShareDenied as exc:
@@ -941,8 +980,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         return out
 
     @app.post("/share/{token}/comments")
-    def share_comment(token: str, payload: dict, at: str | None = None):
-        when = payload.get("at") or at or now()
+    def share_comment(token: str, payload: dict):
+        when = now()  # P25 item 4 (P0-18): a guest never supplies the clock
         try:
             lane, record = _resolve_share(token, when, "comment")
         except ShareDenied as exc:
@@ -983,7 +1022,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                     link_id=record["link_id"], display_name=display_name,
                     screen_flags=[{"pattern_id": f.pattern_id,
                                    "excerpt": f.excerpt} for f in flags])
-            except EventsError as exc:
+            except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))
         return {"cid": entry["cid"], "section_id": section_id,
                 "screened": bool(flags),
@@ -999,7 +1038,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             try:
                 return lane.mark_pending(cid, included_by=who,
                                          included_at=_at(payload))
-            except EventsError as exc:
+            except (EventsError, ContractError) as exc:
                 raise HTTPException(404, str(exc))
 
     @app.post("/api/pursuits/{pursuit_id}/comments/{cid}/dismiss")
@@ -1010,7 +1049,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             try:
                 return lane.mark_pending(cid, dismissed_by=who,
                                          dismissed_at=_at(payload))
-            except EventsError as exc:
+            except (EventsError, ContractError) as exc:
                 raise HTTPException(404, str(exc))
 
     # -- pings + gaps (D14/D15; c13) ---------------------------------------
@@ -1091,7 +1130,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     # -- the review loop on the web (D6/D7, F9; c12) -----------------------
 
     @app.get("/api/pursuits/{pursuit_id}/review")
-    def review_surface(pursuit_id: str):
+    def review_surface(pursuit_id: str, who: str = Depends(operator)):
+        # P25 item 4 (P0-19): the FULL internal model — waiver identities,
+        # pending internals, red-team findings — is for operators; guests
+        # get the stripped surface through /share/{token}
         _pursuit_root(pursuit_id)
         out = state_models.review(workspace, pursuit_id)
         if out is None:
@@ -1221,13 +1263,17 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                       research_mode=cfg["research_mode"])
         return log
 
-    def _effort_ride_along(lane: EventsLane, payload: dict, who: str,
-                           at: str, gate: str) -> None:
+    def _effort_payload(payload: dict, gate: str) -> dict | None:
         """The one-click effort confirm at gate close (D13): optional,
-        and when present it follows the confirmed-retains-both rule."""
+        and when present it follows the confirmed-retains-both rule.
+        Validated BEFORE the decision commits (P25 item 1): a bad effort
+        payload can never 422 after the gate has landed, which used to
+        leave the next resubmit refusing an already-decided gate."""
         effort = payload.get("effort")
         if not effort:
-            return
+            return None
+        if not isinstance(effort, dict):
+            raise HTTPException(422, "effort must be an object")
         effort = dict(effort)
         effort.setdefault("measurement", "confirmed")
         effort.setdefault("scope", "gate")
@@ -1237,11 +1283,20 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 or "confirmed_minutes" not in effort):
             raise HTTPException(
                 422, "confirmed effort retains BOTH figures")
+        return effort
+
+    def _effort_append(lane: EventsLane, effort: dict | None, payload: dict,
+                       who: str, at: str) -> None:
+        """Appends the validated effort — only after a decision that
+        actually landed; a converged resubmit records no second
+        review_session (P25 item 1)."""
+        if effort is None:
+            return
         try:
             lane.append("review_session", at=at, actor=who,
                         actor_role=payload.get("actor_role", ""),
                         effort=effort)
-        except EventsError as exc:
+        except (EventsError, ContractError) as exc:
             raise HTTPException(422, str(exc))
 
     def _preflight(root, brief: dict) -> dict | None:
@@ -1320,6 +1375,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
+        effort = _effort_payload(payload, "gate_0")
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "gate_0")
             try:
@@ -1335,8 +1391,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
-            _effort_ride_along(EventsLane(pursuit), payload, who, at,
-                               "gate_0")
+            if not result.converged:
+                _effort_append(EventsLane(pursuit), effort, payload, who, at)
         out = {"decision": result.decision, "converged": result.converged}
         if result.proposals:
             out["proposals"] = result.proposals  # steward inbox, not corpus
@@ -1370,6 +1426,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         root = _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
+        effort = _effort_payload(payload, "gate_1")
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "strategy")
             try:
@@ -1382,8 +1439,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
-            _effort_ride_along(EventsLane(pursuit), payload, who, at,
-                               "gate_1")
+            if not result.converged:
+                _effort_append(EventsLane(pursuit), effort, payload, who, at)
         out = {"decision": result.decision, "converged": result.converged}
         # The collapse toggle (D25): gate 1 approved on the one-screen
         # path enqueues planning with an auto-gate-2 policy that fires
@@ -1454,12 +1511,20 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         """The Gate-2 modal content — the plan summary is ALWAYS shown
         (UAT C2: a blank modal means approving unseen)."""
         plan, sections = _plan_sections(pursuit_id)
-        approved_themes = json.loads(
-            (workspace / pursuit_id / "brief.frozen.json").read_text(
-                encoding="utf-8")).get("win_themes", {}).get("approved", []) \
-            if (workspace / pursuit_id / "brief.frozen.json").exists() else []
+        from engine.contracts import ContractError
+        honesty = None
+        try:  # the verified read (P0-2): a modal never renders an
+            # unvouched freeze as the approved themes
+            approved_themes = PursuitDir(workspace, pursuit_id).read_frozen(
+                "bid_brief").get("win_themes", {}).get("approved", [])
+        except FileNotFoundError:
+            approved_themes = []
+        except ContractError as exc:
+            approved_themes = []
+            honesty = f"frozen brief fails verification: {exc}"
         return {
             "status": plan.get("status"),
+            "frozen_brief_honesty": honesty,
             "decidable": plan.get("status") == "gate2_pending",
             "path": plan.get("path"),
             "coverage_summary": plan.get("coverage_summary", {}),
@@ -1488,6 +1553,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
+        effort = _effort_payload(payload, "gate_2")
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "planning")
             try:
@@ -1501,8 +1567,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
-            _effort_ride_along(EventsLane(pursuit), payload, who, at,
-                               "gate_2")
+            if not result.converged:
+                _effort_append(EventsLane(pursuit), effort, payload, who, at)
         return {"decision": result.decision, "converged": result.converged,
                 "frozen": result.frozen_path is not None}
 
@@ -1524,9 +1590,15 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                                      f"{ACTOR_ROLES}")
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "validation")
-            result = approve_waiver(pursuit, log, claim_id=claim_id,
-                                    actor=who, reason=reason, at=at)
-            log.run_end(status="completed")
+            try:
+                result = approve_waiver(pursuit, log, claim_id=claim_id,
+                                        actor=who, reason=reason, at=at)
+            except (ContractError, ValueError) as exc:
+                log.run_end(status="failed")
+                raise HTTPException(409, str(exc))
+            # P25 item 4 (P2-18): a refused waiver's mini-run says so
+            log.run_end(status="completed" if result.status == "waived"
+                        else "failed")
             if result.status == "waived":
                 EventsLane(pursuit).append(
                     "waive_block", at=at, actor=who,
@@ -1563,7 +1635,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         return EventsLane(PursuitDir(workspace, pursuit_id))
 
     def _plan_sections(pursuit_id: str) -> dict:
-        root = workspace / pursuit_id
+        root = _pursuit_root(pursuit_id)  # P2-17: the shape check, one home
         plan_path = root / "plan.json"
         if not plan_path.exists():
             raise HTTPException(400, "no plan yet — comments target plan "
@@ -1590,7 +1662,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                     before=payload.get("before"),
                     after=payload.get("after"),
                     edit_reason=payload.get("edit_reason"))
-            except EventsError as exc:
+            except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))
             # D11: the first pending item puts a drafted section in_review
             # — on the LIVE plan only; the frozen copy never moves.
@@ -1616,27 +1688,28 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         with _mutate(pursuit_id):
             try:
                 return lane.remove_pending(cid)
-            except EventsError as exc:
+            except (EventsError, ContractError) as exc:
                 raise HTTPException(404, str(exc))
 
     @app.post("/api/pursuits/{pursuit_id}/events")
     def add_event(pursuit_id: str, payload: dict,
                   who: str = Depends(operator)):
-        kind = payload.get("kind")
-        if kind not in ("accept", "reject"):
-            raise HTTPException(
-                422, "this door takes accept|reject of an agent revision; "
-                     "comments/edits pend, outcome/effort have their own "
-                     "routes")
-        lane = _lane(pursuit_id)
-        try:
-            return lane.append(
-                kind, at=_at(payload), actor=who,
-                actor_role=payload.get("actor_role", ""),
-                section_id=payload.get("section_id"),
-                edit_reason=payload.get("edit_reason"))
-        except EventsError as exc:
-            raise HTTPException(422, str(exc))
+        with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
+            kind = payload.get("kind")
+            if kind not in ("accept", "reject"):
+                raise HTTPException(
+                    422, "this door takes accept|reject of an agent revision; "
+                         "comments/edits pend, outcome/effort have their own "
+                         "routes")
+            lane = _lane(pursuit_id)
+            try:
+                return lane.append(
+                    kind, at=_at(payload), actor=who,
+                    actor_role=payload.get("actor_role", ""),
+                    section_id=payload.get("section_id"),
+                    edit_reason=payload.get("edit_reason"))
+            except (EventsError, ContractError) as exc:
+                raise HTTPException(422, str(exc))
 
     @app.post("/api/pursuits/{pursuit_id}/accept")
     def accept_pursuit(pursuit_id: str, payload: dict,
@@ -1661,7 +1734,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 event = lane.append(
                     "accept", at=_at(payload), actor=who,
                     actor_role=payload.get("actor_role", ""))
-            except EventsError as exc:
+            except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))
             # D11: final is the pursuit-accept stamp — live plan only.
             plan_path = root / "plan.json"
@@ -1677,16 +1750,17 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/pursuits/{pursuit_id}/outcome")
     def record_outcome(pursuit_id: str, payload: dict,
                        who: str = Depends(operator)):
-        outcome = {k: payload[k] for k in
-                   ("result", "buyer_feedback", "score_received")
-                   if payload.get(k)}
-        lane = _lane(pursuit_id)
-        try:
-            return lane.append("outcome", at=_at(payload), actor=who,
-                               actor_role=payload.get("actor_role", ""),
-                               outcome=outcome)
-        except EventsError as exc:
-            raise HTTPException(422, str(exc))
+        with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
+            outcome = {k: payload[k] for k in
+                       ("result", "buyer_feedback", "score_received")
+                       if payload.get(k)}
+            lane = _lane(pursuit_id)
+            try:
+                return lane.append("outcome", at=_at(payload), actor=who,
+                                   actor_role=payload.get("actor_role", ""),
+                                   outcome=outcome)
+            except (EventsError, ContractError) as exc:
+                raise HTTPException(422, str(exc))
 
     @app.post("/api/pursuits/{pursuit_id}/effort")
     def record_effort(pursuit_id: str, payload: dict,
@@ -1694,30 +1768,31 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         """D13: one event retains BOTH figures. confirmed requires the
         passive figure it was pre-filled from alongside the human's
         number; manual is the offline path; passive is the UI's own."""
-        measurement = payload.get("measurement", "passive")
-        effort = {k: payload[k] for k in
-                  ("active_ms", "measurement", "confirmed_minutes", "scope",
-                   "gate", "started_at", "ended_at") if payload.get(k)
-                  is not None}
-        effort["measurement"] = measurement
-        if measurement == "confirmed" and (
-                "active_ms" not in effort
-                or "confirmed_minutes" not in effort):
-            raise HTTPException(
-                422, "confirmed effort retains BOTH figures — active_ms "
-                     "(the passive measurement it was pre-filled from) and "
-                     "confirmed_minutes (the human's number)")
-        if measurement == "manual" and "confirmed_minutes" not in effort:
-            raise HTTPException(422, "manual effort needs confirmed_minutes")
-        if measurement == "passive" and "active_ms" not in effort:
-            raise HTTPException(422, "passive effort needs active_ms")
-        lane = _lane(pursuit_id)
-        try:
-            return lane.append("review_session", at=_at(payload), actor=who,
-                               actor_role=payload.get("actor_role", ""),
-                               effort=effort)
-        except EventsError as exc:
-            raise HTTPException(422, str(exc))
+        with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
+            measurement = payload.get("measurement", "passive")
+            effort = {k: payload[k] for k in
+                      ("active_ms", "measurement", "confirmed_minutes", "scope",
+                       "gate", "started_at", "ended_at") if payload.get(k)
+                      is not None}
+            effort["measurement"] = measurement
+            if measurement == "confirmed" and (
+                    "active_ms" not in effort
+                    or "confirmed_minutes" not in effort):
+                raise HTTPException(
+                    422, "confirmed effort retains BOTH figures — active_ms "
+                         "(the passive measurement it was pre-filled from) and "
+                         "confirmed_minutes (the human's number)")
+            if measurement == "manual" and "confirmed_minutes" not in effort:
+                raise HTTPException(422, "manual effort needs confirmed_minutes")
+            if measurement == "passive" and "active_ms" not in effort:
+                raise HTTPException(422, "passive effort needs active_ms")
+            lane = _lane(pursuit_id)
+            try:
+                return lane.append("review_session", at=_at(payload), actor=who,
+                                   actor_role=payload.get("actor_role", ""),
+                                   effort=effort)
+            except (EventsError, ContractError) as exc:
+                raise HTTPException(422, str(exc))
 
     # -- the steward assistant (P14/B63) -----------------------------------
     # Reads + the proposal door only, grounded in docs/steward + advisor.

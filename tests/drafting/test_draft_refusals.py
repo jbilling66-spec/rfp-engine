@@ -14,6 +14,7 @@ from engine.drafting import VoiceSpecError
 from engine.runlog import read_run
 from engine.workspace import PursuitDir
 from tests.drafting.fixtures.drafts import run_drafting_run
+from tests.helpers import plant_freeze
 
 APPROVED_PLAN = {"status": "approved", "path": "B_free_flow"}
 
@@ -23,9 +24,9 @@ def _bare(tmp_path, *, plan=None, frozen_plan=None, frozen_brief=None):
     if plan is not None:
         pursuit.write_json("plan.json", plan)
     if frozen_plan is not None:
-        pursuit.write_json("plan.frozen.json", frozen_plan)
+        plant_freeze(pursuit, "pursuit_plan", frozen_plan)
     if frozen_brief is not None:
-        pursuit.write_json("brief.frozen.json", frozen_brief)
+        plant_freeze(pursuit, "bid_brief", frozen_brief)
     return pursuit
 
 
@@ -80,3 +81,18 @@ def test_malformed_voice_spec_raises_not_refuses(tmp_path):
     bad.write_text("# Wrong header\n", encoding="utf-8")
     with pytest.raises(VoiceSpecError):
         run_drafting_run(tmp_path, pursuit, voice_path=bad)
+
+
+def test_refuses_tampered_frozen_plan(tmp_path):
+    """P0-2: a frozen plan modified after the gate — a raw write past the
+    door, so the gate_2 checkpoint's frozen_sha256 no longer matches — is
+    refused before any spend, with the run footer written."""
+    import json
+
+    pursuit = _bare(tmp_path, plan=APPROVED_PLAN, frozen_plan=APPROVED_PLAN,
+                    frozen_brief={"status": "approved"})
+    frozen = pursuit.root / "plan.frozen.json"
+    frozen.write_text(json.dumps({**APPROVED_PLAN, "sections": []}),
+                      encoding="utf-8")
+    pursuit, report = run_drafting_run(tmp_path, pursuit)
+    _assert_refused(pursuit, report, "frozen_verification_failed")

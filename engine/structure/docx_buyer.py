@@ -49,6 +49,7 @@ from engine.structure.classify import (
     _sub_questions,
 )
 from engine.structure.parse import ParsedWorkbook, StructureError
+from engine.structure.zipguard import check_office_zip
 
 WORDS_PER_PAGE = 450  # declared prose-page conversion (B67-F6)
 
@@ -241,6 +242,7 @@ def parse_buyer_docx(path: Path, *, core_scan: bool = False) -> ParsedWorkbook:
     path = Path(path)
     if not path.is_file():
         raise StructureError(f"no document at {path}")
+    check_office_zip(path)  # P0-8: the container before the parser
     document = Document(str(path))
 
     # Pass 1: sections from numbered headings; paragraphs and tables
@@ -365,6 +367,7 @@ def question_cell_map(path: Path) -> dict[str, dict]:
     slot in the document. The frozen slot schema does not carry table
     addresses, so write-back RE-DERIVES them from the digest-bound
     source file — deterministic parse, same ids, server-side truth."""
+    check_office_zip(path)  # P0-8: the container before the parser
     document = Document(str(Path(path)))
     cells: dict[str, dict] = {}
     table_index = -1

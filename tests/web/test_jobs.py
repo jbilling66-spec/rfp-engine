@@ -21,7 +21,7 @@ def demo_client(tmp_path_factory):
     scoped because the advance runs three real stages."""
     ws = tmp_path_factory.mktemp("web-jobs") / "ws"
     app = create_app(ws, now=lambda: FIXED_AT)  # default = FakeCaller
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client)
         client.post("/api/pursuits", json={"pursuit_id": "pur_webdemo"})
         for name, path in (("demo-twin.xlsx", DEMO_WORKBOOK),

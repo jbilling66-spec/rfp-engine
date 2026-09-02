@@ -10,10 +10,10 @@ set would dishonestly unblock packaging. The staleness clock is the
 injected `at` — never the wall clock; byte-determinism holds.
 """
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from engine.contracts import ContractError
 from engine.drafting.compose import VOICE_DEFAULT
 from engine.drafting.verify import flag_present
 from engine.validation import annotate, audit, checks, claims, redteam, voice
@@ -78,15 +78,18 @@ def run_validation(pursuit, caller, log, store, *, at: str,
     if not (pursuit.root / FROZEN_BRIEF).exists():
         return _refuse(log, report, code="missing_frozen_brief",
                        message="brief.frozen.json missing")
-    plan_sha = hashlib.sha256(
-        (pursuit.root / FROZEN_PLAN).read_bytes()).hexdigest()
+    plan_sha = pursuit.file_sha256(FROZEN_PLAN)
     if envelope.get("plan_sha256") != plan_sha:
         return _refuse(log, report, code="plan_sha_mismatch",
                        message="draft envelope binds a different frozen plan "
                                "— a re-planned pursuit voids the draft (T6)")
 
-    frozen_plan = pursuit.read_artifact(FROZEN_PLAN)
-    frozen_brief = pursuit.read_artifact(FROZEN_BRIEF)
+    try:  # verified against the gate records (P0-2)
+        frozen_plan = pursuit.read_frozen("pursuit_plan")
+        frozen_brief = pursuit.read_frozen("bid_brief")
+    except ContractError as exc:
+        return _refuse(log, report, code="frozen_verification_failed",
+                       message=str(exc))
     path = frozen_plan.get("path")
     slots_by_id: dict[str, dict] = {}
     if path == "A_designated":
@@ -105,8 +108,7 @@ def run_validation(pursuit, caller, log, store, *, at: str,
     facts = claims.fact_catalog(store)
     facts_by_id = {c["kb_id"]: c for c in facts}
     catalog_ids = frozenset(facts_by_id)
-    draft_sha = hashlib.sha256(
-        (pursuit.root / DRAFT_NAME).read_bytes()).hexdigest()
+    draft_sha = pursuit.file_sha256(DRAFT_NAME)
 
     # Gate-2 flag demands per section, from the frozen plan (the authority).
     # The gap->slot join is structural since E1: gap.slot_id, or section
@@ -129,6 +131,11 @@ def run_validation(pursuit, caller, log, store, *, at: str,
     ckpt = (pursuit.checkpoint_payload(STAGE)
             if STAGE in pursuit.completed_stages()
             else {"sections": {}, "cross": None, "complete": False})
+    if ckpt.get("draft_sha256") != draft_sha:
+        # P25 item 8 (P0-16): the checkpoint binds the envelope it was
+        # built against; a different (or unrecorded) envelope starts over
+        ckpt = {"sections": {}, "cross": None, "complete": False}
+    ckpt["draft_sha256"] = draft_sha
 
     drafted = [e for e in envelope["sections"] if e["status"] == "drafted"]
 

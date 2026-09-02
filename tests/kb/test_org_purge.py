@@ -13,6 +13,7 @@ from engine.kb import purge_org, purge_pursuit_memory
 from engine.workspace import PursuitDir, orgs
 
 from tests.kb.fixtures.corpus import ingest_corpus
+from tests.helpers import plant_freeze
 
 AT = "2026-08-29T09:00:00Z"
 
@@ -50,12 +51,12 @@ def test_org_memory_survives_pursuit_purge_and_brief_cites_surface(
     pursuit = PursuitDir(tmp_path, "pur_one")
     # A frozen brief citing the org note (an internal_kb research
     # finding's source) — immutable record, surfaced not rewritten.
-    (pursuit.root / "brief.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "bid_brief", {
         "buyer": {"name": "Synthetic County", "org_id": org_id,
                   "research_findings": [
                       {"claim": "they weight change management",
                        "topic": "evaluation", "source_kind": "internal_kb",
-                       "source": kb_id}]}}))
+                       "source": kb_id}]}})
 
     # A pursuit purge leaves the org tree standing (siting is the control).
     purge_pursuit_memory(pursuit.root, actor="owner", firm_store=firm)

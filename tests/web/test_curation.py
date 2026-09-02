@@ -45,7 +45,7 @@ def client(tmp_path):
 
     app = create_app(workspace, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Sam Steward")
         yield client
 
@@ -259,7 +259,7 @@ def test_every_mutating_curation_route_needs_an_operator(tmp_path):
         "B", PROV, {})
     app = create_app(workspace, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as anonymous:
+    with TestClient(app, base_url="http://127.0.0.1") as anonymous:
         assert anonymous.get("/api/kb/cards").status_code == 200
         assert anonymous.post("/api/kb/proposals", json={
             "kb_id": "kb_alpha0001", "changes": {"summary": "x"}

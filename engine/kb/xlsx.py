@@ -18,6 +18,7 @@ Import produces PROPOSALS (S4). Nothing here writes a card.
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from engine.structure.zipguard import ZipGuardError, check_office_zip
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "schemas" / "kb-card.schema.json"
@@ -184,6 +185,10 @@ def read_workbook(path: Path) -> tuple[list[dict], list[tuple], list[str]]:
         # data_only=True a workbook saved by a non-Excel tool has no
         # cached value, so "=CONCAT(...)" reads as an empty required
         # cell while the user is looking at visible text.
+        try:
+            check_office_zip(Path(path))  # P0-8: the container first
+        except ZipGuardError as exc:
+            raise WorkbookError(str(exc)) from exc
         book = load_workbook(Path(path), data_only=False)
     except Exception as exc:  # noqa: BLE001 — any openpyxl failure
         raise WorkbookError(

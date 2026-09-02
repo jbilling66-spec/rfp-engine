@@ -32,6 +32,7 @@ from engine.runlog import RunLogger, read_run
 from engine.structure import merge_parsed, parse_default_template
 from engine.version import engine_version
 from engine.workspace import PursuitDir
+from tests.helpers import plant_freeze
 
 AT = "2026-08-29T12:00:00Z"
 PARA_ONE = "First paragraph of the summary."
@@ -53,10 +54,10 @@ def _workspace(tmp_path, *, ref_sha=None, source_mode=None):
     sections = [{"section_id": f"sec-{slot}",
                  "slot_ids": [f"{slot}-hdr", slot]}
                 for slot in ("s-h02", "s-h03", "s-h04")]
-    (pursuit.root / "plan.frozen.json").write_text(json.dumps({
+    plant_freeze(pursuit, "pursuit_plan", {
         "pursuit_id": "pur_fill", "path": "B_free_flow",
         "slots_ref": "slots.json", "status": "approved",
-        "sections": sections}))
+        "sections": sections})
     (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
         "plan_sha256": "0" * 64, "revision_n": 0,
         "sections": [

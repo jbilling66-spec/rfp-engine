@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+from engine.contracts import request_digest
 from engine.contracts import ContractError, validate
 from engine.intake.gate import approve_gate0
 from engine.llm import effective_config
@@ -53,8 +54,10 @@ def test_approval_stamps_confirms_and_checkpoints(clean):
     log.run_end(status="completed")
     brief = clean.read_artifact("brief.json")
     validate("bid_brief", brief)
-    assert brief["gate0"] == {"approved_by": "Pat Lead", "at": GATE_AT,
-                              "notes": "read it"}
+    assert brief["gate0"] == {
+        "approved_by": "Pat Lead", "at": GATE_AT, "notes": "read it",
+        "request_sha256": request_digest(decision="approved",
+                                         notes="read it")}
     # blanket confirmation is the human act the register exists for
     assert all(e["status"] == "confirmed"
                for e in brief["intake"]["assumptions"])
@@ -209,4 +212,62 @@ def test_idempotent_convergent_and_conflicting(clean):
     with pytest.raises(ContractError, match="already decided"):
         approve_gate0(clean, log, decision="approved",
                       actor="Sam Other", at=GATE_AT)
+    # P0-5/P2-13: a fresh clock converges; different notes refuse
+    fresh = approve_gate0(clean, log, decision="approved", actor="Pat Lead",
+                          at="2026-08-28T10:00:00Z")
+    assert fresh.converged and fresh.brief_sha256 == first.brief_sha256
+    assert clean.checkpoint_payload("gate_0")["at"] == GATE_AT
+    with pytest.raises(ContractError, match="already decided"):
+        approve_gate0(clean, log, decision="approved", actor="Pat Lead",
+                      at=GATE_AT, notes="changed my reading")
+    log.run_end(status="completed")
+
+
+def test_crash_after_stamp_completes_from_the_stamp_with_a_fresh_clock(clean):
+    """Gate 0's crash window: brief stamped, checkpoint missing. A
+    same-request resubmit with a different clock completes with the
+    stamp's clock; a different request refuses."""
+    log = _gate_log(clean)
+    approve_gate0(clean, log, decision="approved", actor="Pat Lead",
+                  at=GATE_AT, notes="read it")
+    (clean.root / "checkpoints" / "gate_0.json").unlink()
+    with pytest.raises(ContractError, match="different decision"):
+        approve_gate0(clean, log, decision="approved", actor="Pat Lead",
+                      at="2026-08-28T10:00:00Z", notes="read it twice")
+    again = approve_gate0(clean, log, decision="approved", actor="Pat Lead",
+                          at="2026-08-28T10:00:00Z", notes="read it")
+    assert again.converged is True
+    assert clean.checkpoint_payload("gate_0")["at"] == GATE_AT
+    assert clean.read_artifact("brief.json")["gate0"]["at"] == GATE_AT
+    log.run_end(status="completed")
+
+
+def test_crash_before_brief_write_replays_no_gap_lines(gapped, monkeypatch):
+    """P2-11: gap lines used to be emitted INSIDE the disposition loop,
+    before the brief write, so a crash between them replayed every line
+    on resume. Now nothing lands before the write; the resume emits each
+    line exactly once."""
+    gap_ids = [g["gap_id"] for g in
+               gapped.read_artifact("brief.json")["intake"]["gaps"]]
+    log = _gate_log(gapped)
+    args = dict(decision="approved_with_edits", actor="Pat Lead", at=GATE_AT,
+                answers=[{"gap_id": gap_ids[0],
+                          "answer": "ERP implementation services"}],
+                skips=gap_ids[1:])
+
+    class Boom(Exception):
+        pass
+
+    def crash(*a, **k):
+        raise Boom("crash before the brief write")
+
+    monkeypatch.setattr(gapped, "write_artifact", crash)
+    with pytest.raises(Boom):
+        approve_gate0(gapped, log, **args)
+    monkeypatch.undo()
+    assert not [r for r in read_run(log.path) if r["record_type"] == "gap"]
+    result = approve_gate0(gapped, log, **args)
+    assert result.converged is False
+    gaps = [r for r in read_run(log.path) if r["record_type"] == "gap"]
+    assert len(gaps) == len(gap_ids)  # one line per action, never doubled
     log.run_end(status="completed")

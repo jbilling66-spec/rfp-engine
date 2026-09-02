@@ -10,10 +10,25 @@ RFP_EXTRACTION_FALLBACK=1 is the explicit override, degraded-stamped."""
 
 import json
 import os
+import sys
 from pathlib import Path
+
+from engine.workspace.lock import WorkspaceLocked, workspace_lock
 
 
 def _cmd_run(args) -> int:
+    """The workspace lock first (P25 item 2, P0-4): a CLI intake beside a
+    live server on the same workspace refuses instead of racing it."""
+    try:
+        lock = workspace_lock(Path(args.outputs), holder="engine intake run")
+    except WorkspaceLocked as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    with lock:
+        return _cmd_run_locked(args)
+
+
+def _cmd_run_locked(args) -> int:
     from engine.extraction.backend import (
         FALLBACK_ENV,
         ExtractionUnavailable,

@@ -8,16 +8,20 @@ gates — an internal finding must cite a card that was actually opened, an
 airgapped external finding must cite a URL the pack actually carries.
 Untraceable citations are dropped and reported, never silently kept.
 
-Stage split (B21(7)): `research_internal` is guarded by its checkpoint (the
-`intake` pattern); `research_external` is an unguarded deterministic rerun
-(the `bid_brief` pattern) that ALWAYS merges internal findings from the
-checkpoint payload — the fresh path and the resume path are the same code
-path. As the second writer of brief.json the stage REPLACES the research
+Stage split (B21(7), amended P25 item 1 / register P1-12): BOTH stages are
+guarded by their checkpoints. `research_internal` always was; `research_external`
+was an unguarded deterministic rerun whose "converges byte-identically" held
+only under FakeCaller — live or via handoff it was a second external call that
+replaced the findings. It now skips on its own checkpoint (written since P4,
+read by nobody until P25) and the report reads back what the stage wrote. The
+stage also refuses a brief that is past Gate 1 (approved/declined, or frozen):
+a research rerun may never mutate a gated brief (T7), which closes the Gate-1
+crash-window rewrite the driver used to permit. As the second writer of brief.json the stage REPLACES the research
 fields (never appends) and sorts findings with a code-owned key, so a rerun
 converges byte-identically (N2) — and, like P3, writes no wall-clock.
 
 Both researchers always run (R1) — exactly two mid-tier agent_calls in every
-mode, every run. In airgapped mode with no pack uploaded, the external call
+mode, every FRESH run; a rerun over a checkpointed stage spends nothing. In airgapped mode with no pack uploaded, the external call
 still happens with an explicit no-material line and the absence is a gap
 record, never a silent skip.
 """
@@ -155,6 +159,17 @@ def run_research(pursuit, caller, log, store, *, mode: str,
         })
         report.status = "refused"
         return report
+    if brief.get("status") in ("approved", "declined") or (
+            pursuit.root / "brief.frozen.json").exists():
+        log.emit("error", stage="research_internal", error={
+            "code": "brief_frozen",
+            "message": "the brief is past Gate 1 — a research rerun may not "
+                       "mutate a gated brief (T7; P25 item 1, P1-12)",
+            "recoverable": False,
+            "action_taken": "surfaced_to_human",
+        })
+        report.status = "refused"
+        return report
 
     topics = derive_topics(brief)
     forbidden = forbidden_tokens(brief)
@@ -200,6 +215,15 @@ def run_research(pursuit, caller, log, store, *, mode: str,
             "warnings": warnings + cleared,
         })
         log.emit("stage_end", stage="research_internal")
+
+    if "research_external" in pursuit.completed_stages():
+        # P25 item 1 (P1-12): the external call is checkpointed like the
+        # internal one — a rerun never re-spends or rewrites the brief;
+        # the report reads back what the stage wrote.
+        done = pursuit.read_artifact("brief.json")
+        report.findings = done["buyer"].get("research_findings", [])
+        report.brief_path = pursuit.root / "brief.json"
+        return report
 
     log.emit("stage_start", stage="research_external")
     internal = pursuit.checkpoint_payload("research_internal")

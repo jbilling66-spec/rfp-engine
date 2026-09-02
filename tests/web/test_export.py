@@ -29,7 +29,7 @@ def exportable(tmp_path_factory):
     pursuit, report, _ = run_validation_package(tmp)
     assert report.status == "complete"
     app = create_app(tmp, make_caller=raising_caller, now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Eddy Exporter")
         yield client, pursuit
 
@@ -93,7 +93,7 @@ def test_blocked_packaging_refuses_submission_not_review(tmp_path):
         tmp_path, script=make_validation_script(plant_unsupported=True))
     app = create_app(tmp_path, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Eddy Exporter")
         pid = pursuit.pursuit_id
         r = client.post(f"/api/pursuits/{pid}/export", json={**ROLE})
@@ -109,3 +109,58 @@ def test_blocked_packaging_refuses_submission_not_review(tmp_path):
                          "annotated-review.docx")
         text = _assert_opens_in_word(rev.content, "Packaging: BLOCKED")
         assert "tier-1 block" in text
+
+
+def test_export_refuses_tampered_frozen_brief(tmp_path):
+    """P0-2 at the exit door: a frozen brief modified after Gate 1 (a raw
+    write past the door) makes the submission AND review renders refuse
+    with a 409 naming the verification, and the gate run records the
+    failure — nothing buyer-facing is produced from an unvouched freeze."""
+    pursuit, report, _ = run_validation_package(tmp_path)
+    assert report.status == "complete"
+    frozen = pursuit.root / "brief.frozen.json"
+    frozen.write_text(frozen.read_text(encoding="utf-8").replace(
+        '"name"', '"name "', 1), encoding="utf-8")
+    app = create_app(tmp_path, make_caller=raising_caller,
+                     now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Eddy Exporter")
+        r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/export",
+                        json={"lane": "both", "at": FIXED_AT})
+    assert r.status_code == 409
+    assert "fails verification" in r.json()["detail"]
+    assert not (pursuit.root / "exports" / "submission").exists() or not any(
+        (pursuit.root / "exports" / "submission").iterdir())
+
+
+def test_both_exit_doors_refuse_stale_bindings(tmp_path):
+    """P0-16 at the exits: an envelope bound to another freeze refuses the
+    write-back confirm door AND the export door; an annotated draft that
+    no longer matches the envelope refuses the export — each 409 names
+    the binding that broke, and nothing buyer-facing is produced."""
+    pursuit, report, _ = run_validation_package(tmp_path)
+    assert report.status == "complete"
+    draft = pursuit.root / "drafts" / "draft.json"
+    envelope = json.loads(draft.read_text(encoding="utf-8"))
+    good = draft.read_bytes()
+    app = create_app(tmp_path, make_caller=raising_caller,
+                     now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Eddy Exporter")
+        pid = pursuit.pursuit_id
+        draft.write_text(json.dumps({**envelope, "plan_sha256": "0" * 64}),
+                         encoding="utf-8")
+        r = client.post(f"/api/pursuits/{pid}/writeback/confirm",
+                        json={"at": FIXED_AT})
+        assert r.status_code == 409 and "different frozen plan" in r.text
+        r = client.post(f"/api/pursuits/{pid}/export",
+                        json={"lane": "both", "at": FIXED_AT})
+        assert r.status_code == 409 and "different frozen plan" in r.text
+        draft.write_bytes(good)
+        draft.write_text(draft.read_text(encoding="utf-8") + "\n",
+                         encoding="utf-8")  # the envelope moved on
+        r = client.post(f"/api/pursuits/{pid}/export",
+                        json={"lane": "review", "at": FIXED_AT})
+        assert r.status_code == 409 and "does not match" in r.text
+    assert not (pursuit.root / "exports" / "submission").exists() or not any(
+        (pursuit.root / "exports" / "submission").iterdir())

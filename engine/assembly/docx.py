@@ -16,6 +16,7 @@ import hashlib
 
 from docx import Document
 
+from engine.assembly.bindings import owed_pends as _owed_pends
 from engine.contracts import ContractError
 
 SUBMISSION_NAME = "exports/submission/response.docx"
@@ -25,15 +26,8 @@ REVIEW_NAME = "exports/review/annotated-review.docx"
 def _load(pursuit):
     envelope = pursuit.read_artifact("drafts/draft.json")
     annotated = pursuit.read_artifact("drafts/annotated-draft.json")
-    brief = pursuit.read_artifact("brief.frozen.json")
+    brief = pursuit.read_frozen("bid_brief")  # verified (P0-2)
     return envelope, annotated, brief
-
-
-def _owed_pends(envelope) -> list[str]:
-    return sorted({e["section_id"] for e in envelope.get("sections", [])
-                   if e.get("status") == "awaiting_disposition"
-                   or any(a.get("status") == "awaiting_disposition"
-                          for a in e.get("answers", []))})
 
 
 def _title(brief) -> str:
@@ -47,7 +41,7 @@ def _refuse_firm_default(pursuit) -> None:
     document per pursuit, so the generated render refuses with the
     pointer instead of minting a competitor."""
     try:
-        frozen = pursuit.read_artifact("plan.frozen.json")
+        frozen = pursuit.read_frozen("pursuit_plan")
         container = pursuit.read_artifact(
             frozen.get("slots_ref", "slots.json"))
     except FileNotFoundError:

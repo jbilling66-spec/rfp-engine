@@ -27,6 +27,7 @@ never cited in drafted prose.
 
 import hashlib
 import json
+import threading
 from pathlib import Path
 
 from engine.contracts import ContractError
@@ -68,20 +69,23 @@ def _write_org(workspace: Path, org: dict) -> dict:
     return org
 
 
+_MINT_LOCK = threading.Lock()  # P1-22: org ids mint under a process lock
+
+
 def create_org(workspace: Path, name: str, *, created_by: str,
                at: str) -> dict:
     """Mint the next opaque org id and register the display name as its
     first alias. The name lives in this file's CONTENT only."""
     if not (name or "").strip():
         raise ContractError("an org needs a display name to alias")
-    existing = {o["org_id"] for o in list_orgs(workspace)}
-    n = 1
-    while f"org_{n:04d}" in existing:
-        n += 1
-    return _write_org(workspace, {
-        "org_id": f"org_{n:04d}", "known_as": [name.strip()],
-        "created_by": created_by, "created_at": at,
-    })
+    with _MINT_LOCK:
+        seen = [int(o["org_id"][4:]) for o in list_orgs(workspace)
+                if o["org_id"][4:].isdigit()]
+        n = (max(seen) + 1) if seen else 1
+        return _write_org(workspace, {
+            "org_id": f"org_{n:04d}", "known_as": [name.strip()],
+            "created_by": created_by, "created_at": at,
+        })
 
 
 def link_alias(workspace: Path, org_id: str, name: str) -> dict:

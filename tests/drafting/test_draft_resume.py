@@ -98,3 +98,33 @@ def test_completed_stage_reruns_as_pure_replay(fresh, tmp_path):
     replay = read_run(pursuit.root / "runs" / "run_0006" / "run.jsonl")
     assert not any(r["record_type"] == "agent_call" for r in replay)
     assert not any(r["record_type"] == "kb_retrieval" for r in replay)
+
+
+
+def test_stale_drafting_checkpoint_is_discarded_not_rebound(tmp_path):
+    """P0-16, the silent re-binding hazard: with a COMPLETE drafting
+    checkpoint on disk and a NEW freeze in place, the stage must draft
+    again (model called) and bind the new prose to the new plan hash —
+    never resume the old checkpoint and stamp its prose with the new
+    hash for free."""
+    from tests.helpers import plant_freeze
+    pursuit, report = run_drafting_package(tmp_path, script=make_drafter_script())
+    assert report.status == "complete"
+    old_sha = pursuit.file_sha256("plan.frozen.json")
+    plan = pursuit.read_artifact("plan.json")
+    plan["created"] = "2026-08-11T00:00:00"  # a different, still-valid plan
+    pursuit.write_artifact("pursuit_plan", plan)
+    pursuit.archive_frozen("pursuit_plan", "addenda/addm_t/plan.frozen.superseded.json")
+    _, new_sha = plant_freeze(pursuit, "pursuit_plan", plan, validate=True)
+    assert new_sha != old_sha
+    assert pursuit.checkpoint_payload("drafting")["complete"] is True
+    pursuit, report2 = run_drafting_run(tmp_path, pursuit,
+                                        script=make_drafter_script())
+    assert report2.status == "complete"
+    records = read_run(pursuit.root / "runs" / pursuit.latest_run_id()
+                       / "run.jsonl")
+    assert any(r["record_type"] == "agent_call" for r in records), (
+        "the stale checkpoint was resumed — prose re-bound without a call")
+    envelope = pursuit.read_artifact("drafts/draft.json")
+    assert envelope["plan_sha256"] == new_sha
+    assert pursuit.checkpoint_payload("drafting")["plan_sha256"] == new_sha

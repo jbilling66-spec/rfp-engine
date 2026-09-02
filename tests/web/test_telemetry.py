@@ -33,7 +33,7 @@ def client(tmp_path):
     shutil.copytree(source, workspace / "pur_metrics")
     app = create_app(workspace, make_caller=raising_caller,
                      now=lambda: FIXED_AT)
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Sam Owner")
         yield client
 

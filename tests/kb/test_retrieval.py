@@ -154,12 +154,12 @@ def test_emitter_enforces_query_step_and_subset_chain(seeded):
 
 def test_targeted_open_returns_body_and_traces(seeded):
     markers = _marker_index(seeded)
-    log = _log(seeded, "run_0104")
+    log = _log(seeded, "run_0106")
     kb_id = markers["rollback rehearsal"]
     body = targeted_open(seeded, kb_id, log=log, stage="drafting",
                          agent="section_drafter", query="cutover gates")
     assert "rollback rehearsal" in body
-    line = read_run(seeded.root / "runs" / "run_0104" / "run.jsonl")[-1]
+    line = read_run(seeded.root / "runs" / "run_0106" / "run.jsonl")[-1]
     assert line["kb"]["step"] == "targeted_open"
     assert line["kb"]["cards_opened"] == [kb_id]
 
@@ -227,7 +227,7 @@ def test_empty_result_is_success_with_flag(tmp_path):
 
 
 def test_ranking_is_deterministic(seeded):
-    log = _log(seeded, "run_0105")
+    log = _log(seeded, "run_0107")
     runs = [
         [r.kb_id for r in card_search(seeded, "payroll parallel testing",
                                       log=log, stage="drafting",

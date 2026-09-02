@@ -41,6 +41,7 @@ from docx.text.paragraph import Paragraph
 from engine.contracts.slots import field_key
 from engine.structure.classify import _field_type, _slot
 from engine.structure.parse import ParsedWorkbook, StructureError
+from engine.structure.zipguard import check_office_zip
 
 _NUMBERED_H1 = re.compile(r"^(\d+)\.\s+")
 _INNER_FIELD = re.compile(r"([A-Z][^:\[\]]{2,40}):\s*\[")
@@ -65,6 +66,7 @@ def parse_default_template(path: Path) -> ParsedWorkbook:
     path = Path(path)
     if not path.is_file():
         raise StructureError(f"no template at {path}")
+    check_office_zip(path)  # P0-8: the container before the parser
     document = Document(str(path))
 
     slots: list[dict] = []
