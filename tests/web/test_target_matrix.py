@@ -17,7 +17,6 @@ from engine.web.server import create_app
 from tests.intake.fixtures.packages import FIXTURES as INTAKE_FIXTURES
 from tests.web.conftest import FIXED_AT, sign_in, wait_job
 
-ROLE = {"actor_role": "pursuit_lead"}
 PDF_TWIN = INTAKE_FIXTURES / "pdf-twin.pdf"
 OUTLINE_TWIN = Path(__file__).resolve().parents[1] / "fixtures" / "outline-twin.docx"
 
@@ -68,7 +67,7 @@ def test_declared_docx_target_never_falls_to_glob_order(matrix_client):
     assert "gate_1" in wait_job(client, job["id"])["message"]
     assert client.post("/api/pursuits/pur_matrix/gate1",
                        json={"decision": "approved",
-                             **ROLE}).status_code == 200
+                             }).status_code == 200
     job = client.post("/api/pursuits/pur_matrix/jobs",
                       json={"kind": "advance"}).json()
     assert "gate_2" in wait_job(client, job["id"])["message"]

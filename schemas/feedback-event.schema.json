@@ -59,7 +59,7 @@
         },
         "confirmed_minutes": { "type": "integer", "description": "The reviewer's figure at gate close, pre-filled with the passive measurement. Accepting the default is one click — this is the only effort field a human ever touches." },
         "scope": { "type": "string", "enum": ["section", "gate", "gap_answer", "document_prep", "pursuit"], "description": "What the session covered. Gate and gap-answer scopes join to run-log gate.wait_ms and gap records. document_prep (P13/C17, B51's carrier; spec N1/R3) = human time preparing buyer documents for the engine (transcribing matrices, retyping tables, cleaning scans) — the cost the extraction layer exists to remove, and unmeasurable once it has been removed: the scope must exist BEFORE the pilot or the baseline is gone forever." },
-        "gate": { "type": "string", "enum": ["gate_1", "gate_2", "review_loop", "final_signoff"] },
+        "gate": { "type": "string", "enum": ["gate_0", "gate_1", "gate_2", "review_loop", "final_signoff"], "description": "gate_0 (P27 wave 1, P1-42): the intake-review decision carries effort like the other two gates." },
         "started_at": { "type": "string", "format": "date-time" },
         "ended_at": { "type": "string", "format": "date-time" }
       }

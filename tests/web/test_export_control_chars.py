@@ -15,7 +15,6 @@ from tests.helpers import plant_annotated
 from tests.validation.fixtures.validations import run_validation_package
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture(scope="module")
@@ -45,7 +44,7 @@ def _last_run_footer(pursuit):
 def test_export_door_refuses_typed_and_closes_the_run(poisoned):
     client, pursuit = poisoned
     r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/export",
-                    json={**ROLE})
+                    json={})
     assert r.status_code == 409, r.text
     assert "XML compatible" in r.json()["detail"]
     footer = _last_run_footer(pursuit)

@@ -13,8 +13,13 @@ the touched sections are re-audited. Every round is on the record and
 readable through the revision doors (`GET /api/pursuits/{pursuit_id}/revisions`
 lists the rounds; `GET /api/pursuits/{pursuit_id}/revisions/{n}` carries one
 round's before/after diff); the workbench does not render that history
-yet — the pilot host reads it for you until the history panel lands.
+yet — the history panel is wave 2 of the workbench work.
+
+After a round, each section the agent rewrote offers **Accept revision**
+and **Reject revision**; a pending comment of your own can be taken back
+with **Withdraw**. A BLOCK mark offers **Waive** — the reason you give at
+**Confirm waiver** is the record.
 
 Answered gaps are drafted at the next revision round. When everything
-is right, **accept** closes the review — accept refuses while packaging
-is blocked.
+is right, **Accept pursuit** closes the review — it refuses while
+packaging is blocked.

@@ -14,7 +14,6 @@ from engine.web.server import create_app
 from tests.validation.fixtures.validations import run_validation_package
 from tests.web.conftest import advance_past_gate0, FIXED_AT, raising_caller, sign_in, wait_job
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +82,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
                        content=path.read_bytes())
         advance_past_gate0(client, "pur_amend", timeout=180)
         client.post("/api/pursuits/pur_amend/gate1",
-                    json={"decision": "approved", **ROLE})
+                    json={"decision": "approved"})
         wait_job(client, client.post(
             "/api/pursuits/pur_amend/jobs",
             json={"kind": "advance"}).json()["id"],
@@ -95,7 +94,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
                    if g["status"] == "open"]
         client.post("/api/pursuits/pur_amend/gate2", json={
             "decision": "approved_with_edits",
-            "edits": {"dispose": dispose}, **ROLE})
+            "edits": {"dispose": dispose}})
         wait_job(client, client.post(
             "/api/pursuits/pur_amend/jobs",
             json={"kind": "advance"}).json()["id"],
@@ -159,7 +158,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
                    if g["status"] == "open"]
         r = client.post("/api/pursuits/pur_amend/gate2", json={
             "decision": "approved_with_edits",
-            "edits": {"dispose": dispose}, **ROLE})
+            "edits": {"dispose": dispose}})
         assert r.status_code == 200, r.text
         new_frozen_sha = pursuit.file_sha256("plan.frozen.json")
         assert new_frozen_sha

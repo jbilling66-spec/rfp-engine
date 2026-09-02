@@ -16,7 +16,6 @@ from engine.runlog import read_run
 from engine.web.server import create_app
 from tests.web.conftest import FIXED_AT, sign_in, wait_job
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 def _starving_caller(log):
@@ -63,7 +62,7 @@ def test_intake_gap_pings_and_answers_pre_plan(gapped_walk):
                if g["target"] == "procurement.what_is_bought")
 
     r = client.post(f"/api/pursuits/pur_ig/gaps/{gap['gap_id']}/ping",
-                    json={"route_to": "sme", **ROLE})
+                    json={"route_to": "sme"})
     assert r.status_code == 200, r.text
     ping = r.json()
     assert ping["section_id"] == "intake"
@@ -83,7 +82,7 @@ def test_intake_gap_pings_and_answers_pre_plan(gapped_walk):
     assert row["escalated"] is True
 
     r = client.post(f"/api/pursuits/pur_ig/pings/{ping['ping_id']}/answer",
-                    json={"answer": "ERP managed services transition", **ROLE})
+                    json={"answer": "ERP managed services transition"})
     assert r.status_code == 200, r.text
     brief = json.loads((ws / "pur_ig" / "brief.json").read_text())
     gap_now = next(g for g in brief["intake"]["gaps"]
@@ -105,7 +104,7 @@ def test_intake_gap_pings_and_answers_pre_plan(gapped_walk):
 def test_unknown_intake_gap_409s(gapped_walk):
     client, _ = gapped_walk
     r = client.post("/api/pursuits/pur_ig/gaps/gap_nope_01/ping",
-                    json={"route_to": "sme", **ROLE})
+                    json={"route_to": "sme"})
     assert r.status_code == 409
     assert "no gap" in r.json()["detail"]
 
@@ -126,12 +125,12 @@ def test_frozen_brief_refuses_intake_pings(gapped_walk):
                       json={"kind": "advance"}).json()
     assert "gate_1" in wait_job(client, job["id"])["message"]
     r = client.post("/api/pursuits/pur_ig/gate1",
-                    json={"decision": "approved", **ROLE})
+                    json={"decision": "approved"})
     assert r.status_code == 200, r.text
     assert (ws / "pur_ig" / "brief.frozen.json").exists()
 
     r = client.post(
         f"/api/pursuits/pur_ig/gaps/{open_gaps[0]['gap_id']}/ping",
-        json={"route_to": "sme", **ROLE})
+        json={"route_to": "sme"})
     assert r.status_code == 409
     assert "settled once the brief freezes" in r.json()["detail"]

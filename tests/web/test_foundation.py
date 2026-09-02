@@ -6,6 +6,7 @@ construction on a read path fails the suite."""
 import pytest
 from fastapi.testclient import TestClient
 
+from engine.web.auth import DECLARABLE_ROLES
 from engine.web.server import create_app
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
 
@@ -32,13 +33,16 @@ def test_reads_stay_open(offline_app):
     assert offline_app.get("/api/pursuits").status_code == 200
     assert offline_app.get("/api/jobs").status_code == 200
     assert offline_app.get("/api/health").status_code == 200
-    assert offline_app.get("/api/session").json() == {"operator": None}
+    assert offline_app.get("/api/session").json() == {
+        "operator": None, "role": None, "roles": list(DECLARABLE_ROLES)}
 
 
 def test_declared_session_flow(offline_app):
     name = sign_in(offline_app, "Sam Lead")
     assert name == "Sam Lead"
-    assert offline_app.get("/api/session").json() == {"operator": "Sam Lead"}
+    assert offline_app.get("/api/session").json() == {
+        "operator": "Sam Lead", "role": "pursuit_lead",
+        "roles": list(DECLARABLE_ROLES)}
     out = offline_app.post("/api/pursuits",
                            json={"pursuit_id": "pur_alpha"}).json()
     assert out == {"pursuit_id": "pur_alpha", "created_by": "Sam Lead"}

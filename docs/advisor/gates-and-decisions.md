@@ -12,6 +12,6 @@ gapped obligation can be waived with a written reason. Approving
 freezes the plan; rejecting requires notes and sends planning back for
 a redo that reads your feedback.
 
-Blocked items at review time can be **waived** with a written reason —
-every waiver is recorded with your name, and boilerplate reasons are
-surfaced as a warning.
+Blocked items at review time can be waived — **Waive** beside the mark,
+then **Confirm waiver** with a written reason. Every waiver is recorded
+with your name, and boilerplate reasons are surfaced as a warning.

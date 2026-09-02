@@ -18,7 +18,6 @@ from tests.validation.fixtures.validations import (
 )
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture(scope="module")
@@ -49,12 +48,12 @@ def test_confirmed_event_retains_passive_figure(reviewed):
     pid = pursuit.pursuit_id
     passive = client.post(f"/api/pursuits/{pid}/effort", json={
         "measurement": "passive", "active_ms": 462_000,
-        "scope": "section", **ROLE})
+        "scope": "section"})
     assert passive.status_code == 200
     confirmed = client.post(f"/api/pursuits/{pid}/effort", json={
         "measurement": "confirmed", "active_ms": 462_000,
         "confirmed_minutes": 9, "scope": "gate", "gate": "review_loop",
-        **ROLE})
+        })
     assert confirmed.status_code == 200
     sessions = [e for e in _events(pursuit) if e["kind"] == "review_session"]
     kinds = [s["effort"]["measurement"] for s in sessions]
@@ -75,11 +74,11 @@ def test_effort_guards(reviewed):
     pid = pursuit.pursuit_id
     no_passive = client.post(f"/api/pursuits/{pid}/effort", json={
         "measurement": "confirmed", "confirmed_minutes": 9,
-        "scope": "gate", "gate": "gate_1", **ROLE})
+        "scope": "gate", "gate": "gate_1"})
     assert no_passive.status_code == 422
     assert "BOTH figures" in no_passive.json()["detail"]
     assert client.post(f"/api/pursuits/{pid}/effort", json={
-        "measurement": "passive", "scope": "section", **ROLE}
+        "measurement": "passive", "scope": "section"}
     ).status_code == 422
     # schema allOf non-vacuity: a review_session with NO effort block is
     # structurally unwritable at the lane
@@ -96,10 +95,10 @@ def test_outcome_corrections_are_append_only_last_wins(reviewed):
     client, pursuit = reviewed
     pid = pursuit.pursuit_id
     client.post(f"/api/pursuits/{pid}/outcome",
-                json={"result": "shortlisted", **ROLE})
+                json={"result": "shortlisted"})
     client.post(f"/api/pursuits/{pid}/outcome",
                 json={"result": "won",
-                      "buyer_feedback": "strong transition story", **ROLE})
+                      "buyer_feedback": "strong transition story"})
     outcomes = [e for e in _events(pursuit) if e["kind"] == "outcome"]
     assert len(outcomes) == 2  # the record keeps both
     assert EventsLane(pursuit).latest_outcome()["outcome"]["result"] == "won"
@@ -116,7 +115,7 @@ def test_comment_pends_and_flips_draft_status_on_live_plan_only(reviewed):
         (pursuit.root / "plan.json").read_text())["sections"][0]["section_id"]
     r = client.post(f"/api/pursuits/{pid}/comments", json={
         "kind": "comment", "section_id": section_id,
-        "text": "Tighten the second paragraph.", **ROLE})
+        "text": "Tighten the second paragraph."})
     assert r.status_code == 200
     entry = r.json()
     assert entry["provenance"] == "internal"
@@ -140,18 +139,21 @@ def test_comment_guards(reviewed):
     client, pursuit = reviewed
     pid = pursuit.pursuit_id
     assert client.post(f"/api/pursuits/{pid}/comments", json={
-        "kind": "comment", "section_id": "nope", "text": "x", **ROLE}
+        "kind": "comment", "section_id": "nope", "text": "x"}
     ).status_code == 400
     section_id = json.loads(
         (pursuit.root / "plan.json").read_text())["sections"][0]["section_id"]
     no_diff = client.post(f"/api/pursuits/{pid}/comments", json={
-        "kind": "edit", "section_id": section_id, **ROLE})
+        "kind": "edit", "section_id": section_id})
     assert no_diff.status_code == 422
     assert "before AND after" in no_diff.json()["detail"]
+    # P27 (M-9): a payload role — valid or not — is refused; the session
+    # names the role and the detail says so
     bad_role = client.post(f"/api/pursuits/{pid}/comments", json={
         "kind": "comment", "section_id": section_id, "text": "x",
         "actor_role": "ceo"})
     assert bad_role.status_code == 422
+    assert "session names the role" in bad_role.json()["detail"]
 
 
 # -- accept (D12, D11 final) ----------------------------------------------
@@ -160,7 +162,7 @@ def test_comment_guards(reviewed):
 def test_accept_is_pursuit_scoped_and_stamps_final(reviewed):
     client, pursuit = reviewed
     pid = pursuit.pursuit_id
-    r = client.post(f"/api/pursuits/{pid}/accept", json={**ROLE})
+    r = client.post(f"/api/pursuits/{pid}/accept", json={})
     assert r.status_code == 200
     event = r.json()
     assert event["kind"] == "accept"
@@ -178,7 +180,7 @@ def test_accept_refuses_blocked_packaging(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client)
         r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept",
-                        json={**ROLE})
+                        json={})
         assert r.status_code == 409
         assert "BLOCKED" in r.json()["detail"]
         assert _events(pursuit) == []  # a refused accept leaves no event
@@ -187,7 +189,7 @@ def test_accept_refuses_blocked_packaging(tmp_path):
 def test_accept_requires_an_annotated_draft(offline_app):
     sign_in(offline_app)
     offline_app.post("/api/pursuits", json={"pursuit_id": "pur_early"})
-    r = offline_app.post("/api/pursuits/pur_early/accept", json={**ROLE})
+    r = offline_app.post("/api/pursuits/pur_early/accept", json={})
     assert r.status_code == 409
     assert "nothing to accept" in r.json()["detail"]
 

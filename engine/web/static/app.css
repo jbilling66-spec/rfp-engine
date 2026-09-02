@@ -27,7 +27,11 @@ nav a{display:block;padding:10px 20px;color:var(--dim);
 nav a.active{color:var(--text);border-left-color:var(--accent)}
 .who{position:absolute;bottom:18px;left:20px;right:20px;
   border-top:1px solid var(--line);padding-top:12px}
-.who-name{font-size:13px;font-weight:600;margin-bottom:6px}
+.who-name{font-size:13px;font-weight:600;margin-bottom:2px}
+.who-role{font-size:12px;color:var(--dim);margin-bottom:6px}
+select{font:inherit;width:100%;padding:8px 10px;border-radius:6px;
+  border:1px solid var(--line);background:var(--panel);color:var(--text);
+  margin-top:6px}
 main{padding:24px 32px 60px;max-width:1100px}
 .viewhead{display:flex;justify-content:space-between;align-items:center}
 .view{display:none}.view.show{display:block}
@@ -96,3 +100,23 @@ button.danger{background:var(--stop)}
 .asst-compose input{flex:1}
 .asst-spend{font-family:ui-monospace,monospace;font-size:13px;
   color:var(--dim)}
+.minutes{display:flex;align-items:center;gap:8px;margin-top:8px}
+.minutes input{width:90px;margin-top:0}
+.sub{font-size:15px;margin:18px 0 6px}
+.dlhead{font-weight:600;color:var(--text);margin-top:8px}
+.dl{display:block;color:var(--accent);text-decoration:none;margin:2px 0}
+.withheld{color:var(--draft)}
+.hf{display:block;font-size:12px;color:var(--dim);margin-top:6px}
+.hfrow{border-top:1px dashed var(--line);padding-top:6px;margin-top:6px}
+.hfAdd{margin-top:8px}
+.shareUrl{font-family:ui-monospace,monospace;font-size:12px;margin-top:6px}
+body.guest{background:var(--ink)}
+.guestmain{max-width:860px;margin:0 auto;padding:24px 20px 80px}
+.brand-inline{font-size:11px;color:var(--accent);letter-spacing:.12em;
+  text-transform:uppercase}
+.guestbox{flex-wrap:wrap}
+.guestbox .gname{flex:0 0 180px}
+.guestbox .gcmt{flex:1 1 300px}
+.revisedrow{font-size:12px;color:var(--plan);margin:6px 0}
+.pendingnote button{margin-left:6px;padding:2px 8px;font-size:11px}
+

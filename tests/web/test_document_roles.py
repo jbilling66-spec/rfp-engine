@@ -16,7 +16,6 @@ from engine.web.server import create_app
 from tests.intake.fixtures.packages import FIXTURES
 from tests.web.conftest import FIXED_AT, sign_in, wait_job
 
-ROLE = {"actor_role": "pursuit_lead"}
 PDF_TWIN = FIXTURES / "pdf-twin.pdf"
 
 
@@ -81,7 +80,7 @@ def test_declared_set_intakes_all_docs_and_routes_the_target(role_client):
                       json={"kind": "advance"}).json()
     assert "gate_1" in wait_job(client, job["id"])["message"]
     r = client.post("/api/pursuits/pur_roles/gate1",
-                    json={"decision": "approved", **ROLE})
+                    json={"decision": "approved"})
     assert r.status_code == 200, r.text
     job = client.post("/api/pursuits/pur_roles/jobs",
                       json={"kind": "advance"}).json()

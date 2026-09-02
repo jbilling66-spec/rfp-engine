@@ -641,3 +641,40 @@ of the gate image resolved docling 2.124 / ibm-models 4.0, under which the
 ruled-table PDF extracts with zero grids and three more container tests fail —
 the container install is now constrained by `requirements-extraction.lock`, and
 the next deliberate docling bump re-runs the gate before the lock moves.
+
+### 5.9 P27 wave-1 kickoff — one finding at planning (2026-09-02, B110)
+
+*Read at P27 planning against `7682383`, before any wave-1 code: the effort
+schema against the three gate doors that will carry effort once the
+workbench produces it. Re-read at the cited lines before entry; the id
+continues the numbering and has exactly one home (the B94 door).*
+
+| id | finding | where | home |
+|---|---|---|---|
+| P1-42 | **A gate-0 decision carrying effort fails AFTER the decision lands.** The effort block's `gate` enum is `gate_1 \| gate_2 \| review_loop \| final_signoff` — no `gate_0` — while the gate-0 door defaults `effort.gate = "gate_0"` and appends the review_session only after the decision commits, so the append is refused over an already-decided gate: the P25-item-1 failure mode through a door P25 never exercised. Latent today only because nothing in the UI produces effort. | `schemas/feedback-event.schema.json` (effort `gate` enum) · `engine/web/server.py:1489,1506` | **P27 wave 1** (step 2: a failing test first, then the enum in its own schema commit) |
+
+**P26b pre-read (no new ids; recorded for that slice's step 0).** The
+thirty-three P26b ids re-located at `7682383`: seven implementation groups
+(the parser-fidelity carrier P1-23 first, then the KB store integrity set,
+ingest/reconcile idempotence, the flywheel wiring at accept, eval integrity,
+the output/web boundary; every M-id folds into one of them). Two citations
+sharpen: `docx_buyer.py:379-386` (`question_cell_map`) raises on a ragged
+table at write-back too, so P2-30's scope includes the write-back
+re-derivation; `server.py:1424`'s gate-time forecast parses a target with no
+run log in scope, so P1-23's drain must name that path. The run-log schema
+has no `warning` record type — P1-23's channel either reuses
+`error{recoverable: true}` (the planner's existing idiom) or adds a record
+type in its own schema commit; decided at P26b step 0, not here.
+
+**Closed by P27 wave 1 (2026-09-02, B111), each with a named test:** **M-9**
+(the role half — `tests/web/test_session_role.py`, `test_workbench_source.py`,
+`tests/metrics/test_effort_attribution.py`, `test_waiver_session_role.py`) ·
+**P1-42** (`tests/web/test_gate0_effort.py`) · **P2-5's wave-1 half** (the
+curl doors, share management, the waiver screen, the ping inbox, the guest
+page, the review-loop doors — `tests/contracts/test_ui_surfaces_doors.py`
+pins every wave-1 door as `ui`/`guest`; `tests/web/test_share_page.py`,
+`test_review_last_round.py`; wave 2's half — revision-diff view, ARIA/dialog
+semantics, focus management, poll error handling — stays open in the P27
+row) · **P1-7's UI half** (the ping inbox has a screen; the delivery channel
+is still the owner's choice — the id stays open on that half). Suite at
+close: 1728. Ids remain permanent labels; nothing here renumbers.

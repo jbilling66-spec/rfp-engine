@@ -38,7 +38,8 @@ DOC_NAMES = (
 _GUARANTEES = {
     "operator-guide.md": (
         "every bold phrase in this guide appears verbatim in the web app's "
-        "source files — that is what the drift test checks, and no more"),
+        "source files, and the guide names no door by route — that is what "
+        "the drift test checks, and no more"),
     "runbook.md": (
         "Every backticked door reference in canonical form resolves to a "
         "row of the door index — that is what the drift test checks, and "
@@ -278,10 +279,33 @@ def test_stated_defaults_equal_the_introspected_defaults():
         f"127.0.0.1:{port} (serve's introspected --port default)")
 
 
+def test_operator_guide_needs_no_terminal():
+    """P27 wave 1's acceptance (B93 §4, B110): the "pilot host runs these
+    for you via curl" passages are gone — the guide cites no door by
+    route, and never sends anyone to a shell."""
+    text = _read("operator-guide.md")
+    assert _ROUTE_RX.findall(text) == [], _ROUTE_RX.findall(text)
+    low = text.lower()
+    # the answering session IS something the pilot host runs (on the same
+    # machine) — that sentence stays; what may not appear is any step the
+    # host runs against the engine on the operator's behalf
+    for phrase in ("runs these for you", "runs them directly", "curl",
+                   "runs for you", "directly against the engine"):
+        assert phrase not in low, phrase
+
+
 def test_operator_guide_bold_spans_are_ui_text():
-    ui = ((REPO / "engine" / "web" / "static" / "app.html").read_text()
-          + (REPO / "engine" / "web" / "static" / "app.js").read_text())
-    spans = re.findall(r"\*\*([^*\n]+)\*\*", _read("operator-guide.md"))
+    static = REPO / "engine" / "web" / "static"
+    ui = "".join((static / n).read_text() for n in
+                 ("app.html", "app.js", "share.html", "share.js"))
+    text = _read("operator-guide.md")
+    # split on the marker: odd segments are the bold contents — a span
+    # wrapped across a line break used to escape the pin silently
+    spans = text.split("**")[1::2]
+    wrapped = [s for s in spans if "\n" in s]
+    assert not wrapped, (
+        "a bold span wraps across a line break and would escape this pin "
+        f"— keep each on one line: {wrapped}")
     assert spans, ("the operator guide names no on-screen text at all — "
                    "either the guide or this regex rotted")
     missing = sorted({s for s in spans if s not in ui})

@@ -261,7 +261,26 @@ def review(workspace: Path, pursuit_id: str, *,
            "validated_at": annotated.get("validated_at"),
            "packaging": annotated.get("packaging"),
            "sections": sections}
+    if include_internal:
+        out["last_round"] = _last_round(root)
     return out
+
+
+def _last_round(root: Path) -> dict | None:
+    """P27 wave 1: the sections the latest revision round actually
+    revised — the ones an accept/reject of the agent's revision applies
+    to. Read from `revisions/round_{n}.json` (round.py's record:
+    `round_n` + `sections[].outcome`); None until a round has run."""
+    rev_dir = root / "revisions"
+    rounds = sorted(rev_dir.glob("round_*.json")) if rev_dir.is_dir() else []
+    if not rounds:
+        return None
+    record = _read_json(rounds[-1])
+    if record is None:
+        return None
+    return {"n": record.get("round_n"),
+            "revised": sorted(s["section_id"] for s in record.get("sections", [])
+                              if s.get("outcome") == "revised")}
 
 
 def detail(workspace: Path, pursuit_id: str) -> dict | None:
@@ -299,4 +318,35 @@ def detail(workspace: Path, pursuit_id: str) -> dict | None:
     if annotated is not None:
         out["packaging"] = annotated.get("packaging")
         out["revision_n"] = annotated.get("revision_n")
+    out["finishing"] = _finishing(pursuit, root, annotated is not None)
     return out
+
+
+def _finishing(pursuit, root: Path, reviewable: bool) -> dict:
+    """P27 wave 1: the preconditions the finish panel's buttons key on
+    — named by the SERVER so the shell never infers them. `reviewable`
+    = a validated annotated draft exists (the export door's own gate);
+    `bundle` = the submission bundle's summary, if ever composed;
+    `hand_fill_lane` = the frozen plan's container is the firm-default
+    template, the one lane with a hand-completion record."""
+    bundle_path = root / "exports" / "submission-bundle.json"
+    bundle = _read_json(bundle_path) if bundle_path.is_file() else None
+    summary = None
+    if bundle is not None:
+        rows = bundle.get("deliverables", [])
+        summary = {"composed_at": bundle.get("composed_at"),
+                   "composed_by": bundle.get("composed_by"),
+                   "produced": sum(1 for d in rows
+                                   if d.get("status") == "produced"),
+                   "refused": sum(1 for d in rows
+                                  if d.get("status") == "refused")}
+    hand_fill_lane = False
+    try:
+        frozen = pursuit.read_frozen("pursuit_plan")
+        container = pursuit.read_artifact(
+            frozen.get("slots_ref", "slots.json"))
+        hand_fill_lane = container.get("source_mode") == "firm_default"
+    except (FileNotFoundError, KeyError, ValueError, OSError):
+        hand_fill_lane = False
+    return {"reviewable": reviewable, "bundle": summary,
+            "hand_fill_lane": hand_fill_lane}

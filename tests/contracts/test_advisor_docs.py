@@ -43,9 +43,13 @@ def test_route_references_resolve_to_door_rows(doc):
 
 @pytest.mark.parametrize("doc", DOCS, ids=lambda p: p.name)
 def test_bold_spans_are_on_screen_text(doc):
-    ui = ((REPO / "engine" / "web" / "static" / "app.html").read_text()
-          + (REPO / "engine" / "web" / "static" / "app.js").read_text())
-    spans = re.findall(r"\*\*([^*\n]+)\*\*", doc.read_text(encoding="utf-8"))
+    static = REPO / "engine" / "web" / "static"
+    ui = "".join((static / n).read_text() for n in
+                 ("app.html", "app.js", "share.html", "share.js"))
+    text = doc.read_text(encoding="utf-8")
+    spans = text.split("**")[1::2]  # odd segments are the bold contents
+    wrapped = [s for s in spans if "\n" in s]
+    assert not wrapped, f"a bold span wraps across a line break: {wrapped}"
     missing = sorted({s for s in spans if s not in ui})
     assert not missing, (
         f"docs/advisor/{doc.name}: bold is reserved for on-screen text, "

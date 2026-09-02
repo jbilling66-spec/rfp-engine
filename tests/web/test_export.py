@@ -20,7 +20,6 @@ from tests.validation.fixtures.validations import (
 )
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +48,7 @@ def _assert_opens_in_word(payload: bytes, must_contain: str):
 def test_export_opens_in_word(exportable):
     client, pursuit = exportable
     pid = pursuit.pursuit_id
-    r = client.post(f"/api/pursuits/{pid}/export", json={**ROLE})
+    r = client.post(f"/api/pursuits/{pid}/export", json={})
     assert r.status_code == 200, r.text
     lanes = r.json()
     assert set(lanes) == {"submission", "review", "bundle"}
@@ -96,14 +95,14 @@ def test_blocked_packaging_refuses_submission_not_review(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Eddy Exporter")
         pid = pursuit.pursuit_id
-        r = client.post(f"/api/pursuits/{pid}/export", json={**ROLE})
+        r = client.post(f"/api/pursuits/{pid}/export", json={})
         assert r.status_code == 409
         assert "BLOCKED" in r.json()["detail"]
         assert not (pursuit.root / "exports" / "submission").exists() or \
             not list((pursuit.root / "exports" / "submission").iterdir())
         # the INTERNAL copy still renders — the reader needs the truth
         r = client.post(f"/api/pursuits/{pid}/export",
-                        json={"lane": "review", **ROLE})
+                        json={"lane": "review"})
         assert r.status_code == 200
         rev = client.get(f"/api/pursuits/{pid}/download/"
                          "annotated-review.docx")

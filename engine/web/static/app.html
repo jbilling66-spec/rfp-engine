@@ -15,12 +15,14 @@
     </div>
     <nav id="mainNav">
       <a href="#/" data-view="board" class="active">Pursuits</a>
+      <a href="#/pings" data-view="pings">Pings</a>
       <a href="#/kb" data-view="kb">Knowledge base</a>
       <a href="#/assistant" data-view="assistant">Assistant</a>
       <a href="#/telemetry" data-view="telemetry">Telemetry</a>
     </nav>
     <div class="who" id="whoCard">
       <div class="who-name" id="whoName">not signed in</div>
+      <div class="who-role" id="whoRole"></div>
       <button id="signInBtn" class="ghost">declare operator</button>
     </div>
   </aside>
@@ -41,14 +43,60 @@
       <div id="detailFacts" class="facts"></div>
       <div class="actions" id="detailActions"></div>
       <div id="detailSections" class="rows"></div>
+      <section id="detailFinish" hidden>
+        <h2 class="sub">Finish</h2>
+        <p class="muted hint">Render the documents, read what may go to
+          the buyer, write the buyer's own forms back, and enter the
+          values only a person supplies. The buyer copy lists only when
+          nothing is owed.</p>
+        <div class="actions" id="finishActions"></div>
+        <div id="finishDownloads" class="facts"></div>
+      </section>
+      <section id="detailPings" hidden>
+        <h2 class="sub">Gaps and pings</h2>
+        <p class="muted hint">Open gaps can be routed to an expert; the
+          pursuit's own inbox is below. To ask something the engine did
+          not, open a gap on a section.</p>
+        <div id="pursuitGapRows" class="rows"></div>
+        <div class="commentbox">
+          <select id="gapSection"></select>
+          <input id="gapQuestion" maxlength="500" placeholder="the question a person must answer">
+          <button id="gapGo" class="ghost">Open a gap</button>
+        </div>
+        <div id="pursuitPingRows" class="rows"></div>
+      </section>
+      <section id="detailShares" hidden>
+        <h2 class="sub">Share for review</h2>
+        <p class="muted hint">A guest link opens a read-only page of the
+          review with a comment box — no sign-in, no internal panels.
+          Hand the link to the person it is for; revoke it the moment it
+          should stop working.</p>
+        <div class="actions"><button id="shareNewBtn" class="ghost">New share link</button></div>
+        <div id="shareRows" class="rows"></div>
+      </section>
+      <section id="detailOutcome">
+        <h2 class="sub">Outcome</h2>
+        <p class="muted hint">When the buyer decides, record it — the win
+          and cost metrics compute from this event and nothing else.</p>
+        <div class="actions"><button id="outcomeBtn" class="ghost">Record outcome</button></div>
+      </section>
     </section>
     <section id="view-review" class="view">
       <a href="#/" class="back" id="reviewBack">&larr; pursuit</a>
       <header class="viewhead"><h1 id="reviewTitle"></h1>
-        <div><button id="reviseBtn">Revise (apply pending)</button></div>
+        <div><button id="reviseBtn">Revise (apply pending)</button>
+          <button id="acceptBtn" class="ghost">Accept pursuit</button></div>
       </header>
       <div id="reviewFacts" class="facts"></div>
       <div id="reviewSections" class="rows"></div>
+    </section>
+    <section id="view-pings" class="view">
+      <header class="viewhead"><h1>Pings</h1></header>
+      <p class="muted hint">Every question routed to a subject-matter
+        expert, across pursuits. Unanswered past a day is marked
+        escalated. Answer here; tick the box to propose the answer as a
+        knowledge-base card for the steward's review.</p>
+      <div id="pingRows" class="rows"></div>
     </section>
     <section id="view-kb" class="view">
       <header class="viewhead">
@@ -107,6 +155,10 @@
     <h2>Who is deciding?</h2>
     <p class="hint">Decisions and comments are recorded under this name.</p>
     <input id="opName" maxlength="60" placeholder="your name">
+    <label class="hint" for="opRole">Your role</label>
+    <select id="opRole"></select>
+    <p class="hint">Your role sets the rate the effort metrics use — pick
+      the one you are acting in for this session; nothing is preselected.</p>
     <div class="modal-foot">
       <button id="opGo">Start session</button>
     </div>
@@ -132,6 +184,9 @@
       block &mdash; skip freely.</p>
     <div id="g0Body"></div>
     <input id="g0Notes" placeholder="notes (required to reject — the redo feedback)">
+    <label class="hint minutes">Minutes on this gate
+      <input id="g0Minutes" type="number" min="0" step="1"
+             placeholder="0"></label>
     <div class="modal-foot">
       <button class="ghost" data-close>Cancel</button>
       <button id="g0Reject" class="danger">Reject (re-run intake)</button>
@@ -147,6 +202,9 @@
       Small deal: collapse Gates 1+2 (auto-approves the plan ONLY if it
       carries no open gaps — a human decision is never preselected)</label>
     <input id="g1Notes" placeholder="notes (required to reject)">
+    <label class="hint minutes">Minutes on this gate
+      <input id="g1Minutes" type="number" min="0" step="1"
+             placeholder="0"></label>
     <div class="modal-foot">
       <button class="ghost" data-close>Cancel</button>
       <button id="g1Reject" class="danger">Reject</button>
@@ -159,10 +217,78 @@
     <h2>Gate 2 — pursuit plan</h2>
     <div id="g2Body"></div>
     <input id="g2Notes" placeholder="notes (required to reject — the redo feedback)">
+    <label class="hint minutes">Minutes on this gate
+      <input id="g2Minutes" type="number" min="0" step="1"
+             placeholder="0"></label>
     <div class="modal-foot">
       <button class="ghost" data-close>Cancel</button>
       <button id="g2Reject" class="danger">Reject (redo with feedback)</button>
       <button id="g2Approve">Approve &amp; freeze</button>
+    </div>
+  </div>
+</div>
+<div id="writebackOverlay" class="overlay" hidden>
+  <div class="modal wide">
+    <h2>Write-back preview</h2>
+    <p class="hint">Exactly what will be written, and what is refused.
+      Nothing is written until you confirm.</p>
+    <div id="wbBody"></div>
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="wbConfirm" disabled>Confirm write-back</button>
+    </div>
+  </div>
+</div>
+<div id="handFillOverlay" class="overlay" hidden>
+  <div class="modal wide">
+    <h2>Complete by hand</h2>
+    <p class="hint">The values only a person supplies — the cover block,
+      the pricing grid, the case block, the payment line. Saved values
+      land in the working copy at the next write-back; the buyer copy
+      appears only when nothing is owed.</p>
+    <div id="hfBody"></div>
+    <div class="modal-foot">
+      <button class="ghost" data-close>Close</button>
+      <button id="hfSave">Save values</button>
+    </div>
+  </div>
+</div>
+<div id="shareOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h2>New share link</h2>
+    <p class="hint">The label is who this link is FOR — it is the record.</p>
+    <input id="shLabel" maxlength="80" placeholder="for whom (e.g. buyer-side counsel)">
+    <label class="hint minutes">Days until it expires
+      <input id="shDays" type="number" min="1" max="30" value="7"></label>
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="shGo">Create link</button>
+    </div>
+  </div>
+</div>
+<div id="waiverOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h2>Waive a block</h2>
+    <p class="hint">A Tier-1 block stops packaging until it is revised or
+      waived. Waiving is recorded under your name with the reason you give
+      here — the reason is the record, so write the real one.</p>
+    <div id="wvClaim" class="facts"></div>
+    <input id="wvReason" maxlength="500" placeholder="why this claim may ship as written (required)">
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="wvGo" class="danger">Confirm waiver</button>
+    </div>
+  </div>
+</div>
+<div id="outcomeOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h2>Record the outcome</h2>
+    <select id="ocResult"></select>
+    <input id="ocFeedback" maxlength="2000" placeholder="buyer feedback, if any">
+    <input id="ocScore" maxlength="40" placeholder="score received, if any">
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="ocGo">Record</button>
     </div>
   </div>
 </div>

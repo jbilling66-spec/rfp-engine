@@ -12,7 +12,6 @@ import pytest
 from engine.web import pings
 from tests.web.conftest import FIXED_AT, sign_in
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture
@@ -31,10 +30,10 @@ def client(offline_app):
     ("post", "/api/pursuits/pur_clock/waivers",
      {"claim_id": "c", "reason": "r"}),
     ("post", "/api/pursuits/pur_clock/comments",
-     {"section_id": "s", "text": "t", **ROLE}),
-    ("post", "/api/pursuits/pur_clock/accept", {**ROLE}),
+     {"section_id": "s", "text": "t"}),
+    ("post", "/api/pursuits/pur_clock/accept", {}),
     ("post", "/api/pursuits/pur_clock/outcome",
-     {"result": "won", **ROLE}),
+     {"result": "won"}),
     ("post", "/api/pursuits/pur_clock/share",
      {"label": "x", "expires_at": "2026-08-16T09:00:00"}),
     ("post", "/api/orgs", {"name": "Synthetic Org"}),

@@ -18,7 +18,6 @@ from tests.revision.fixtures.rounds import round_script
 from tests.validation.fixtures.validations import run_validation_package
 from tests.web.conftest import FIXED_AT, sign_in, wait_job
 
-ROLE = {"actor_role": "pursuit_lead"}
 EXPIRES = "2026-08-16T09:00:00"
 AFTER_EXPIRY = "2026-08-16T09:00:01"
 
@@ -147,7 +146,7 @@ def test_guest_comment_lane(shared):
     # the plain one stays un-included — both directions proven below
     client.post(f"/api/pursuits/{pid}/comments", json={
         "kind": "comment", "section_id": sid,
-        "text": "Also tighten the close.", **ROLE})
+        "text": "Also tighten the close."})
     client.post(f"/api/pursuits/{pid}/comments/{injected['cid']}/include",
                 json={})
     job = client.post(f"/api/pursuits/{pid}/revise", json={})
@@ -204,7 +203,7 @@ def test_dismissed_guest_comment_finalizes_without_reply(shared):
                 json={})
     client.post(f"/api/pursuits/{pid}/comments", json={
         "kind": "comment", "section_id": sid,
-        "text": "One more pass on the intro.", **ROLE})
+        "text": "One more pass on the intro."})
     job = client.post(f"/api/pursuits/{pid}/revise", json={})
     done = wait_job(client, job.json()["id"], timeout=120)
     assert done["state"] == "done", done["message"]
@@ -226,11 +225,11 @@ def test_guest_token_reaches_no_other_mutation(shared):
     fresh = TestClient(client.app, base_url="http://127.0.0.1")  # no cookie jar
     for method, path, body in (
             ("post", f"/api/pursuits/{pid}/revise", {}),
-            ("post", f"/api/pursuits/{pid}/accept", {**ROLE}),
+            ("post", f"/api/pursuits/{pid}/accept", {}),
             ("post", f"/api/pursuits/{pid}/waivers",
-             {"claim_id": "x", "reason": "y", **ROLE}),
+             {"claim_id": "x", "reason": "y"}),
             ("post", f"/api/pursuits/{pid}/comments",
-             {"kind": "comment", "section_id": "s", "text": "t", **ROLE}),
+             {"kind": "comment", "section_id": "s", "text": "t"}),
             ("post", f"/api/pursuits/{pid}/share",
              {"label": "x", "expires_at": EXPIRES}),
             ("post", f"/api/jobs/job-0001/cancel", {})):

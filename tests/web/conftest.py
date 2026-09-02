@@ -25,9 +25,12 @@ def offline_app(tmp_path):
         yield client
 
 
-def sign_in(client, name="Jordan Reviewer") -> str:
-    out = client.post("/api/session", json={"name": name}).json()
-    return out["operator"]
+def sign_in(client, name="Jordan Reviewer", role="pursuit_lead") -> str:
+    """Declares name AND role — the role is the session's, never a
+    payload field (P27 wave 1, M-9)."""
+    r = client.post("/api/session", json={"name": name, "role": role})
+    assert r.status_code == 200, r.text
+    return r.json()["operator"]
 
 
 def wait_job(client, job_id, timeout=180.0) -> dict:

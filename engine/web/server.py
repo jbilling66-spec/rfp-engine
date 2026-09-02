@@ -32,7 +32,7 @@ from engine.pipeline import advance
 from engine.runlog import read_run, read_run_report
 from engine.version import engine_version
 from engine.web import state as state_models
-from engine.web.auth import AuthSeam
+from engine.web.auth import DECLARABLE_ROLES, AuthSeam
 from engine.contracts import ContractError, write_bytes_atomic, write_json_atomic
 from engine.web.events import EventsError, EventsLane
 from engine.web import limits
@@ -107,6 +107,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     def operator(request: Request) -> str:
         return seam.operator(request)
 
+    def actor_role(request: Request) -> str:
+        # P27 wave 1 (M-9): the role a door records is the SESSION's —
+        # never a payload field, never a hardcoded default
+        return seam.role(request)
+
     app.state.clock = now  # the injectable clock (tests move it here)
 
     def now() -> str:  # noqa: F811 — shadows the parameter on purpose
@@ -117,11 +122,19 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         clock. A client `at` in a mutating payload is refused, not
         silently ignored — the door is visibly closed (the browser never
         sent one; tests inject through create_app(now=)). Read-time
-        staleness inputs use _read_at, never this."""
+        staleness inputs use _read_at, never this.
+
+        P27 wave 1 (M-9): the same boundary refuses a client `actor_role`
+        — the session names the role (Depends(actor_role)); every door
+        that records one calls _at first."""
         if payload and payload.get("at") is not None:
             raise HTTPException(
                 422, "the server stamps the clock — a client-supplied 'at' "
                      "is refused on every mutating door (P0-11)")
+        if payload and payload.get("actor_role") is not None:
+            raise HTTPException(
+                422, "the session names the role — a client-supplied "
+                     "'actor_role' is refused on every door (P27, M-9)")
         return now()
 
     def _read_at(at: str | None) -> str:
@@ -147,14 +160,19 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/session")
     def establish_session(payload: dict, response: Response):
-        token = seam.establish(payload.get("name", ""))
+        token = seam.establish(field(payload, "name", "str", default=""),
+                               field(payload, "role", "str", default=""))
         response.set_cookie("operator", token, httponly=True,
                             samesite="lax")
-        return {"operator": seam._sessions[token]}
+        session = seam._sessions[token]
+        return {"operator": session["name"], "role": session["role"],
+                "roles": list(DECLARABLE_ROLES)}
 
     @app.get("/api/session")
     def whoami(request: Request):
-        return {"operator": seam.whoami(request)}
+        # the declarable list rides along: the shell's role picker reads
+        # it from here, so the enum has one copy (P27, M-9)
+        return {**seam.whoami(request), "roles": list(DECLARABLE_ROLES)}
 
     @app.get("/api/health")
     def health():
@@ -792,13 +810,21 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         (B77§1a), so they list here, not under Internal."""
         root = _pursuit_root(pursuit_id)
         bundle = _bundle_record(root)
-        buyer = sorted(d["name"] for d in bundle["deliverables"]
-                       if d["status"] == "produced") if bundle else []
+        deliverables = bundle["deliverables"] if bundle else []
+        buyer = sorted(d["name"] for d in deliverables
+                       if d["status"] == "produced")
         rev = root / "exports" / "review"
         return {
             "to_the_buyer": buyer,
             "internal_do_not_send": sorted(
                 p.name for p in rev.iterdir()) if rev.exists() else [],
+            # P27 wave 1: a withheld deliverable and its reason render on
+            # the finish panel without a 409 round-trip — the record's
+            # own words, the same ones the download door refuses with
+            "refused": sorted(
+                ({"name": d["name"], "reason": d.get("reason", "refused")}
+                 for d in deliverables if d["status"] == "refused"),
+                key=lambda d: d["name"]),
         }
 
     @app.get("/api/pursuits/{pursuit_id}/download/{name:path}")
@@ -1067,7 +1093,13 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         raise ShareDenied(404, "unknown share link")
 
     @app.get("/share/{token}")
-    def share_view(token: str):
+    def share_view(token: str, request: Request):
+        # P27 wave 1: a browser navigating to the link gets the guest PAGE
+        # — the static shell, served without resolving the token, so the
+        # page's own JSON fetch (Accept: application/json) stays the one
+        # access-logged view; every API caller keeps the JSON model
+        if "text/html" in (request.headers.get("accept") or ""):
+            return FileResponse(STATIC_DIR / "share.html")
         when = now()  # P25 item 4 (P0-18): a guest never supplies the clock
         try:
             lane, record = _resolve_share(token, when, "view")
@@ -1396,17 +1428,16 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 422, "confirmed effort retains BOTH figures")
         return effort
 
-    def _effort_append(lane: EventsLane, effort: dict | None, payload: dict,
+    def _effort_append(lane: EventsLane, effort: dict | None, role: str,
                        who: str, at: str) -> None:
         """Appends the validated effort — only after a decision that
         actually landed; a converged resubmit records no second
-        review_session (P25 item 1)."""
+        review_session (P25 item 1). The role is the session's (P27)."""
         if effort is None:
             return
         try:
             lane.append("review_session", at=at, actor=who,
-                        actor_role=payload.get("actor_role", ""),
-                        effort=effort)
+                        actor_role=role, effort=effort)
         except (EventsError, ContractError) as exc:
             raise HTTPException(422, str(exc))
 
@@ -1482,7 +1513,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/gate0")
     def gate0_decide(pursuit_id: str, payload: dict,
-                     who: str = Depends(operator)):
+                     who: str = Depends(operator),
+                     role: str = Depends(actor_role)):
         _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
@@ -1503,7 +1535,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
             if not result.converged:
-                _effort_append(EventsLane(pursuit), effort, payload, who, at)
+                _effort_append(EventsLane(pursuit), effort, role, who, at)
         out = {"decision": result.decision, "converged": result.converged}
         if result.proposals:
             out["proposals"] = result.proposals  # steward inbox, not corpus
@@ -1533,7 +1565,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/gate1")
     def gate1_decide(pursuit_id: str, payload: dict,
-                     who: str = Depends(operator)):
+                     who: str = Depends(operator),
+                     role: str = Depends(actor_role)):
         root = _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
@@ -1551,7 +1584,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
             if not result.converged:
-                _effort_append(EventsLane(pursuit), effort, payload, who, at)
+                _effort_append(EventsLane(pursuit), effort, role, who, at)
         out = {"decision": result.decision, "converged": result.converged}
         # The collapse toggle (D25): gate 1 approved on the one-screen
         # path enqueues planning with an auto-gate-2 policy that fires
@@ -1660,7 +1693,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/gate2")
     def gate2_decide(pursuit_id: str, payload: dict,
-                     who: str = Depends(operator)):
+                     who: str = Depends(operator),
+                     role: str = Depends(actor_role)):
         _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
@@ -1679,12 +1713,13 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
             if not result.converged:
-                _effort_append(EventsLane(pursuit), effort, payload, who, at)
+                _effort_append(EventsLane(pursuit), effort, role, who, at)
         return {"decision": result.decision, "converged": result.converged,
                 "frozen": result.frozen_path is not None}
 
     @app.post("/api/pursuits/{pursuit_id}/waivers")
-    def waive(pursuit_id: str, payload: dict, who: str = Depends(operator)):
+    def waive(pursuit_id: str, payload: dict, who: str = Depends(operator),
+              role: str = Depends(actor_role)):
         _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
@@ -1693,12 +1728,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         if not claim_id or not reason:
             raise HTTPException(422, "claim_id and reason are required — "
                                      "the reason is the record")
-        from engine.web.events import ACTOR_ROLES
-        if payload.get("actor_role") not in ACTOR_ROLES:
-            # validated BEFORE the waiver lands: a waiver whose event
-            # cannot append would leave the record half-written
-            raise HTTPException(422, f"actor_role must be one of "
-                                     f"{ACTOR_ROLES}")
+        # the role is the session's, validated at sign-in — a waiver whose
+        # event could not append would leave the record half-written, and
+        # a declared session can only carry a declarable role (P27, M-9)
         with _mutate(pursuit_id):
             log = _gate_run(pursuit, "validation")
             try:
@@ -1712,8 +1744,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                         else "failed")
             if result.status == "waived":
                 EventsLane(pursuit).append(
-                    "waive_block", at=at, actor=who,
-                    actor_role=payload.get("actor_role", ""),
+                    "waive_block", at=at, actor=who, actor_role=role,
                     claim_tier=payload.get("claim_tier"))
         if result.status == "refused":
             raise HTTPException(409, "; ".join(result.warnings))
@@ -1756,7 +1787,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/comments")
     def add_comment(pursuit_id: str, payload: dict,
-                    who: str = Depends(operator)):
+                    who: str = Depends(operator),
+                    role: str = Depends(actor_role)):
         at = _at(payload)  # P0-11: refused before any state is consulted
         section_id = field(payload, "section_id", "str", default="")
         plan, sections = _plan_sections(pursuit_id)
@@ -1767,8 +1799,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             try:
                 entry = lane.add_pending(
                     kind=payload.get("kind", "comment"),
-                    section_id=section_id, actor=who,
-                    actor_role=payload.get("actor_role", ""),
+                    section_id=section_id, actor=who, actor_role=role,
                     at=at, slot_id=payload.get("slot_id"),
                     text=payload.get("text"),
                     before=payload.get("before"),
@@ -1805,7 +1836,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/events")
     def add_event(pursuit_id: str, payload: dict,
-                  who: str = Depends(operator)):
+                  who: str = Depends(operator),
+                  role: str = Depends(actor_role)):
         with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
             kind = payload.get("kind")
             if kind not in ("accept", "reject"):
@@ -1816,8 +1848,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             lane = _lane(pursuit_id)
             try:
                 return lane.append(
-                    kind, at=_at(payload), actor=who,
-                    actor_role=payload.get("actor_role", ""),
+                    kind, at=_at(payload), actor=who, actor_role=role,
                     section_id=payload.get("section_id"),
                     edit_reason=payload.get("edit_reason"))
             except (EventsError, ContractError) as exc:
@@ -1825,7 +1856,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/accept")
     def accept_pursuit(pursuit_id: str, payload: dict,
-                       who: str = Depends(operator)):
+                       who: str = Depends(operator),
+                       role: str = Depends(actor_role)):
         """THE accept (D12): one pursuit-scoped event, no section_id —
         review_rounds_to_accept computes from it. Refuses while packaging
         is blocked: the Q2 control reaches the exit door."""
@@ -1845,8 +1877,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         with _mutate(pursuit_id):
             try:
                 event = lane.append(
-                    "accept", at=at, actor=who,
-                    actor_role=payload.get("actor_role", ""))
+                    "accept", at=at, actor=who, actor_role=role)
             except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))
             # D11: final is the pursuit-accept stamp — live plan only.
@@ -1862,7 +1893,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits/{pursuit_id}/outcome")
     def record_outcome(pursuit_id: str, payload: dict,
-                       who: str = Depends(operator)):
+                       who: str = Depends(operator),
+                       role: str = Depends(actor_role)):
         with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
             outcome = {k: payload[k] for k in
                        ("result", "buyer_feedback", "score_received")
@@ -1870,14 +1902,14 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             lane = _lane(pursuit_id)
             try:
                 return lane.append("outcome", at=_at(payload), actor=who,
-                                   actor_role=payload.get("actor_role", ""),
-                                   outcome=outcome)
+                                   actor_role=role, outcome=outcome)
             except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))
 
     @app.post("/api/pursuits/{pursuit_id}/effort")
     def record_effort(pursuit_id: str, payload: dict,
-                      who: str = Depends(operator)):
+                      who: str = Depends(operator),
+                      role: str = Depends(actor_role)):
         """D13: one event retains BOTH figures. confirmed requires the
         passive figure it was pre-filled from alongside the human's
         number; manual is the offline path; passive is the UI's own."""
@@ -1902,8 +1934,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             lane = _lane(pursuit_id)
             try:
                 return lane.append("review_session", at=_at(payload), actor=who,
-                                   actor_role=payload.get("actor_role", ""),
-                                   effort=effort)
+                                   actor_role=role, effort=effort)
             except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))
 

@@ -24,7 +24,6 @@ from tests.web.conftest import (
     wait_job,
 )
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture(scope="module")
@@ -67,7 +66,7 @@ def test_gate1_model_and_id_addressed_decision(walked):
     r = client.post("/api/pursuits/pur_walk/gate1", json={
         "decision": "approved_with_edits",
         "edits": {"kill": [live[-1]]},
-        "wait_ms": 120000, **ROLE,
+        "wait_ms": 120000,
         "effort": {"active_ms": 120000, "confirmed_minutes": 2}})
     assert r.status_code == 200 and r.json()["decision"] == \
         "approved_with_edits"
@@ -137,7 +136,7 @@ def test_gate2_model_shows_the_plan_and_decision_freezes(walked):
                for sid, gid in open_gaps]
     r = client.post("/api/pursuits/pur_walk/gate2", json={
         "decision": "approved_with_edits", "edits": {"dispose": dispose},
-        **ROLE})
+        })
     assert r.status_code == 200 and r.json()["frozen"] is True
     assert (ws / "pur_walk" / "plan.frozen.json").exists()
 
@@ -163,10 +162,10 @@ def test_gate_refusals_surface_as_409(walked):
     # the walk); a CONFLICTING re-decision must then refuse (T7)
     if client.get("/api/pursuits/pur_walk/gate1").json()["decidable"]:
         client.post("/api/pursuits/pur_walk/gate1",
-                    json={"decision": "approved", **ROLE})
+                    json={"decision": "approved"})
     r = client.post("/api/pursuits/pur_walk/gate1",
                     json={"decision": "rejected", "notes": "changed mind",
-                          **ROLE})
+                          })
     assert r.status_code == 409, r.text
     # a settled gate 2 refuses a NEW decision (a same-args resubmission
     # would converge idempotently per B22(10) — so probe with different
@@ -176,7 +175,7 @@ def test_gate_refusals_surface_as_409(walked):
         "decision": "approved_with_edits",
         "edits": {"dispose": [{"section_id": "x", "gap_id": "y",
                                "action": "answered", "answer": "z"}]},
-        **ROLE})
+        })
     assert r.status_code == 409, r.text
     assert "already decided" in r.json()["detail"]
 
@@ -194,18 +193,18 @@ def test_gate2_rejection_is_the_redo_door_over_http(tmp_path):
                        content=path.read_bytes())
         advance_past_gate0(client, "pur_redo")
         client.post("/api/pursuits/pur_redo/gate1",
-                    json={"decision": "approved", **ROLE})
+                    json={"decision": "approved"})
         job = client.post("/api/pursuits/pur_redo/jobs",
                           json={"kind": "advance"}).json()
         wait_job(client, job["id"])
         # reject without notes refuses — feedback is the point of the redo
         no_notes = client.post("/api/pursuits/pur_redo/gate2",
-                               json={"decision": "rejected", **ROLE})
+                               json={"decision": "rejected"})
         assert no_notes.status_code == 409
         r = client.post("/api/pursuits/pur_redo/gate2", json={
             "decision": "rejected",
             "notes": "Too thin on hypercare — replan with the SME pack.",
-            **ROLE})
+            })
         assert r.status_code == 200
         plan = json.loads((ws / "pur_redo" / "plan.json").read_text())
         assert plan["status"] == "draft"  # the redo door, not a terminal
@@ -232,7 +231,7 @@ def test_collapse_stops_honest_when_gaps_exist(tmp_path):
         advance_past_gate0(client, "pur_clp")
         r = client.post("/api/pursuits/pur_clp/gate1",
                         json={"decision": "approved", "collapse": True,
-                              **ROLE}).json()
+                              }).json()
         assert "job" in r  # the collapse enqueued planning
         done = wait_job(client, r["job"], timeout=120)
         assert done["state"] == "done"
@@ -257,7 +256,7 @@ def test_waiver_reaches_the_annotated_draft_with_its_event(tmp_path):
         r = client.post(f"/api/pursuits/{pid}/waivers", json={
             "claim_id": blocked["claim_id"],
             "reason": "Verified offline with the practice lead; evidence "
-                      "attached to the pursuit file.", **ROLE})
+                      "attached to the pursuit file."})
         assert r.status_code == 200
         assert r.json() == {"status": "waived", "warnings": []}
         after = pursuit.read_artifact("drafts/annotated-draft.json")
@@ -277,7 +276,7 @@ def test_waiver_reaches_the_annotated_draft_with_its_event(tmp_path):
         if blocked2:
             r2 = client.post(f"/api/pursuits/{pid}/waivers", json={
                 "claim_id": blocked2[0]["claim_id"],
-                "reason": "waived", **ROLE})
+                "reason": "waived"})
             assert r2.status_code == 200
             assert any("boilerplate" in w for w in r2.json()["warnings"])
 
@@ -308,7 +307,7 @@ def test_resubmit_over_http_with_a_real_clock_converges_once(tmp_path):
         sign_in(client, "Ash Approver")
         _walk_to_gate1(ws, client, "pur_clock")
         body = {"decision": "approved", "effort": {
-            "active_ms": 90000, "confirmed_minutes": 2}, **ROLE}
+            "active_ms": 90000, "confirmed_minutes": 2}}
         first = client.post("/api/pursuits/pur_clock/gate1", json=body)
         assert first.status_code == 200, first.text
         assert first.json()["converged"] is False
@@ -330,12 +329,12 @@ def test_bad_effort_refuses_before_the_decision_commits(tmp_path):
         _walk_to_gate1(ws, client, "pur_effort")
         r = client.post("/api/pursuits/pur_effort/gate1", json={
             "decision": "approved",
-            "effort": {"measurement": "confirmed", "active_ms": 1}, **ROLE})
+            "effort": {"measurement": "confirmed", "active_ms": 1}})
         assert r.status_code == 422, r.text
         assert client.get("/api/pursuits/pur_effort/gate1").json()[
             "decidable"] is True
         r = client.post("/api/pursuits/pur_effort/gate1", json={
-            "decision": "approved", **ROLE})
+            "decision": "approved"})
         assert r.status_code == 200 and r.json()["converged"] is False
 
 
@@ -354,7 +353,7 @@ def test_refused_waiver_writes_a_failed_footer(walked):
     unknown claim is a typed 409, never a traceback."""
     client, ws = walked
     r = client.post("/api/pursuits/pur_walk/waivers", json={
-        "claim_id": "claim_nope", "reason": "no such claim", **ROLE})
+        "claim_id": "claim_nope", "reason": "no such claim"})
     assert r.status_code == 409, r.text
     runs = sorted((ws / "pur_walk" / "runs").glob("*/run.jsonl"))
     footer = read_run(runs[-1])[-1]
@@ -367,5 +366,5 @@ def test_event_door_schema_violation_is_a_422(walked):
     500 — ContractError and EventsError are both refusals."""
     client, _ = walked
     r = client.post("/api/pursuits/pur_walk/outcome", json={
-        "result": "banana", **ROLE})
+        "result": "banana"})
     assert r.status_code == 422, r.text

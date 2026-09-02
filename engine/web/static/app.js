@@ -15,6 +15,8 @@ const STAGE_COLOR = {
 };
 
 let OPERATOR = null;
+let OPERATOR_ROLE = null;  // the session's role — the server records it,
+                          // the shell never sends one (P27, M-9)
 let JOB_TIMER = null;
 
 async function api(path, opts = {}) {
@@ -43,12 +45,21 @@ function toast(msg, sticky = false) {
 async function bootSession() {
   const s = await api("/api/session");
   OPERATOR = s.operator;
+  OPERATOR_ROLE = s.role;
+  ROUTE_TARGETS = s.roles || [];
+  // the declarable roles come from the server — one copy of the enum;
+  // nothing preselected: the blank option is the human's to leave
+  $("opRole").innerHTML = '<option value="">— choose your role —</option>'
+    + (s.roles || []).map((r) =>
+      `<option value="${esc(r)}">${esc(r.replace(/_/g, " "))}</option>`).join("");
   renderWho();
   if (!OPERATOR) $("opOverlay").hidden = false;
 }
 
 function renderWho() {
   $("whoName").textContent = OPERATOR || "not signed in";
+  $("whoRole").textContent = OPERATOR_ROLE
+    ? OPERATOR_ROLE.replace(/_/g, " ") : "";
   $("signInBtn").hidden = Boolean(OPERATOR);
 }
 
@@ -56,13 +67,97 @@ $("signInBtn").onclick = () => { $("opOverlay").hidden = false; };
 $("opGo").onclick = async () => {
   try {
     const out = await api("/api/session", {
-      method: "POST", body: JSON.stringify({ name: $("opName").value }),
+      method: "POST", body: JSON.stringify({ name: $("opName").value,
+                                             role: $("opRole").value }),
     });
     OPERATOR = out.operator;
+    OPERATOR_ROLE = out.role;
     renderWho();
     $("opOverlay").hidden = true;
   } catch (e) { toast(e.message); }
 };
+
+// -- effort (P27 wave 1, D13): one active clock per screen -----------------
+// Foreground, focused time with a decision screen open: paused while the
+// tab is hidden or the window blurred, cut after 90 s without input (the
+// schema's own idle figure). Gate decisions carry BOTH figures — the
+// measured active_ms and the human's confirmed_minutes, prefilled from it
+// (accepting the default is one click); leaving the review surface posts
+// a passive review_session. The role is the session's: nothing here
+// names one. Estimated, and labeled so wherever displayed.
+
+const IDLE_MS = 90000;
+const CLOCK = { start: null, banked: 0, lastInput: 0, running: false };
+let REVIEW_PID = null;       // the pursuit whose review surface is open
+let MINUTES_TIMER = null;
+
+function clockStart() {
+  CLOCK.banked = 0; CLOCK.start = Date.now();
+  CLOCK.lastInput = Date.now(); CLOCK.running = true;
+}
+function clockPause() {
+  if (!CLOCK.running) return;
+  CLOCK.banked += Date.now() - CLOCK.start; CLOCK.running = false;
+}
+function clockResume() {
+  if (CLOCK.running || CLOCK.start === null) return;
+  CLOCK.start = Date.now(); CLOCK.lastInput = Date.now(); CLOCK.running = true;
+}
+function clockActiveMs() {
+  return Math.round(CLOCK.banked
+    + (CLOCK.running ? Date.now() - CLOCK.start : 0));
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") clockPause(); else clockResume();
+});
+window.addEventListener("blur", clockPause);
+window.addEventListener("focus", clockResume);
+for (const ev of ["keydown", "pointerdown", "input"]) {
+  document.addEventListener(ev, () => { CLOCK.lastInput = Date.now();
+                                        clockResume(); }, true);
+}
+setInterval(() => {
+  if (CLOCK.running && Date.now() - CLOCK.lastInput > IDLE_MS) clockPause();
+}, 5000);
+
+function gateClockOpen(minutesId) {
+  // the field shows the running figure as its placeholder; a typed value
+  // is the human's number and is never overwritten
+  clockStart();
+  const field = $(minutesId);
+  field.value = "";
+  clearInterval(MINUTES_TIMER);
+  MINUTES_TIMER = setInterval(() => {
+    field.placeholder = String(Math.round(clockActiveMs() / 60000));
+  }, 10000);
+}
+
+function gateEffort(minutesId) {
+  clearInterval(MINUTES_TIMER);
+  const ms = clockActiveMs();
+  const typed = $(minutesId).value;
+  return { active_ms: ms,
+           confirmed_minutes: typed === "" ? Math.round(ms / 60000)
+                                           : Math.max(0, Math.round(Number(typed))) };
+}
+
+function flushReviewEffort() {
+  // passive: the measured span only, posted when the reviewer leaves;
+  // sub-5-second visits are not sessions
+  if (!REVIEW_PID) return;
+  const pid = REVIEW_PID;
+  REVIEW_PID = null;
+  const ms = clockActiveMs();
+  clockPause();
+  if (ms < 5000) return;
+  fetch(`/api/pursuits/${encodeURIComponent(pid)}/effort`, {
+    method: "POST", keepalive: true,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ measurement: "passive", active_ms: ms,
+                           scope: "pursuit", gate: "review_loop" }),
+  }).catch(() => {});
+}
+window.addEventListener("pagehide", flushReviewEffort);
 
 // -- board -----------------------------------------------------------------
 
@@ -125,6 +220,10 @@ async function loadDetail(pid) {
     $("reviewBtn").onclick = () => { location.hash = `#/review/${pid}`; };
   }
   $("upl").onchange = () => uploadFile(pid);
+  await loadFinish(pid, d);
+  await loadPursuitPings(pid, d);
+  await loadShares(pid);
+  wireOutcome(pid);
   $("detailSections").innerHTML = (d.sections || []).map((s) => `
     <div class="row">
       <span class="id">${esc(s.section_id)}</span>
@@ -137,12 +236,397 @@ async function loadDetail(pid) {
     </div>`).join("");
 }
 
+// -- the finish panel (P27 wave 1): render, downloads, write-back, hand
+// completion. The SERVER names the preconditions (detail.finishing); the
+// panel keys on them and every door refuses independently.
+
+async function loadFinish(pid, d) {
+  const f = d.finishing || {};
+  $("detailFinish").hidden = !f.reviewable;
+  if (!f.reviewable) return;
+  $("finishActions").innerHTML =
+    `<button id="renderBtn">Render documents</button>`
+    + `<button id="wbPreviewBtn" class="ghost">Preview write-back</button>`
+    + (f.hand_fill_lane
+        ? `<button id="handFillBtn" class="ghost">Complete by hand</button>`
+        : "");
+  $("renderBtn").onclick = () => renderDocuments(pid);
+  $("wbPreviewBtn").onclick = () => previewWriteback(pid);
+  if ($("handFillBtn")) $("handFillBtn").onclick = () => openHandFill(pid);
+  await loadDownloads(pid, f);
+}
+
+async function loadDownloads(pid, f) {
+  const dl = await api(`/api/pursuits/${encodeURIComponent(pid)}/downloads`);
+  // one whole path literal per line: the door-coverage pin reads them whole
+  const dl = (name) =>
+    `/api/pursuits/${encodeURIComponent(pid)}/download/${encodeURIComponent(name)}`;
+  const link = (name) => `<a class="dl" href="${dl(name)}">${esc(name)}</a>`;
+  $("finishDownloads").innerHTML =
+    `<div class="dlhead">To the buyer</div>`
+    + (dl.to_the_buyer.length ? dl.to_the_buyer.map(link).join("")
+        : `<div class="meta">nothing shippable yet</div>`)
+    + (dl.refused || []).map((r) =>
+        `<div class="meta withheld">withheld — ${esc(r.name)}: ${
+          esc(r.reason)}</div>`).join("")
+    + `<div class="dlhead">Internal — do not send</div>`
+    + (dl.internal_do_not_send.length
+        ? dl.internal_do_not_send.map(link).join("")
+        : `<div class="meta">nothing rendered yet</div>`)
+    + (f.bundle ? `<div class="meta">bundle composed ${esc(f.bundle.composed_at)}
+        by ${esc(f.bundle.composed_by)} — ${esc(String(f.bundle.produced))}
+        produced, ${esc(String(f.bundle.refused))} refused</div>` : "");
+}
+
+async function renderDocuments(pid) {
+  try {
+    await api(`/api/pursuits/${encodeURIComponent(pid)}/export`,
+              { method: "POST", body: JSON.stringify({ lane: "both" }) });
+    toast("documents rendered — the bundle recomposed", true);
+    routeFromHash();
+  } catch (e) { toast(e.message, true); }
+}
+
+function factsSummary(file) {
+  // the three lanes' facts differ in shape; render what each carries,
+  // the full record under detail
+  const rows = [];
+  for (const cell of file.cells || []) {
+    rows.push(`<div class="meta">${esc(cell.cell || cell.slot_id || "")}
+      <span class="chip ${cell.decision === "written" ? "done" : "draft"}">${
+      esc(cell.decision)}</span> ${esc(cell.reason || "")}</div>`);
+  }
+  for (const s of file.sections || []) {
+    rows.push(`<div class="meta">${esc(s.slot_id)}
+      <span class="chip ${s.decision === "filled" ? "done" : "draft"}">${
+      esc(s.decision)}</span></div>`);
+  }
+  return `<div class="gaprow"><b>${esc(file.lane || "")} ${esc(
+      file.output_file || file.working_copy || file.file || "")}</b>
+    ${rows.join("")}
+    ${file.buyer_copy_produced === false
+      ? `<div class="meta withheld">buyer copy withheld — ${esc(
+          (file.remaining_by_hand || []).length)} hand item(s) and ${esc(
+          (file.remaining_guidance || []).length)} section(s) remain</div>`
+      : ""}
+    <details><summary>detail</summary>
+      <pre>${esc(JSON.stringify(file, null, 2))}</pre></details></div>`;
+}
+
+async function previewWriteback(pid) {
+  try {
+    const p = await api(
+      `/api/pursuits/${encodeURIComponent(pid)}/writeback/preview`);
+    $("wbBody").innerHTML = (p.files || []).map(factsSummary).join("")
+      + (p.refused || []).map((r) => `<div class="gaprow withheld">
+          ${esc(r.lane)} ${esc(r.file)}: refused — ${esc(r.reason)}</div>`)
+        .join("");
+    // the confirm door is two steps: it opens only behind a rendered preview
+    $("wbConfirm").disabled = false;
+    $("wbConfirm").onclick = () => confirmWriteback(pid);
+    $("writebackOverlay").hidden = false;
+  } catch (e) { toast(e.message, true); }
+}
+
+async function confirmWriteback(pid) {
+  $("wbConfirm").disabled = true;
+  try {
+    const out = await api(
+      `/api/pursuits/${encodeURIComponent(pid)}/writeback/confirm`,
+      { method: "POST", body: "{}" });
+    $("writebackOverlay").hidden = true;
+    toast(`write-back done — ${out.bundle.deliverables.length} deliverable(s)
+      recorded`, true);
+    routeFromHash();
+  } catch (e) { toast(e.message, true); }
+}
+
+// hand completion: the catalogue drives the form — a record is one entry,
+// a table is rows of entries, the inline line is one value
+let HF_SLOTS = {};
+
+function hfInputs(slot, entry, idx) {
+  return slot.fields.map((f) => `<label class="hf">${esc(f.label)}
+    <input class="hfv" data-slot="${esc(slot.slot_id)}" data-idx="${idx}"
+           data-key="${esc(f.key)}" value="${esc((entry || {})[f.key] || "")}"
+           ${f.type === "numeric" ? 'inputmode="decimal"' : ""}></label>`)
+    .join("");
+}
+
+function renderHandFill(pid, h) {
+  HF_SLOTS = {};
+  $("hfBody").innerHTML = h.slots.map((s) => {
+    HF_SLOTS[s.slot_id] = s;
+    const chip = `<span class="chip ${s.status === "filled" ? "done" : "draft"}">${
+      esc(s.status)}</span>`;
+    let body;
+    if (s.shape === "record") {
+      body = hfInputs(s, s.value, 0);
+    } else if (s.shape === "table") {
+      const rows = (s.value && s.value.length) ? s.value : [{}];
+      body = `<div class="hfrows" data-slot="${esc(s.slot_id)}">`
+        + rows.map((r, i) => `<div class="hfrow">${hfInputs(s, r, i)}</div>`)
+          .join("")
+        + `</div><button class="ghost hfAdd" data-slot="${esc(s.slot_id)}">Add row</button>`;
+    } else {
+      body = `<input class="hfv" data-slot="${esc(s.slot_id)}" data-inline="1"
+                     value="${esc(s.value || "")}">`;
+    }
+    return `<div class="gaprow"><b>${esc(s.docx_anchor || s.slot_id)}</b> ${chip}
+      ${(s.missing || []).length
+        ? `<span class="meta">owed: ${esc(s.missing.join(", "))}</span>` : ""}
+      ${body}</div>`;
+  }).join("");
+  for (const btn of document.querySelectorAll(".hfAdd")) {
+    btn.onclick = () => {
+      const slot = HF_SLOTS[btn.dataset.slot];
+      const box = document.querySelector(`.hfrows[data-slot="${btn.dataset.slot}"]`);
+      box.insertAdjacentHTML("beforeend",
+        `<div class="hfrow">${hfInputs(slot, {}, box.children.length)}</div>`);
+    };
+  }
+  $("hfSave").onclick = () => saveHandFill(pid);
+}
+
+function collectHandFill() {
+  const values = {};
+  for (const el of document.querySelectorAll("#hfBody .hfv")) {
+    const slot = el.dataset.slot;
+    const shape = (HF_SLOTS[slot] || {}).shape;
+    if (el.dataset.inline) { values[slot] = el.value; continue; }
+    if (shape === "record") {
+      values[slot] = values[slot] || {};
+      values[slot][el.dataset.key] = el.value;
+    } else {
+      values[slot] = values[slot] || [];
+      const i = Number(el.dataset.idx);
+      values[slot][i] = values[slot][i] || {};
+      values[slot][i][el.dataset.key] = el.value;
+    }
+  }
+  for (const k of Object.keys(values)) {
+    if (Array.isArray(values[k])) values[k] = values[k].filter(Boolean);
+  }
+  return values;
+}
+
+async function openHandFill(pid) {
+  try {
+    const h = await api(
+      `/api/pursuits/${encodeURIComponent(pid)}/writeback/hand-fill`);
+    renderHandFill(pid, h);
+    $("handFillOverlay").hidden = false;
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveHandFill(pid) {
+  try {
+    const out = await api(
+      `/api/pursuits/${encodeURIComponent(pid)}/writeback/hand-fill`,
+      { method: "PUT", body: JSON.stringify({ values: collectHandFill() }) });
+    renderHandFill(pid, out);
+    toast("values saved — run the write-back to land them", true);
+  } catch (e) { toast(e.message, true); }
+}
+
+// -- share links (P27 wave 1): mint, hand out, revoke ---------------------
+// The list door is operator-gated and carries the secret tokens: this
+// panel shows them as the URL the guest opens — that is the door's
+// purpose. Expiry is a naive UTC timestamp, the server clock's own form.
+
+async function loadShares(pid) {
+  let links;
+  try {
+    links = await api(`/api/pursuits/${encodeURIComponent(pid)}/share`);
+  } catch (e) { $("detailShares").hidden = true; return; }
+  $("detailShares").hidden = false;
+  const url = (l) => `${location.origin}/share/${l.token}`;
+  $("shareRows").innerHTML = links.length ? links.map((l) => `
+    <div class="gaprow">
+      <b>${esc(l.label)}</b>
+      <span class="meta">${esc(l.link_id)} &middot; expires ${esc(l.expires_at)}
+        &middot; by ${esc(l.created_by)}</span>
+      ${l.revoked
+        ? `<span class="chip stop">revoked</span>`
+        : `<span class="chip done">live</span>
+           <input class="shareUrl" readonly value="${esc(url(l))}">
+           <button class="ghost shareCopy" data-url="${esc(url(l))}">Copy link</button>
+           <button class="ghost danger shareRevoke" data-id="${esc(l.link_id)}">Revoke</button>`}
+    </div>`).join("") : `<div class="meta">no guest links yet</div>`;
+  for (const b of document.querySelectorAll(".shareCopy")) {
+    b.onclick = () => navigator.clipboard.writeText(b.dataset.url)
+      .then(() => toast("link copied"))
+      .catch(() => toast("copy failed — select the link and copy it", true));
+  }
+  for (const b of document.querySelectorAll(".shareRevoke")) {
+    b.onclick = async () => {
+      try {
+        const id = encodeURIComponent(b.dataset.id);
+        await api(`/api/pursuits/${encodeURIComponent(pid)}/share/${id}/revoke`,
+                  { method: "POST", body: "{}" });
+        toast(`${b.dataset.id} revoked`);
+        loadShares(pid);
+      } catch (e) { toast(e.message, true); }
+    };
+  }
+  $("shareNewBtn").onclick = () => { $("shareOverlay").hidden = false; };
+  $("shGo").onclick = async () => {
+    const days = Math.max(1, Math.min(30, Number($("shDays").value) || 7));
+    const expires_at = new Date(Date.now() + days * 86400000)
+      .toISOString().slice(0, 19);
+    try {
+      const link = await api(`/api/pursuits/${encodeURIComponent(pid)}/share`, {
+        method: "POST",
+        body: JSON.stringify({ label: $("shLabel").value, expires_at }),
+      });
+      $("shareOverlay").hidden = true;
+      $("shLabel").value = "";
+      toast(`${link.link_id} created — ${url(link)}`, true);
+      loadShares(pid);
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
+// -- gaps and pings (P27 wave 1): the inbox that used to be curl-only ----
+// Escalation is the SERVER's clock (P2-47); rows render what they carry.
+
+// who a gap can be routed to: the session door's declarable roles — the
+// shell never names a role (M-9), it renders the list it is handed
+let ROUTE_TARGETS = [];
+
+function pingRow(p, pid) {
+  const answered = Boolean(p.answered_at);
+  return `<div class="gaprow" data-ping="${esc(p.ping_id)}">
+    <b>${esc(p.ping_id)}</b>
+    ${pid ? "" : `<a href="#/pursuit/${esc(p.pursuit_id)}">${esc(p.pursuit_id)}</a>`}
+    <span class="meta">${esc(p.section_id)} &middot; to ${esc(p.route_to)}
+      &middot; by ${esc(p.by)} &middot; ${esc(p.pinged_at)}</span>
+    ${answered ? `<span class="chip done">answered</span>`
+      : p.escalated ? `<span class="chip stop">escalated</span>`
+      : `<span class="chip draft">${esc(String(p.age_hours))} h open</span>`}
+    <div class="q">${esc(p.question)}</div>
+    ${answered
+      ? `<div class="prose">${esc(p.answer || "")}</div>`
+      : `<div class="commentbox">
+           <input class="pingAnswer" maxlength="4000" placeholder="the answer">
+           <label class="hint"><input type="checkbox" class="pingPropose">
+             propose a KB card</label>
+           <button class="pingGo" data-pid="${esc(p.pursuit_id || pid)}"
+                   data-ping="${esc(p.ping_id)}">Answer</button>
+         </div>`}
+  </div>`;
+}
+
+function wirePingAnswers(reload) {
+  for (const btn of document.querySelectorAll(".pingGo")) {
+    btn.onclick = async () => {
+      const box = btn.closest(".commentbox");
+      try {
+        const pid = encodeURIComponent(btn.dataset.pid);
+        const ping = encodeURIComponent(btn.dataset.ping);
+        await api(`/api/pursuits/${pid}/pings/${ping}/answer`, {
+          method: "POST",
+          body: JSON.stringify({
+            answer: box.querySelector(".pingAnswer").value,
+            propose_card: box.querySelector(".pingPropose").checked }),
+        });
+        toast(`${btn.dataset.ping} answered`);
+        reload();
+      } catch (e) { toast(e.message, true); }
+    };
+  }
+}
+
+async function loadPingInbox() {
+  const rows = await api("/api/pings");
+  $("pingRows").innerHTML = rows.length
+    ? rows.map((p) => pingRow(p, null)).join("")
+    : `<div class="meta">no pings anywhere</div>`;
+  wirePingAnswers(loadPingInbox);
+}
+
+async function loadPursuitPings(pid, d) {
+  const sections = d.sections || [];
+  $("detailPings").hidden = !sections.length;
+  if (!sections.length) return;
+  const open = [];
+  for (const s of sections) {
+    for (const g of s.gaps || []) {
+      if (g.status === "open") open.push({ ...g, section_id: s.section_id });
+    }
+  }
+  $("pursuitGapRows").innerHTML = open.map((g) => `
+    <div class="gaprow">
+      <b>${esc(g.gap_id)}</b> <span class="meta">${esc(g.section_id)} &middot; ${esc(g.kind || "")}</span>
+      <div class="q">${esc(g.question_to_human || "")}</div>
+      <div class="commentbox">
+        <select class="routeTo">
+          <option value="">— route to —</option>
+          ${ROUTE_TARGETS.map((r) => `<option value="${r}">${esc(r.replace(/_/g, " "))}</option>`).join("")}
+        </select>
+        <button class="ghost pingBtn" data-gap="${esc(g.gap_id)}">Ping an SME</button>
+      </div>
+    </div>`).join("") || `<div class="meta">no open gaps</div>`;
+  for (const btn of document.querySelectorAll(".pingBtn")) {
+    btn.onclick = async () => {
+      const route_to = btn.closest(".commentbox").querySelector(".routeTo").value;
+      if (!route_to) { toast("choose who to route it to"); return; }
+      try {
+        const gap = encodeURIComponent(btn.dataset.gap);
+        await api(`/api/pursuits/${encodeURIComponent(pid)}/gaps/${gap}/ping`,
+                  { method: "POST", body: JSON.stringify({ route_to }) });
+        toast(`${btn.dataset.gap} pinged to ${route_to}`);
+        routeFromHash();
+      } catch (e) { toast(e.message, true); }
+    };
+  }
+  $("gapSection").innerHTML = `<option value="">— section —</option>`
+    + sections.map((s) => `<option value="${esc(s.section_id)}">${esc(s.title)}</option>`).join("");
+  $("gapGo").onclick = async () => {
+    try {
+      await api(`/api/pursuits/${encodeURIComponent(pid)}/gaps`, {
+        method: "POST",
+        body: JSON.stringify({ section_id: $("gapSection").value,
+                               question: $("gapQuestion").value }),
+      });
+      $("gapQuestion").value = "";
+      toast("gap opened on the live plan");
+      routeFromHash();
+    } catch (e) { toast(e.message, true); }
+  };
+  const inbox = await api(`/api/pursuits/${encodeURIComponent(pid)}/pings`);
+  $("pursuitPingRows").innerHTML = inbox.length
+    ? inbox.map((p) => pingRow(p, pid)).join("")
+    : `<div class="meta">no pings on this pursuit</div>`;
+  wirePingAnswers(routeFromHash);
+}
+
+// -- the outcome (P27 wave 1): one pursuit-level event -----------------------
+// The result vocabulary is the feedback-event schema's; nothing preselected.
+const OUTCOME_RESULTS = ["won", "lost", "shortlisted", "withdrawn", "no_decision"];
+
+function wireOutcome(pid) {
+  $("ocResult").innerHTML = `<option value="">— result —</option>`
+    + OUTCOME_RESULTS.map((r) => `<option value="${r}">${esc(r.replace(/_/g, " "))}</option>`).join("");
+  $("outcomeBtn").onclick = () => { $("outcomeOverlay").hidden = false; };
+  $("ocGo").onclick = async () => {
+    const body = { result: $("ocResult").value };
+    if ($("ocFeedback").value) body.buyer_feedback = $("ocFeedback").value;
+    if ($("ocScore").value) body.score_received = $("ocScore").value;
+    try {
+      await api(`/api/pursuits/${encodeURIComponent(pid)}/outcome`,
+                { method: "POST", body: JSON.stringify(body) });
+      $("outcomeOverlay").hidden = true;
+      toast(`outcome recorded: ${body.result}`, true);
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
 async function uploadFile(pid) {
   const file = $("upl").files[0];
   if (!file) return;
   const res = await fetch(
-    `/api/pursuits/${encodeURIComponent(pid)}/inbox/`
-    + encodeURIComponent(file.name),
+    `/api/pursuits/${encodeURIComponent(pid)}/inbox/${encodeURIComponent(file.name)}`,
     { method: "PUT", body: file });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -184,6 +668,7 @@ const MARK_COLOR = { block: "stop", review: "draft", advisory: "plan",
 
 async function loadReview(pid) {
   const m = await api(`/api/pursuits/${encodeURIComponent(pid)}/review`);
+  if (REVIEW_PID !== pid) { REVIEW_PID = pid; clockStart(); }
   $("reviewTitle").textContent = `${m.pursuit_id} — revision ${m.revision_n}`;
   $("reviewBack").href = `#/pursuit/${encodeURIComponent(pid)}`;
   $("reviewFacts").innerHTML =
@@ -203,14 +688,31 @@ async function loadReview(pid) {
         <div class="mark">
           <span class="chip ${esc(MARK_COLOR[k.mark] || "plan")}">${esc(k.mark)}</span>
           <span class="line">${esc(k.line)}</span>
+          ${k.mark === "block" && k.claim_id
+            ? `<button class="ghost waiveBtn" data-claim="${esc(k.claim_id)}"
+                 data-line="${esc(k.line)}">Waive</button>` : ""}
           <details><summary>detail</summary>
             <pre>${esc(JSON.stringify(k.detail, null, 2))}</pre>
           </details>
         </div>`).join("")}
       ${(s.pending || []).map((p) => `
         <div class="pendingnote">pending ${esc(p.kind)} ${esc(p.cid)}:
-          ${esc(p.text || p.after || "")} (applies at next revise)</div>
+          ${esc(p.text || p.after || "")}
+          ${p.provenance === "external"
+            ? `<span class="chip plan">guest: ${esc(p.display_name || "")}</span>
+               ${(p.screen_flags || []).length
+                 ? `<span class="chip stop">flagged by the injection screen</span>` : ""}
+               <button class="ghost pendInclude" data-cid="${esc(p.cid)}">Include</button>
+               <button class="ghost pendDismiss" data-cid="${esc(p.cid)}">Dismiss</button>`
+            : `(applies at next revise)
+               <button class="ghost pendWithdraw" data-cid="${esc(p.cid)}">Withdraw</button>`}
+        </div>
       `).join("")}
+      ${(m.last_round && m.last_round.revised.includes(s.section_id))
+        ? `<div class="revisedrow">revised in round ${esc(String(m.last_round.n))}
+             <button class="ghost revAccept" data-sid="${esc(s.section_id)}">Accept revision</button>
+             <button class="ghost revReject" data-sid="${esc(s.section_id)}">Reject revision</button>
+           </div>` : ""}
       <div class="commentbox">
         <input class="cmt" placeholder="comment for the revision agent">
         <button class="cmtGo" data-sid="${esc(s.section_id)}">Comment</button>
@@ -224,14 +726,61 @@ async function loadReview(pid) {
           method: "POST",
           body: JSON.stringify({ kind: "comment",
                                  section_id: btn.dataset.sid,
-                                 text: input.value, ...ROLE() }),
+                                 text: input.value }),
         });
         input.value = "";
         loadReview(pid);
       } catch (e) { toast(e.message); }
     };
   }
+  for (const btn of document.querySelectorAll(".waiveBtn")) {
+    btn.onclick = () => openWaiver(pid, btn.dataset.claim, btn.dataset.line);
+  }
+  // the review-loop doors (P27 wave 1, the owner's call): guest comments
+  // reach the revision agent ONLY when included; internal pendings can be
+  // withdrawn; an agent revision is accepted or rejected per section
+  const pend = (cls, fn) => {
+    for (const btn of document.querySelectorAll(cls)) {
+      btn.onclick = async () => {
+        try { await fn(btn.dataset.cid); loadReview(pid); }
+        catch (e) { toast(e.message, true); }
+      };
+    }
+  };
+  const p = encodeURIComponent(pid);
+  pend(".pendInclude", (cid) =>
+    api(`/api/pursuits/${p}/comments/${encodeURIComponent(cid)}/include`,
+        { method: "POST", body: "{}" }));
+  pend(".pendDismiss", (cid) =>
+    api(`/api/pursuits/${p}/comments/${encodeURIComponent(cid)}/dismiss`,
+        { method: "POST", body: "{}" }));
+  pend(".pendWithdraw", (cid) =>
+    api(`/api/pursuits/${p}/comments/${encodeURIComponent(cid)}`,
+        { method: "DELETE" }));
+  for (const [cls, kind] of [[".revAccept", "accept"], [".revReject", "reject"]]) {
+    for (const btn of document.querySelectorAll(cls)) {
+      btn.onclick = async () => {
+        try {
+          await api(`/api/pursuits/${encodeURIComponent(pid)}/events`, {
+            method: "POST",
+            body: JSON.stringify({ kind, section_id: btn.dataset.sid }) });
+          toast(`${kind}ed the revision of ${btn.dataset.sid}`);
+          loadReview(pid);
+        } catch (e) { toast(e.message, true); }
+      };
+    }
+  }
+  $("acceptBtn").onclick = async () => {
+    flushReviewEffort();
+    try {
+      await api(`/api/pursuits/${encodeURIComponent(pid)}/accept`,
+                { method: "POST", body: "{}" });
+      toast("accepted — every drafted section is now final", true);
+      location.hash = `#/pursuit/${encodeURIComponent(pid)}`;
+    } catch (e) { toast(e.message, true); }
+  };
   $("reviseBtn").onclick = async () => {
+    flushReviewEffort();  // the span before the round is its own session
     try {
       const job = await api(
         `/api/pursuits/${encodeURIComponent(pid)}/revise`,
@@ -241,9 +790,29 @@ async function loadReview(pid) {
   };
 }
 
-// -- gates -----------------------------------------------------------------
+// -- waivers (P27 wave 1): a Tier-1 block, overridden on the record -------
+// The reason IS the record: required by the server, surfaced (never
+// refused) when it reads as boilerplate. The role is the session's.
 
-const ROLE = () => ({ actor_role: "pursuit_lead" }); // role picker: post-A5
+function openWaiver(pid, claimId, line) {
+  $("wvClaim").textContent = `${claimId} — ${line}`;
+  $("wvReason").value = "";
+  $("waiverOverlay").hidden = false;
+  $("wvGo").onclick = async () => {
+    try {
+      const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/waivers`, {
+        method: "POST",
+        body: JSON.stringify({ claim_id: claimId, reason: $("wvReason").value }),
+      });
+      $("waiverOverlay").hidden = true;
+      toast(out.warnings.length
+        ? `waived — ${out.warnings.join("; ")}` : "waived — on the record", true);
+      loadReview(pid);
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
+// -- gates -----------------------------------------------------------------
 
 async function openGate0(pid) {
   const m = await api(`/api/pursuits/${encodeURIComponent(pid)}/gate0`);
@@ -280,6 +849,7 @@ async function openGate0(pid) {
              ${esc(g.answer || "")}`}
       </div>`).join("");
   $("gate0Overlay").hidden = false;
+  gateClockOpen("g0Minutes");
   $("g0Approve").onclick = () => decideGate0(pid, true);
   $("g0Reject").onclick = () => decideGate0(pid, false);
 }
@@ -293,7 +863,8 @@ async function decideGate0(pid, approve) {
     .map((el) => ({ gap_id: el.dataset.gap, answer: el.value.trim() }));
   const skips = [...document.querySelectorAll(".g0skip:checked")]
     .map((el) => el.value);
-  const body = { ...ROLE(), notes: $("g0Notes").value || undefined };
+  const body = { notes: $("g0Notes").value || undefined,
+                 effort: gateEffort("g0Minutes") };
   if (!approve) body.decision = "rejected";
   else if (corrections.length || answers.length || skips.length) {
     body.decision = "approved_with_edits";
@@ -327,6 +898,7 @@ async function openGate1(pid) {
         &middot; cites: ${esc((c.cites || []).join(", "))}</div>
     </div>`).join("");
   $("gate1Overlay").hidden = false;
+  gateClockOpen("g1Minutes");
   $("g1Approve").onclick = () => decideGate1(pid, true);
   $("g1Reject").onclick = () => decideGate1(pid, false);
 }
@@ -334,8 +906,9 @@ async function openGate1(pid) {
 async function decideGate1(pid, approve) {
   const kills = [...document.querySelectorAll(".g1kill:checked")]
     .map((el) => el.value);
-  const body = { ...ROLE(), notes: $("g1Notes").value || undefined,
-                 collapse: $("g1Collapse").checked };
+  const body = { notes: $("g1Notes").value || undefined,
+                 collapse: $("g1Collapse").checked,
+                 effort: gateEffort("g1Minutes") };
   if (!approve) body.decision = "rejected";
   else if (kills.length) {
     body.decision = "approved_with_edits";
@@ -386,12 +959,14 @@ async function openGate2(pid) {
                  placeholder="waive reason (required)">` : ""}
       </div>`).join("");
   $("gate2Overlay").hidden = false;
+  gateClockOpen("g2Minutes");
   $("g2Approve").onclick = () => decideGate2(pid, true);
   $("g2Reject").onclick = () => decideGate2(pid, false);
 }
 
 async function decideGate2(pid, approve) {
-  const body = { ...ROLE(), notes: $("g2Notes").value || undefined };
+  const body = { notes: $("g2Notes").value || undefined,
+                 effort: gateEffort("g2Minutes") };
   if (!approve) body.decision = "rejected";
   else {
     const dispose = [];
@@ -667,9 +1242,13 @@ function showView(name) {
 
 async function routeFromHash() {
   const r = location.hash.match(/^#\/review\/(.+)$/);
+  if (REVIEW_PID && !(r && r[1] === REVIEW_PID)) flushReviewEffort();
   if (r) { showView("review"); await loadReview(r[1]); return; }
   const m = location.hash.match(/^#\/pursuit\/(.+)$/);
   if (m) { showView("detail"); await loadDetail(m[1]); return; }
+  if (location.hash.startsWith("#/pings")) {
+    showView("pings"); await loadPingInbox(); return;
+  }
   if (location.hash.startsWith("#/kb")) { showView("kb"); await loadKb(); return; }
   if (location.hash.startsWith("#/assistant")) {
     showView("assistant"); await loadAssistant(); return;

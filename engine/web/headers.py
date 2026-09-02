@@ -6,7 +6,7 @@ origin can address 127.0.0.1. `TrustedHostMiddleware` (wired in
 `create_app`) closes DNS rebinding — the Host header must be one the
 operator serves. This middleware adds the headers every response should
 carry (a strict CSP fits: the UI has no inline scripts or styles), marks
-API responses no-store, and refuses any non-safe request a browser
+API and guest-lane responses no-store, and refuses any non-safe request a browser
 labels `Sec-Fetch-Site: cross-site` — the raw-body upload doors accept
 `text/plain`, so a cross-origin "simple" PUT would otherwise execute
 even though its response is unreadable. curl and the pilot's scripts
@@ -40,7 +40,8 @@ class SecurityHeadersMiddleware:
                            for k, v in scope.get("headers", [])}
         extra = [(k.encode("latin-1"), v.encode("latin-1"))
                  for k, v in SECURITY_HEADERS.items()]
-        if scope["path"].startswith("/api/"):
+        if scope["path"].startswith(("/api/", "/share/")):
+            # the guest lane's model is as private as the API's (P27)
             extra.append((b"cache-control", b"no-store"))
         if (scope["method"] not in SAFE_METHODS
                 and request_headers.get("sec-fetch-site") == "cross-site"):

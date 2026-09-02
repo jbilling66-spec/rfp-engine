@@ -172,3 +172,32 @@ def test_generated_render_refuses_firm_default_with_the_pointer(
                        json={"lane": "submission"})
     assert resp.status_code == 409
     assert "FILLED template" in resp.json()["detail"]
+
+
+def test_downloads_and_detail_name_what_is_withheld(fill_client):
+    """P27 wave 1: the downloads model carries every refused deliverable
+    with the record's own reason (the finish panel renders it without a
+    409 round-trip), and the detail model names the finishing
+    preconditions the panel's buttons key on — reviewable, the bundle
+    summary, the hand-completion lane."""
+    client, ws = fill_client
+    r = client.post("/api/pursuits/pur_fill/writeback/confirm", json={})
+    assert r.status_code == 200, r.text
+    downloads = client.get("/api/pursuits/pur_fill/downloads").json()
+    assert [d["name"] for d in downloads["refused"]] == ["response.docx"]
+    assert downloads["refused"][0]["reason"].startswith("buyer copy withheld")
+    detail = client.get("/api/pursuits/pur_fill").json()
+    finishing = detail["finishing"]
+    assert finishing["reviewable"] is True
+    assert finishing["hand_fill_lane"] is True
+    assert finishing["bundle"]["produced"] == 0
+    assert finishing["bundle"]["refused"] == 1
+    assert finishing["bundle"]["composed_by"] == "Fiona Filler"
+    # a bare pursuit: nothing to finish, nothing composed, no lane
+    client.post("/api/pursuits", json={"pursuit_id": "pur_bare"})
+    bare = client.get("/api/pursuits/pur_bare").json()
+    assert bare["finishing"] == {"reviewable": False, "bundle": None,
+                                 "hand_fill_lane": False}
+    assert client.get("/api/pursuits/pur_bare/downloads").json() == {
+        "to_the_buyer": [], "internal_do_not_send": [], "refused": []}
+

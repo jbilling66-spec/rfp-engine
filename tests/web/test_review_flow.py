@@ -16,7 +16,6 @@ from tests.revision.fixtures.rounds import round_script
 from tests.validation.fixtures.validations import run_validation_package
 from tests.web.conftest import FIXED_AT, sign_in, wait_job
 
-ROLE = {"actor_role": "pursuit_lead"}
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +65,7 @@ def test_comment_then_revise_over_http(reviewing):
     sid = next(s["section_id"] for s in m["sections"] if s["slots"])
     entry = client.post(f"/api/pursuits/{pid}/comments", json={
         "kind": "comment", "section_id": sid,
-        "text": "Lead with the transition story.", **ROLE}).json()
+        "text": "Lead with the transition story."}).json()
     # the pending overlay shows it before any round runs
     m = client.get(f"/api/pursuits/{pid}/review").json()
     row = next(s for s in m["sections"] if s["section_id"] == sid)

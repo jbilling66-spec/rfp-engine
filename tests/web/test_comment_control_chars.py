@@ -11,7 +11,6 @@ from engine.web.server import create_app
 from tests.validation.fixtures.validations import run_validation_package
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
 
-ROLE = {"actor_role": "pursuit_lead"}
 EXPIRES = "2026-08-16T09:00:00"
 
 
@@ -35,10 +34,10 @@ def test_operator_comment_and_edit_doors_refuse(reviewed):
     client, pursuit = reviewed
     pid, sid = pursuit.pursuit_id, _section_id(pursuit)
     r = client.post(f"/api/pursuits/{pid}/comments", json={
-        "kind": "comment", "section_id": sid, "text": "bad\x0bchar", **ROLE})
+        "kind": "comment", "section_id": sid, "text": "bad\x0bchar"})
     assert r.status_code == 422 and "control character" in r.json()["detail"]
     r = client.post(f"/api/pursuits/{pid}/comments", json={
-        "kind": "edit", "section_id": sid, "before": "a", "after": "b\x0c", **ROLE})
+        "kind": "edit", "section_id": sid, "before": "a", "after": "b\x0c"})
     assert r.status_code == 422 and "after: control" in r.json()["detail"]
     assert EventsLane(pursuit).pending() == []
 

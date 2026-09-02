@@ -7,6 +7,11 @@
 #              authenticates against the IdP and SETS auth.header_name
 #              (stripping any client-supplied copy — the 127.0.0.1 bind is
 #              what makes same-host proxying safe). /api/session is disabled.
+# auth.role_header_name (P27 wave 1, M-9): in header mode the proxy also
+#   sets the actor's role — required only by the doors that record one
+#   (comments, waivers, accept/reject, outcome, effort, gate decisions
+#   carrying effort). In declared mode the role is chosen at sign-in.
 auth:
   mode: declared
   header_name: X-Auth-User
+  role_header_name: X-Auth-Role
