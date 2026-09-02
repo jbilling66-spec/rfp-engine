@@ -24,7 +24,7 @@
           "section_type": { "type": "string", "description": "Deterministic code-assigned type (B31: the 16-value KB ingest vocabulary + 'other'). Deliberately a bare string, not an enum — the vocabulary's source of truth is A2's; pinning it here would force schema churn there. Mirrors run-log target.section_type; 13 metrics slice on it." },
           "status": { "type": "string", "enum": ["drafted", "pending", "omitted", "skipped_non_prose"], "description": "drafted = prose landed; pending = owed but not produced (reason names why — parse failure, awaiting disposition, killed run); omitted = human-approved omission (B24); skipped_non_prose = no authored-prose lane at P7 (B28(4))." },
           "reason": { "type": "string", "description": "Why a non-drafted section has no prose. Required by code on every pending/omitted/skipped section." },
-          "prose": { "type": "string", "description": "Path B: the section's drafted text. Absent on Path A (per-slot answers carry the text)." },
+          "prose": { "type": "string", "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$", "description": "Path B: the section's drafted text. Absent on Path A (per-slot answers carry the text). No control characters except TAB/LF/CR (P26a, P2-29b): the wire refuses them on entry, and this pattern is the last line at write_artifact — python-docx refuses them at the exit door." },
           "answers": {
             "type": "array",
             "description": "Path A: one entry per slot the section answers, in plan slot order. The write-back grain (P9).",
@@ -36,7 +36,7 @@
                 "slot_id": { "type": "string" },
                 "ref_id": { "type": "string", "description": "The buyer's own numbering, carried verbatim from the slot." },
                 "status": { "type": "string", "enum": ["drafted", "pending", "omitted", "gated_skipped", "awaiting_disposition"] },
-                "prose": { "type": "string" },
+                "prose": { "type": "string", "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$", "description": "No control characters except TAB/LF/CR (P2-29b) — see the section-level prose." },
                 "reason": { "type": "string", "description": "Named reason for every non-drafted status." },
                 "kb_ids": { "type": "array", "items": { "type": "string" }, "description": "This answer's surviving citations — model-claimed ids intersected by code against the cards actually opened for this section (B21(4) carried to drafting). Union across answers = the section's cards_cited." },
                 "proposed_approach": { "type": "boolean", "description": "Code-scanned presence of the literal [proposed approach] flag in prose — never model-claimed." },

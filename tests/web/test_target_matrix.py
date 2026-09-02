@@ -53,7 +53,7 @@ def test_declared_docx_target_never_falls_to_glob_order(matrix_client):
                    content=path.read_bytes())
 
     job = client.post("/api/pursuits/pur_matrix/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_0" in wait_job(client, job["id"])["message"]
 
     model = client.get("/api/pursuits/pur_matrix/gate0").json()
@@ -62,16 +62,15 @@ def test_declared_docx_target_never_falls_to_glob_order(matrix_client):
     assert (fc["unit"], fc["unit_count"]) == ("target_slots", 6)
 
     assert client.post("/api/pursuits/pur_matrix/gate0",
-                       json={"decision": "approved",
-                             "at": FIXED_AT}).status_code == 200
+                       json={"decision": "approved"}).status_code == 200
     job = client.post("/api/pursuits/pur_matrix/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_1" in wait_job(client, job["id"])["message"]
     assert client.post("/api/pursuits/pur_matrix/gate1",
-                       json={"decision": "approved", "at": FIXED_AT,
+                       json={"decision": "approved",
                              **ROLE}).status_code == 200
     job = client.post("/api/pursuits/pur_matrix/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_2" in wait_job(client, job["id"])["message"]
 
     slots = json.loads((ws / "pur_matrix" / "slots.json").read_text())
@@ -96,7 +95,7 @@ def test_gate0_flags_designated_without_a_declared_target(matrix_client):
     client.put("/api/pursuits/pur_conflict/inbox/ramble.md",
                content=DEMO_RAMBLE.read_bytes())
     job = client.post("/api/pursuits/pur_conflict/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_0" in wait_job(client, job["id"])["message"]
     model = client.get("/api/pursuits/pur_conflict/gate0").json()
     assert any("no document is declared role=target" in c

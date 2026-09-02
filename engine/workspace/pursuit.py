@@ -11,10 +11,14 @@ import hashlib
 import json
 import os
 import re
-import tempfile
 from pathlib import Path
 
-from engine.contracts import ContractError, validate
+from engine.contracts import (
+    ContractError,
+    validate,
+    write_bytes_atomic,
+    write_text_atomic,
+)
 
 SUBDIRS = ["drafts", "revisions", "events", "runs", "checkpoints", "inbox",
            "addenda", "pings", "share", "exports", "memory"]
@@ -57,16 +61,9 @@ def _serialize(obj: dict) -> str:
 
 
 def _atomic_write_json(path: Path, obj: dict) -> None:
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(_serialize(obj))
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    """The workspace serializer over the one atomic primitive (P0-6:
+    engine/contracts/atomic.py is the single home)."""
+    write_text_atomic(path, _serialize(obj))
 
 
 class PursuitDir:
@@ -113,6 +110,15 @@ class PursuitDir:
 
     def read_artifact(self, name: str) -> dict:
         return json.loads(self._under_root(name).read_text(encoding="utf-8"))
+
+    def write_bytes(self, name: str, data: bytes) -> Path:
+        """Atomic bytes under the root (P0-6): the research-pack copy and
+        any other opaque record the workspace holds. Frozen names refused."""
+        self._refuse_frozen_name(name)
+        path = self._under_root(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_bytes_atomic(path, data)
+        return path
 
     # -- the freeze door (T7; P25 item 5, register P0-2) --------------------
 

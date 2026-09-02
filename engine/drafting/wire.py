@@ -16,6 +16,19 @@ holds by construction.
 
 import json
 
+from engine.contracts import check_prose
+
+
+def _clean_prose(text: str, where: str) -> str:
+    """P26a Group B (P2-29b): a control character in model prose is a
+    WireError here — the section pends with the reason (a named pend
+    beats a failed job) and the envelope never carries a byte python-docx
+    would refuse at the exit door hours later."""
+    bad = check_prose(text)
+    if bad:
+        raise WireError(f"{where}: {bad}")
+    return text
+
 
 class WireError(ValueError):
     """The draft wire was unusable; the section pends with this reason."""
@@ -71,7 +84,7 @@ def parse_wire_answers(text: str, *, requested: list[str],
                             "first wins, duplicate dropped")
             continue
         out[slot_id] = {
-            "prose": entry["prose"],
+            "prose": _clean_prose(entry["prose"], f"answers[{i}] ({slot_id})"),
             "kb_ids": _clean_kb_ids(entry.get("kb_ids"), opened_ids,
                                     f"answers[{i}] ({slot_id})", warnings),
         }
@@ -89,7 +102,7 @@ def parse_wire_prose(text: str, *, opened_ids: set[str]
     if not isinstance(wire, dict) or not isinstance(wire.get("prose"), str):
         raise WireError("draft wire carries no prose")
     return {
-        "prose": wire["prose"],
+        "prose": _clean_prose(wire["prose"], "prose"),
         "kb_ids": _clean_kb_ids(wire.get("kb_ids"), opened_ids, "prose",
                                 warnings),
     }, warnings

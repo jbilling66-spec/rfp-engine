@@ -23,6 +23,8 @@ import os
 import re
 from pathlib import Path
 
+from engine.contracts import write_bytes_atomic
+
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{3,}")
 _STOP = frozenset(
     "this that with from your will shall must have been they their the-firm "
@@ -68,7 +70,7 @@ class AddendumLane:
         aid = f"addm_{len(existing) + 1:02d}"
         folder = self.root / aid
         folder.mkdir(parents=True)
-        (folder / filename).write_bytes(body)
+        write_bytes_atomic(folder / filename, body)  # P0-6
         try:
             text = body.decode("utf-8")
         except UnicodeDecodeError:

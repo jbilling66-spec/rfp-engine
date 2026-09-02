@@ -29,7 +29,7 @@
           "items": { "type": "string", "enum": ["run_log", "feedback_event", "review_session", "kb", "eval_results", "crm", "manual_entry", "config"] }
         },
         "fields": { "type": "array", "items": { "type": "string" }, "description": "Specific fields consumed, e.g. agent_call.cost_usd, feedback_event.edit_reason, review_session.active_ms." },
-        "filters": { "type": "array", "items": { "type": "string" }, "description": "Row filters always applied, e.g. run.mode == 'live'." }
+        "filters": { "type": "array", "items": { "type": "string" }, "description": "The row filters the metric DECLARES, e.g. run.mode == 'live' — documentation of intent, checked for enum validity by the registry test, never executed as code. The resolver applies the production-mode exclusion globally (engine/metrics/walker.py production_only) and each resolver hand-codes its own check/kind filter (P26a P0-10 corrected the earlier 'always applied')." }
       }
     },
 

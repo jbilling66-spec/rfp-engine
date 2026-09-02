@@ -104,10 +104,12 @@ outside this table, and the drift test pins that set closed.
 | method | path | purpose | gate |
 |---|---|---|---|
 | POST | `/api/pursuits/{pursuit_id}/export` | Render submission/review DOCX + recompose the bundle | operator; job-lane |
-| GET | `/api/pursuits/{pursuit_id}/downloads` | The two headings — buyer list read from the submission bundle | open |
-| GET | `/api/pursuits/{pursuit_id}/download/{name:path}` | Serve one file — closed allow-list from the bundle record | open; 403 outside the list |
+| GET | `/api/pursuits/{pursuit_id}/downloads` | The two headings — buyer list read from the submission bundle (a withheld firm-template fill lists as refused, its working copy under internal) | open |
+| GET | `/api/pursuits/{pursuit_id}/download/{name:path}` | Serve one file — closed allow-list from the bundle record | open; 403 outside the list; 409 naming what remains for a deliverable the bundle records as refused |
 | GET | `/api/pursuits/{pursuit_id}/writeback/preview` | Per-file facts preview for every declared lane | open (the preview half) |
 | POST | `/api/pursuits/{pursuit_id}/writeback/confirm` | Run every declared write-back lane; facts + bundle written | operator; confirm; job-lane |
+| GET | `/api/pursuits/{pursuit_id}/writeback/hand-fill` | The hand-completion record + what a human still owes (metadata record, pricing grid, case block, inline line) | open |
+| PUT | `/api/pursuits/{pursuit_id}/writeback/hand-fill` | Enter the values only a human supplies — server-stamped, last write wins per slot, empty clears | operator; job-lane |
 
 ### Addenda
 

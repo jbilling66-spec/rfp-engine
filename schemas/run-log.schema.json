@@ -88,6 +88,7 @@
         "actor": { "type": "string" },
         "auto_approved": { "type": "boolean", "default": false },
         "edits_summary": { "type": "string" },
+        "notes": {"type": "string", "description": "The decider's notes, verbatim (P26a, P1-15): a rejection's rationale is the redo instruction and the audit record — it was mandatory at Gate 0 and Gate 2 and then discarded, or overwritten by the next decision. The run log is append-only, so it survives here."},
         "wait_ms": { "type": "integer", "minimum": 0, "description": "Human latency — separated from compute latency so cycle-time reporting can tell the two apart." }
       }
     },

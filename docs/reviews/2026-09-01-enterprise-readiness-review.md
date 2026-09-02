@@ -474,7 +474,7 @@ routes (enumerated), `engine/assistant/`, `engine/cli/`, `engine/intake/`,
 | P1-24 | A buyer question authored as a formula (`='Instructions'!A5`, common) produces NO slot and NO warning: formula cells are excluded from slot text and `data_only=False` reads no cached value. | `engine/structure/facts.py:81` · `classify.py:222` | **P26** rider — parser fidelity group |
 | P1-25 | Intake renders formula SOURCE text into the brief and the model prompt unwarned (`=B2&" "&C2` where the human sees a date); the KB import lane refuses formula cells by name for exactly this reason, intake does not. Formula evaluation is correctly absent. | `engine/intake/extract.py:88` vs `engine/kb/xlsx.py:145-149` | **P26** rider — parser fidelity group |
 | P1-26 | Hidden-content marking is narrower than the stated contract: hidden sheets and rows are marked, hidden COLUMNS are extracted unmarked (`column_dimensions` never consulted) and cannot fire the `hidden_content` flag; the module docstring says "hidden workbook content is extracted AND marked" — a stated property stronger than the implemented one (lessons.md line 11). Unsure, same class: docx `w:vanish` hidden text. | `engine/intake/extract.py:11,94,112` (0 hits for `column_dimensions`) | **P26** rider — parser fidelity group; **the docstring is corrected in P25 item 6's commit** (the file is touched there) |
-| P1-27 | Firm-template authoring scaffolding ships to the buyer: `template_fill` strips only the guidance boxes of filled sections; the "How to Use This Template" front matter, its `Field` table and every `[ Replace with the drafted section. ]` placeholder of an unfilled section survive into `exports/submission/response.docx`; `remaining_guidance` does not list the front matter and nothing blocks the download. | `engine/structure/docx_default.py:76-161` (front matter skipped by the parser, so the fill never sees it) · `engine/assembly/template_fill.py:169,273` | **P26** rider — **owner's call whether it pulls forward** (see B97 §5) |
+| P1-27 | Firm-template authoring scaffolding ships to the buyer: `template_fill` strips only the guidance boxes of filled sections; the "How to Use This Template" front matter, its `Field` table and every `[ Replace with the drafted section. ]` placeholder of an unfilled section survive into `exports/submission/response.docx`; `remaining_guidance` does not list the front matter and nothing blocks the download. | `engine/structure/docx_default.py:76-161` (front matter skipped by the parser, so the fill never sees it) · `engine/assembly/template_fill.py:169,273` | **P26a item 1** — pulled forward (the owner's call, 2026-09-02, B99); ships as the next work-side tag |
 | P2-16 | The download door serves `root / entry["path"]` straight from the on-disk bundle record with no containment re-check; `output_name` is engine-derived today, so unreachable — but the door verifies nothing about the record it trusts. | `engine/web/server.py:751-754` | **P25 item 4** rider (one `is_relative_to` line) |
 | P2-17 | `PURSUIT_ID` is applied only at creation; every other route joins `pursuit_id` into `workspace / pursuit_id` unvalidated — `_pursuit_root("..")` passes `is_dir()` and the following `PursuitDir(workspace, "..")` mkdirs eleven subdirectories in the workspace's PARENT. | `engine/web/server.py:103-107` · `engine/workspace/pursuit.py:40-42` | **P25 item 4** rider (validate in `_pursuit_root`, 422) |
 | P2-18 | The waiver door writes `run_end(status="completed")` before checking the result — a refused waiver gets a mini-run footer claiming success; `approve_waiver` is also uncaught. | `engine/web/server.py:1525-1535` | **P25 item 4** rider |
@@ -522,3 +522,122 @@ test_export.py`, `tests/web/test_addenda.py`) · **P1-18** + the B92 guard pair
 **P1-20, P1-22** (`tests/web/test_events.py`, `test_share.py`,
 `test_org_routes.py`) · **P1-26** (docstring half; the hidden-column marking
 itself stays in P26). Ids remain permanent labels; nothing here renumbers.
+
+### 5.7 Session-36 step-0 sweeps — the never-reviewed modules (2026-09-02, B104)
+
+*The §5.5 coverage list's remainder, executed at P26a kickoff after item 1
+shipped: two read-only agents (extraction beyond the sandbox, evals,
+metrics; flywheel beyond proposals, kb beyond ingest/read/xlsx/curation/
+purge, `web/state.py` + `pings.py` in full) ran against `0f10fb4`. Every
+line below was re-read by the session at its cited site before entry.
+Ids continue the numbering (P1-28 and P2-31 were minted by B101/B103
+mid-slice); every id has exactly one ROADMAP home (the B94 door).
+Coverage is now complete for every package under `engine/`.*
+
+**Planning errata (register citations that moved or half-closed since
+2026-09-01, each re-read at the new line):** `live.py:22-24` (was 22-25) ·
+`server.py:109-110` `_at` (was 101-102) · `orgs.py:64-69` · `writer.py:156-159`
+(run config) · `driver.py:265-267` (pack copy) · `pursuit.py:76-77` (M-11
+mkdir) · `round.py:91-95` / `:127-129` / `:377-548` · `events.py:90` (id
+mint, under `_APPEND_LOCK` since P25) · `server.py:880` / `:1677` (both now
+inside `_mutate` / read-only) · `test_graph_modules.py:158` (blank; nearest
+test :159). **P0-9**: "`docs/releases/` absent" is the public MIRROR's view
+(`deny.txt:15`); four records are tracked in v2 — the real defect is that
+clauses 2–3 emit `pass` on BOTH branches of `if prior is None`
+(`release.py:85-94`), `load_record` has zero callers and is version-keyed,
+`overrides` is always `[]`, and a clause failure would not change the exit
+code. **P2-14**: the three type guards exist (`handoff.py:146,155,165`); the
+defects were the two bare `int()`s (closed, B101). **P1-14**: the
+`run_validation` replay claim is obsolete (P25 item 8 bound its checkpoint);
+the live defects are the re-keyed round checkpoint, the never-cleared
+checkpoint, and the un-deduped finalize. **P1-17**: the `run_id` half
+closed by P25 item 3; the torn-tail half has four faces (resume, two routes,
+the board) plus the jobs journal. **P3-13**: the `effort` half closed by
+P25 item 1; the `PURSUIT_ID.match` half closed by B101. **P0-13**: landed
+by P25 item 3's riders; residual gap `revoke_share` outside `_mutate`.
+
+| # | Finding | Evidence | Home |
+|---|---|---|---|
+| P0-21 | **The guest share view leaks the waiving operator's identity.** `_claim_mark` builds `line = f"waived by {waived_by}: …"` before the guest strip, which removes `waived_by` from `detail` only; `waiver_reason` is not stripped either. `docs/advisor/share-links.md` promises the opposite; `test_share.py:122` asserts the KEY name, on a fixture with no waiver. | `engine/web/state.py:130-133,180-182` | **P26a Group D** rider (with P0-11) |
+| P1-29 | A malformed docker worker result (`IndexError` on empty stdout, `JSONDecodeError` on a trailing line, `ValueError` from `from_dict`, `TimeoutExpired`) escapes `convert` uncaught — the whole intake job dies instead of one document degrading through the `ExtractionFailed` lane. | `engine/extraction/backend.py:105-117` · `engine/intake/extract.py:310` | **P26b** (parser fidelity) |
+| P1-30 | The two-path fabrication tripwire iterates deterministic grids only and is gated on `doc.grids` — a table the deterministic path DROPPED is never diffed. | `engine/extraction/twopath.py:24-28` · `engine/intake/brief.py:417` | **A1 (§A2 rerun)** |
+| P1-31 | The §A2 gate excludes timed-out documents from the p95 denominator and reads neither `failure_behavior` nor the reading-order/OCR measures in `evaluate_kill_criteria` — a timeout flatters throughput and no criterion notices. | `engine/extraction/gate.py:369-373,499,142-207` | **A1 (§A2 rerun)** |
+| P1-32 | `production_only` keys run headers by `run_id`, which is unique only WITHIN a pursuit — across the flattened corpus `run_0001` collides, last pursuit wins, and a bench run in one pursuit silently drops (or admits) another pursuit's production records. The metrics fixture has one pursuit. | `engine/metrics/walker.py:109-112` · `engine/metrics/resolver.py:73` | **P26a Group E** rider (with P0-15) |
+| P1-33 | `extraction_fabrication_count` reads `two_path.tables_diffed` on a FILENAME-keyed dict the writer produces — the critical-alert metric can never fire; it renders as "absent". | `engine/metrics/resolver.py:412-413` · `engine/intake/brief.py:432,446,460` | **P26a Group E** rider |
+| P1-34 | `injection_screen_flags` counts every screen line (`pass` and `flag`) — the registry's "zero forever means the screen is dead" liveness signal is destroyed — and is the one resolver returning `0.0` on an empty corpus against the module's absent-is-not-zero law. | `engine/metrics/resolver.py:341-345` · `engine/intake/brief.py:401-404` | **P26a Group E** rider |
+| P1-35 | The board's stage and the review model still decide on artifact EXISTENCE while the driver decides on hash bindings (P25 item 8): after a replan the board says `review` / `validated` over an annotation bound to a plan that no longer exists. The docstring claims parity with the driver. | `engine/web/state.py:58-59,81-89,116-118,194-198` | **P26a Group C** rider (with P2-20) |
+| P1-36 | A ping answer's TEXT lives only in the mutable plan/brief, written by the caller AFTER the journal line; a failure between the two loses the SME's answer and the ping refuses to be answered again. | `engine/web/pings.py:125-127,138-142` · `server.py:1165` | **P26a Group C** rider (with P0-14) |
+| P1-37 | Re-ingest stops being idempotent after a drift: the drifted card keeps the OLD id, its new content hash is recorded nowhere the matcher looks, so the same unchanged bytes re-classify as drifted (drift 0.0) on every later ingest — version bumps, snapshot moves, a false `reconciliation: flag`. v1→v2→v2 is untested. | `engine/kb/ingest.py:513-522,528,620-622` · `tests/kb/test_reingest.py:69,87` | **P26b** (KB curation) |
+| P1-38 | Two reconciliations of the same source bytes against different priors write the SAME report path (`doc_id-canonical_doc_id`), the second erasing the first's drift record. | `engine/kb/reconcile.py:129-139` | **P26b** |
+| P1-39 | `ProposalStore.decide` has no state machine: an accepted proposal can be re-decided `rejected` from the reject route, replacing the `decided` block wholesale while the curation log still records the merge. The docstring claims "nothing is deleted". | `engine/flywheel/proposals.py:85-91` · `server.py:596-598` | **P26b** (with P1-13) |
+| P1-40 | The firm KB has no mutual exclusion: `merge_batch`'s "a decision is made once" is check-then-act and the KB routes take no guard (`_mutate` is per-pursuit), so two stewards interleave and both curation-log snapshot pairs lie. Distinct from P1-21 (atomicity within one batch). | `engine/kb/curation.py:328-344` · `server.py:583-613` | **P26b** (with P1-21) |
+| P1-41 | The flywheel is a library nothing calls: `write_card_signals` and `route_edits` have zero engine call sites, so no card ever gains `edit_survival` (the retrieval tie-break can never fire), no edit is ever routed, and `lesson_to_draft_lag_days` can only be absent. Metrics are honestly absent, not falsely zero. | `engine/flywheel/survival.py:79,7-8` · `routing.py:79` · `server.py` `accept_pursuit` | **P26b** (the flywheel wiring at accept; A4 calibrates it) |
+| P2-32 | `_bar_misses`: a missing measure passes a ceiling (`_max`) bar and fails a floor bar — dropping a key behind `false_gap_rate_max` silently clears it. | `engine/evals/release.py:31,43` | **P26a Group E** rider (with P0-9) |
+| P2-33 | A lane carrying any `status` is never scored against its own bars (`misses = [entry["status"]]`); latent today (only `baseline_stale`/`not_measured_live` reach it). | `engine/evals/release.py:57-63` | **P26a Group E** rider (with P0-9) |
+| P2-34 | `write_record` clobbers `docs/releases/<version>/eval-results.json` in place with no archive — the rebaseline history discipline is absent for release records. | `engine/evals/release.py:148,157-163` | **P26a Group E** rider (with P0-9) |
+| P2-35 | The four fingerprint locks prove the environment, never the number: `check_baseline` compares fingerprints stored beside the measures in the same file; an edited recall clears a blocking bar. Commit review is the only control. | `engine/evals/claim_extraction.py:216-243` · `rebaseline.py:164` | **P26b** (eval integrity before A1's re-baseline) |
+| P2-36 | Every eval-lane rate returns a vacuous 1.0/0.0 on an empty denominator and no lane declares a minimum n — a cases file that stops marking any case `must_flag` re-baselines to a perfect number. | `engine/evals/claim_extraction.py:156-159` · `mapper.py:97-101` · `voice.py:67` · `intake.py:85,91` · `structure.py:141` · `trajectory.py:145` · `consistency.py:110` | **P26b** |
+| P2-37 | `remeasure`'s "live" is a self-declared keyword (nothing checks `RFP_LIVE` or the caller), and its `RECORDED_BASELINE` is a hand-typed copy with no drift pin. | `engine/evals/remeasure.py:39-43,82-94` | **P26b** |
+| P2-38 | The sandbox child's result-file write sits outside its try/except and is not atomic — a non-serializable value leaves a truncated but EXISTING result the parent json-loads into an uncaught error, the original lost. | `engine/extraction/_child.py:66-77` | **A1 (§A2 rerun)** |
+| P2-39 | The in-process sandbox's network denial patches `connect`/`getaddrinfo` but not `sendto`/`sendmsg` (UDP, DNS to a literal IP); the docker lane's `--network none` is the outer wall. | `engine/extraction/_child.py:30-33` | **A5** (with the container lane) |
+| P2-40 | `_docker_ready` probes the daemon with no timeout — an unresponsive daemon hangs `resolve_backend()` and wedges the job worker before any conversion (P0-1's class, second site). | `engine/extraction/backend.py:64-67` | **A1 (§A2 rerun)** |
+| P2-41 | A `docker run` timeout kills the CLI, not the container — orphans accumulate with their 12 GB ceiling and mounts. | `engine/extraction/backend.py:105-109` | **A1 (§A2 rerun)** |
+| P2-42 | `cycle_time_days` sums engine `wall_ms` and divides by pursuits — the registry's formula is `submission_date − receipt_date` over `run_log` AND `crm`, and `crm` is in `UNSOURCED_STREAMS`; every other crm-sourced metric is honestly unsourced, this one returns a plausible number. `submission_volume` is the weaker sibling. | `engine/metrics/resolver.py:376-389,39-42,477-478` | **P26a Group E** rider |
+| P2-43 | Two bench-view absences report the wrong reason: `_r_false_gap_rate` sets no `absent_reason` (generic text), `eval_pass_state`'s slot still says "lands later in P10". | `engine/metrics/resolver.py:369-373,491,546-547` · `views.py:74-76` | **P26a Group E** rider (with P0-9) |
+| P2-44 | `PursuitRecords.torn_lines` is recorded and read by nobody — a torn `run_end` drops that run's totals from every totals metric with no reader ("recorded, never silent" has no surface). | `engine/metrics/walker.py:49,76` · `resolver.py:64-91` · `views.py:83-89` | **P26a Group C** rider (with P1-17) |
+| P2-45 | `text_survival` leaves `SequenceMatcher`'s autojunk on: past 200 characters the score is length- and repetition-dependent (measured: one changed word in a 1,550-char section scores 0.80), so cross-section averages compare incomparable numbers; the suite's fixture is 156 chars. | `engine/flywheel/survival.py:38` · `tests/flywheel/test_survival.py:20` | **P26b** (with P1-41) |
+| P2-46 | The restricted store's L0 read doors (`source_meta`, `source_exists`, `list_source_ids`, `absorbed_owner`) and `reconcile.prior_models` bypass the access log and authorization the module's own law states; `source_meta` carries the real `source_client`. No route exposes it. | `engine/kb/provenance.py:5-8,132-148,195-203` · `reconcile.py:70-71` · `ingest.py:448-454` | **P26b** (with P1-13) |
+| P2-47 | Ping escalation runs on a caller-supplied clock on both read routes (`?at=`) and on the record itself (`pinged_at` from the payload) — P0-18's principle unapplied to this lane, P0-11's backdating on the escalation record. | `engine/web/server.py:1198-1206,109-110` · `pings.py:211-218` | **P26a Group D** rider (with P0-11) |
+| P2-48 | The server clock is NAIVE (`strftime` without `Z`) while `_parse` accepts the `Z` form — one legal `POST …/ping {"at": "…Z"}` stamps an aware `pinged_at` and every later `GET /api/pings` (naive clock) 500s for EVERY pursuit, with no repair door on an append-only record. The suite's `FIXED_AT` is naive, so the aware branch is never exercised. | `engine/web/pings.py:32-33,211` · `server.py:59-60` | **P26a Group D** rider (with P0-11 — the server-stamped clock removes the client input; `_parse` normalizes) |
+| P2-49 | One corrupt file in one pursuit (torn `brief.json`, torn run-log line) 500s the whole board — `_read_json`/`read_run` raise straight out of `board()`. | `engine/web/state.py:24-27,36,100-101` | **P26a Group C** rider (with P1-17) |
+| P2-50 | `infer_edit_reason` compares the SET of digit characters — 1,200→2,100, 2024→2042, 12→21 read as "no number changed" and route nowhere. | `engine/flywheel/routing.py:51,59,63` | **P26b** (with P1-41) |
+| M-14 | `gate.py:385` aliases one dict into both slots of `_empty` (read-only today). | `engine/extraction/gate.py:385` | opportunistic (A1 §A2 rerun) |
+| M-15 | The gate report records no digest of the answer key or the corpus builder. | `engine/extraction/gate.py:331-354` | A1 (§A2 rerun) |
+| M-16 | A VLM leg that fails to RUN is appended to `vlm_findings` and reads as fabrication. | `engine/extraction/gate.py:481,175` | A1 (§A2 rerun) |
+| M-17 | `_tree_files` hides dot-prefixed paths from both the manifest and the extras check. | `engine/extraction/weights.py:51-55,121-128` | A1 (§A2 rerun) |
+| M-18 | `media.py` promises `FigureView` objects or dicts; the inner loop is dict-only. | `engine/extraction/media.py:26-29` | opportunistic |
+| M-19 | `files_fingerprint` concatenates bytes with no separator or path (ambiguous by construction; fixed lists today). | `engine/evals/cases.py:35-41` | opportunistic (P26b) |
+| M-20 | `load_trace` joins a case-supplied name into two directories with no containment check and falls through to the live-run directory (cases are committed). | `engine/evals/trajectory.py:30-39` | opportunistic (P26b) |
+| M-21 | `max_cost_usd` treats a call missing `cost_usd` as free (the no-calls case is guarded). | `engine/evals/trajectory.py:90-92` | opportunistic (P26b) |
+| M-22 | `resolver.py:23` says "30 registry entries"; there are 35 (36 after P0-15). | `engine/metrics/resolver.py:23` | P26a Group E (with P0-15) |
+| M-23 | `extraction.json` is json-loaded with no guard in a resolver — one corrupt artifact takes down the view render (P0-14's class). | `engine/metrics/resolver.py:411` | P26a Group C (with P0-14) |
+| M-24 | `Corpus.runs()` re-flattens per call; `_r_fact_sheet_staleness` calls it twice in three lines (correctness-neutral). | `engine/metrics/resolver.py:72-74,334` | opportunistic |
+| M-25 | `_last_run_status` sorts run files lexicographically while `latest_run_id_in` sorts numerically (correct while ids stay 4-digit; the helper exists and is unused). | `engine/web/state.py:44-54` · `workspace/pursuit.py:45-49` | P26a Group C (with P2-20) |
+| M-26 | The anonymization eval has no non-vacuity guard: a case with neither `labels` nor `must_not_contain` skips silently (`expected` is not required by the schema); all 22 cases carry labels today. | `engine/kb/evalset.py:143-148` · `schemas/eval-case.schema.json:7` | P26b |
+| M-27 | The same harness inspects `cards/*.md` only while ingestion scans the L1 model too — an identifier surviving into `kb/canonical/` but not a card is invisible to the suite. | `engine/kb/evalset.py:131-134` · `ingest.py:555-566` | P26b |
+| M-28 | `descend` reads its anchor card with no `use_restriction` check and emits its heading path — a restricted card's document position is enumerable through the assistant; neighbours are correctly excluded. | `engine/kb/retrieve.py:210-220,245-256` · `assistant/tools.py:125-138` | P26b (with P1-13) |
+| M-29 | `card_search` applies the per-query `exclude` set BEFORE idf, which `rank.py`'s corpus-statistics law forbids; no caller passes `exclude` today. | `engine/kb/retrieve.py:161-172` · `rank.py:5-6` | opportunistic (P26b) |
+| M-30 | `ProposalStore.list` json-loads every `prop_*.json` with no defence — one hand-authored bad file 500s the steward inbox (torn writes closed by P0-6). | `engine/flywheel/proposals.py:73-78` | P26b (with P1-39) |
+| M-31 | `pings.py` still hand-rolls append+fsync beside the new `append_fsync`; and no atomic writer fsyncs the containing DIRECTORY after `os.replace` (the rename itself is not crash-durable — documented limit). | `engine/web/pings.py:41-46` · `engine/contracts/atomic.py` | P26a Group B (the append; the directory fsync is a documented limit) |
+
+**Confirmations worth the record (checked sound):** spend discipline in evals (every live path behind `--live` + `LiveCaller`'s three refusals; one `SpendBudget`; a crashed live run still closes its log); baseline archive-before-overwrite; `code_fingerprint` a real fourth lock; the intake and voice lanes' denominators drift-pinned; the registry/resolver bijection; the docker command injection-free (`argv`, `:ro`, `--network none`); weights verification bidirectional; ping and gap id minting under `_mutate` (not a P1-20 sibling); the attribution join exactly as claimed; `emit_kb_retrieval` a real choke point; the card render/parse round trip; `snapshot_id` honest; reconciliation's matcher deterministic and unable to classify a drift as `matched`; store path handling not a traversal risk beyond P2-23; the access log writes before it authorizes; the evalset exclusion control structural; `pursuit_memory` unable to reach the fact sheet; three-state discipline in `state.py` and the flywheel metrics.
+
+### 5.8 P26a closure (2026-09-02, B109)
+
+Closed by P26a, each with a named test in the suite: **P1-27** (item 1 — the
+hand-completion door + the two-copy fill; `tests/assembly/test_template_fill.py`,
+`test_hand_fill.py`, `tests/web/test_template_fill_web.py`, `test_hand_fill_web.py`)
+· **P0-1, P1-16, P1-28, P2-15, P2-14, P3-13** (Group A; `tests/llm/test_live_caller.py`,
+`test_sdk_shape.py`, `test_handoff_caller.py`, `tests/contracts/test_llm_boundary.py`,
+`tests/web/test_payload_types.py`) · **P0-6, M-11, P1-14, P2-29b, P2-31, M-31**
+(Group B; `tests/contracts/test_atomic_writes.py`, `tests/revision/test_round_crash.py`,
+`tests/drafting/test_control_chars_draft.py`, `tests/revision/test_round_control_chars.py`,
+`tests/web/test_comment_control_chars.py`, `test_export_control_chars.py`,
+`tests/contracts/test_draft_prose_pattern.py`) · **P1-17, P2-20, P0-14, P1-35, P1-36,
+P2-44, P2-49, M-23, M-25** (Group C; `tests/runlog/test_torn_tail.py`,
+`tests/web/test_jobs_close_runs.py`, `test_runs_read_model.py`, `test_board_truth.py`,
+`tests/cli/test_recovery_runbook.py`) · **P0-10, P1-15, P0-11, P0-13, P0-21, P2-47,
+P2-48** (Group D; `tests/contracts/test_advisor_docs.py`, `tests/web/test_server_clock.py`,
+`test_share_waiver_privacy.py`, `tests/strategy/test_gate_notes_survive.py`,
+`tests/contracts/test_runlog_gate_notes_schema.py`) · **P0-9, P2-32, P2-33, P2-34, P0-15,
+P1-32, P1-33, P1-34, P2-42, P2-43, M-22, P0-12** (Group E;
+`tests/evals/test_release_regression.py`, `test_trajectory_pattern.py`,
+`tests/metrics/test_sweep_riders.py`, `tests/contracts/test_gate_dockerfile.py`,
+`test_lock_hashes.py`). Suite at close: 1687. Ids remain permanent labels;
+nothing here renumbers.
+
+**Finding at the close (B109 §4), home A1 §A2 rerun:** an unconstrained rebuild
+of the gate image resolved docling 2.124 / ibm-models 4.0, under which the
+ruled-table PDF extracts with zero grids and three more container tests fail —
+the container install is now constrained by `requirements-extraction.lock`, and
+the next deliberate docling bump re-runs the gate before the lock moves.

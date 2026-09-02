@@ -43,7 +43,8 @@ never `uv run` inside the repo):
 
 ```
 uv venv --python 3.11 .venv
-uv pip install -r requirements.lock -e .
+uv pip install --require-hashes -r requirements.lock
+uv pip install --no-deps -e .
 ```
 
 Then prove the copy: `make check` must be green before the first pursuit.
@@ -98,6 +99,46 @@ refusal, not a bug. The request file remains in `pending-calls/` as the
 honest record. Start (or fix) the answering session and press **Advance**
 in the UI again: the engine re-issues new requests and resumes; pairs are
 never deleted, so the audit trail survives the stall.
+
+## Recovery: torn and corrupt files
+
+Every durable record is written atomically or appended with an fsync per
+line, so a crash leaves a file either intact, complete, or — for an
+append-only record — with one torn FINAL line. Anything else is
+corruption, and corruption is evidence: the engine refuses it by name and
+never repairs it silently. What to do, by record:
+
+- **A run log (`runs/<run_id>/run.jsonl`) with a torn final line.**
+  Automatic. The next resume of that run truncates the torn bytes (fsync'd)
+  and records the repair as an `error` line with code `torn_tail_truncated`;
+  the runs list shows `torn_tail` until then. Diagnosis from a shell:
+  `.venv/bin/python -m engine check-run pursuits/web/<pursuit_id>/runs/<run_id>/run.jsonl`
+  exits nonzero and names the torn line.
+- **A run log with a torn or invalid line anywhere EARLIER.** Stop. The
+  run is evidence — never edit it. The same check names the line number.
+  The board marks the pursuit `corrupt` on its own row (the other pursuits
+  keep rendering); the next **Advance** opens a new run, and the damaged
+  run stays on disk for the build side.
+- **A run without a footer (`unclosed` in the runs list).** The job lane
+  closes a crashed job's run with a `failed` footer, and a server restart
+  closes the runs of jobs it found mid-flight. An `unclosed` run that
+  survives a restart is a hard kill; it costs nothing to leave — every
+  metric counts only closed runs.
+- **The jobs journal (`jobs.jsonl`) with a torn final line.** Automatic at
+  the next server start; the line is dropped and the restart proceeds.
+- **A checkpoint (`checkpoints/<stage>.json`) that will not parse.** Delete
+  that one file; the stage re-runs from its predecessor's artifact on the
+  next **Advance**. Never delete `*.frozen.json` — a frozen artifact is
+  rewritten only by resubmitting its gate.
+- **`drafts/annotated-draft.json` unreadable.** The board's row says
+  `corrupt` and names the file; the next **Advance** re-runs validation and
+  rewrites it (the annotated draft is rebuilt, never patched).
+- **`brief.json` or `plan.json` unreadable.** The board names the file. If
+  a frozen copy exists (`brief.frozen.json`, `plan.frozen.json`) it is the
+  authoritative record and the build side restores the live file from it;
+  the pilot host does not hand-edit either.
+- **The knowledge base.** Out of this runbook's scope: a KB file problem is
+  reported to the build side, which runs the reconciliation tooling.
 
 ## Keeping the copy honest
 

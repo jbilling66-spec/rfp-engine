@@ -16,6 +16,8 @@ import re
 import secrets
 from pathlib import Path
 
+from engine.contracts import append_fsync
+
 from engine.runlog.writer import RunLogger
 
 SESSION_CEILING_USD = 5.0
@@ -62,9 +64,9 @@ class AssistantSession:
     # -- transcript --------------------------------------------------------
 
     def append(self, record: dict) -> None:
-        with self.transcript_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, sort_keys=True,
-                               separators=(",", ":")) + "\n")
+        append_fsync(self.transcript_path,
+                     json.dumps(record, sort_keys=True,
+                                separators=(",", ":")))  # P0-6
 
     def transcript(self) -> list[dict]:
         if not self.transcript_path.exists():

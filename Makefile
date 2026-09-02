@@ -30,8 +30,15 @@ eval:
 # Re-pin the dependency lock after an intentional dependency change.
 # uv-created venvs carry no pip module (B87 §2: `python -m pip` died
 # there silently), so the freeze goes through uv against $(PY)'s env.
+# P26a P0-12: a HASHED lock compiled from pyproject. The current lock is the
+# constraint set, so `make lock` re-pins today's versions with hashes and never
+# upgrades silently — a version move is a deliberate edit of the constraint
+# (delete the old pin line first), reviewed as a diff, never a hand splice.
 lock:
-	uv pip freeze --exclude-editable --python $(PY) > requirements.lock
+	cp requirements.lock .lock-constraint.tmp
+	uv pip compile pyproject.toml --extra dev --generate-hashes \
+	  --no-header --no-annotate --python $(PY) \
+	  -c .lock-constraint.tmp -o requirements.lock; rm -f .lock-constraint.tmp
 
 # P12 extraction gate (B51): container-first — the host never installs
 # docling. Builds native-arch Linux (B54: amd64 pin dropped with the Intel
@@ -66,7 +73,7 @@ extraction-models:
 # finding, never an auto-refreeze). Same check the benchmark queue runs
 # as its Stage 0.
 weights-verify:
-	docker run --rm -v "$(CURDIR)":/work -w /work $(GATE_IMAGE) \
+	docker run --rm -v "$(CURDIR)":/work:ro -w /work $(GATE_IMAGE) \
 	  python -m engine.extraction.weights verify
 
 # Container test leg WITHOUT re-rendering the gate verdict (C9): verifies

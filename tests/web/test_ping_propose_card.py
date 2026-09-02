@@ -50,7 +50,7 @@ def ping_client(tmp_path_factory):
 
 def _ping(client, gap_id):
     r = client.post(f"/api/pursuits/pur_pingcard/gaps/{gap_id}/ping",
-                    json={"route_to": "sme", "at": FIXED_AT})
+                    json={"route_to": "sme"})
     assert r.status_code == 200, r.text
     return r.json()["ping_id"]
 
@@ -63,7 +63,7 @@ def test_opt_in_answer_spawns_a_steward_proposal(ping_client):
     r = client.post(
         f"/api/pursuits/pur_pingcard/pings/{ping_id}/answer",
         json={"answer": "We convert in four validated waves.",
-              "propose_card": True, "at": FIXED_AT})
+              "propose_card": True})
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["proposal"].startswith("prop_")
@@ -85,8 +85,7 @@ def test_plain_answer_spawns_nothing(ping_client):
     ping_id = _ping(client, gap_id)
     r = client.post(
         f"/api/pursuits/pur_pingcard/pings/{ping_id}/answer",
-        json={"answer": "Training is train-the-trainer.",
-              "at": FIXED_AT})
+        json={"answer": "Training is train-the-trainer."})
     assert r.status_code == 200
     assert "proposal" not in r.json()
     assert len(ProposalStore(ws / "kb").list()) == before

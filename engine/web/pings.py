@@ -18,9 +18,10 @@ live-copy-vs-record pattern; the frozen plan never moves).
 """
 
 import json
-import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from engine.contracts import append_fsync, read_jsonl
 
 ESCALATION_HOURS = 24  # N4: unanswered past this => escalate
 
@@ -30,7 +31,14 @@ class PingError(ValueError):
 
 
 def _parse(at: str) -> datetime:
-    return datetime.fromisoformat(at.replace("Z", "+00:00"))
+    """Naive strings are the server's own UTC clock (no suffix); aware
+    strings carry Z or an offset. Both normalize to aware UTC so an age
+    can always be computed (P2-48: one aware record used to 500 the
+    whole cross-pursuit inbox)."""
+    parsed = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 class PingLane:
@@ -40,17 +48,12 @@ class PingLane:
 
     def _append(self, line: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(line, sort_keys=True) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
+        append_fsync(self.path, json.dumps(line, sort_keys=True))  # M-31
 
     def _folded(self) -> dict[str, dict]:
-        if not self.path.exists():
-            return {}
+        records, _torn = read_jsonl(self.path)  # P1-17: a torn tail tolerated
         out: dict[str, dict] = {}
-        for raw in self.path.read_text(encoding="utf-8").splitlines():
-            line = json.loads(raw)
+        for line in records:
             out[line["ping_id"]] = {**out.get(line["ping_id"], {}), **line}
         return out
 
@@ -136,7 +139,11 @@ class PingLane:
         section_id, gap, lane = self._find_gap(doc, record["gap_id"])
         self._refuse_if_frozen(lane)
         update = {"ping_id": ping_id, "answered_at": at,
-                  "resolution": "answered", "answered_by": actor}
+                  "resolution": "answered", "answered_by": actor,
+                  # P1-36: the SME's TEXT lives on the append-only record
+                  # too — the live plan/brief write that follows can fail,
+                  # and a ping refuses to be answered twice
+                  "answer": answer}
         self._append(update)
         gap["status"] = "answered"
         gap["answer"] = answer

@@ -71,6 +71,7 @@ exactly these files.
 | eval_case | eval-case.schema.json |
 | eval_results | eval-results.schema.json |
 | feedback_event | feedback-event.schema.json |
+| hand_fill | hand-fill.schema.json |
 | kb_card | kb-card.schema.json |
 | kb_proposal | kb-proposal.schema.json |
 | manifest | manifest.schema.json |

@@ -33,10 +33,10 @@ FEEDBACK_KIND_ENUM = set(
 )
 
 
-def test_registry_has_35_unique_metric_ids():
+def test_registry_has_36_unique_metric_ids():
     ids = [m["metric_id"] for m in REGISTRY]
-    assert len(ids) == 35  # 30 -> 35 at P13/C18 (B51's §A6 metrics)
-    assert len(set(ids)) == 35
+    assert len(ids) == 36  # 30 -> 35 at P13/C18 (B51's §A6 metrics); 36 at P26a (P0-15)
+    assert len(set(ids)) == 36
 
 
 @pytest.mark.parametrize("metric", REGISTRY, ids=lambda m: m["metric_id"])

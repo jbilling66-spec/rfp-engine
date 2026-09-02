@@ -230,14 +230,25 @@ def trajectory_lane() -> dict:
     the committed P8 LIVE run (real traffic, so a clean verdict means
     something); violations are hand-built record lists because the
     emitter refuses to write them (retrieve.py raises at write time)."""
-    from engine.evals.trajectory import evaluate_trajectory_set
+    from engine.evals.trajectory import (
+        evaluate_trajectory_set,
+        slice_call_pattern,
+    )
 
     report = evaluate_trajectory_set()
+    pattern = slice_call_pattern()  # P0-9 clause 2's inputs (P26a)
+    measures = {k: report[k] for k in (
+        "pass_rate", "n_cases", "n_violation_cases",
+        "violations_detected", "failures")}
+    if pattern.get("status") == "ok":
+        measures.update({k: pattern[k] for k in (
+            "cost_per_section", "tool_calls_per_section",
+            "drafted_sections", "agent_calls")})
+    else:
+        measures["call_pattern_unavailable"] = pattern
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(TRAJECTORY_BAR),
-            "measures": {k: report[k] for k in (
-                "pass_rate", "n_cases", "n_violation_cases",
-                "violations_detected", "failures")},
+            "measures": measures,
             "detail": ("the 7 assertion verbs in eval-case.schema.json had "
                        "zero users before P10; three are exercised by "
                        "planted violations and the rest by live traces")}

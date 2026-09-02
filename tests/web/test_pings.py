@@ -45,7 +45,7 @@ def gapped(tmp_path_factory):
     client.post("/api/pursuits/pur_ping/gate1",
                 json={"decision": "approved", **ROLE})
     job = client.post("/api/pursuits/pur_ping/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     wait_job(client, job["id"])
     g2 = client.get("/api/pursuits/pur_ping/gate2").json()
     open_gaps = [(s["section_id"], g["gap_id"], g["slot_id"])
@@ -63,12 +63,12 @@ def gapped(tmp_path_factory):
         **ROLE})
     # drafting stops awaiting_gap (the open gap pends its slot)...
     job = client.post("/api/pursuits/pur_ping/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     done = wait_job(client, job["id"], timeout=120)
     assert "awaiting_gap" in done["message"]
     # ...and the next advance validates the drafted sections regardless
     job = client.post("/api/pursuits/pur_ping/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     done = wait_job(client, job["id"], timeout=120)
     assert done["state"] == "done", done["message"]
     yield client, ws, kept_open
@@ -78,14 +78,16 @@ def gapped(tmp_path_factory):
 def test_ping_escalates_at_24h(gapped):
     client, ws, (sid, gap_id, slot_id) = gapped
     r = client.post(f"/api/pursuits/pur_ping/gaps/{gap_id}/ping",
-                    json={"route_to": "sme", "at": FIXED_AT, **ROLE})
+                    json={"route_to": "sme", **ROLE})
     assert r.status_code == 200
     ping = r.json()
     # T+23:59 — not escalated; T+24:01 — escalated with the routed alert
-    fresh = client.get(f"/api/pings?at={T_23H59}").json()
+    client.app.state.clock = lambda: T_23H59  # P2-47: the SERVER clock moves
+    fresh = client.get("/api/pings").json()
     row = next(x for x in fresh if x["ping_id"] == ping["ping_id"])
     assert row["escalated"] is False and "alert" not in row
-    late = client.get(f"/api/pings?at={T_24H01}").json()
+    client.app.state.clock = lambda: T_24H01
+    late = client.get("/api/pings").json()
     row = next(x for x in late if x["ping_id"] == ping["ping_id"])
     assert row["escalated"] is True
     assert row["alert"]["route_to"] == "pursuit_lead"
@@ -98,7 +100,7 @@ def test_ping_escalates_at_24h(gapped):
     assert any(g["gap"]["gap_id"] == gap_id for g in gap_lines)
     # a second ping of the same gap refuses (it is pinged, not open)
     again = client.post(f"/api/pursuits/pur_ping/gaps/{gap_id}/ping",
-                        json={"at": FIXED_AT, **ROLE})
+                        json={**ROLE})
     assert again.status_code == 409
 
 
@@ -108,17 +110,17 @@ def test_answer_never_escalates_and_completes_next_round(gapped):
     ping = next(p for p in inbox if p["gap_id"] == gap_id)
     r = client.post(
         f"/api/pursuits/pur_ping/pings/{ping['ping_id']}/answer",
-        json={"answer": "Use the parallel-run standard: four cycles.",
-              "at": FIXED_AT, **ROLE})
+        json={"answer": "Use the parallel-run standard: four cycles.", **ROLE})
     assert r.status_code == 200
     # an answered ping never escalates, however late the clock
-    late = client.get(f"/api/pings?at={T_24H01}").json()
+    client.app.state.clock = lambda: T_24H01
+    late = client.get("/api/pings").json()
     row = next(x for x in late if x["ping_id"] == ping["ping_id"])
     assert "escalated" not in row and row["resolution"] == "answered"
     # double answer refuses
     assert client.post(
         f"/api/pursuits/pur_ping/pings/{ping['ping_id']}/answer",
-        json={"answer": "again", "at": FIXED_AT, **ROLE}
+        json={"answer": "again", **ROLE}
     ).status_code == 409
     # D15: the next revise round DRAFTS the previously-awaiting slot
     envelope = json.loads(
@@ -128,7 +130,7 @@ def test_answer_never_escalates_and_completes_next_round(gapped):
                        if a.get("status") == "awaiting_disposition"]
     assert slot_id in awaiting_before
     job = client.post("/api/pursuits/pur_ping/revise",
-                      json={"at": FIXED_AT})
+                      json={})
     done = wait_job(client, job.json()["id"], timeout=120)
     assert done["state"] == "done", done["message"]
     envelope = json.loads(
@@ -152,8 +154,7 @@ def test_mid_review_gap_opening(gapped):
     client, ws, (sid, _, _) = gapped
     r = client.post("/api/pursuits/pur_ping/gaps", json={
         "section_id": sid,
-        "question": "Do we hold the state-specific license this asks for?",
-        "at": FIXED_AT, **ROLE})
+        "question": "Do we hold the state-specific license this asks for?", **ROLE})
     assert r.status_code == 200
     gap = r.json()
     assert gap["gap_id"].startswith("gap_pur_ping_review_")

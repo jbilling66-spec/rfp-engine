@@ -19,9 +19,19 @@ echoed to stderr so retries are never invisible; after primary transport
 exhaustion, ONE attempt at the tier's fallback model (N5's tested-fallback
 demand — the fallback path is exercised under a stub client in the suite).
 
-Deliberately absent, each with its closer: request timeouts -> A6 (circuit
-breakers); rate-limit strategy beyond backoff -> A6; validation-error
-feedback loops -> stages own pend-and-report (B34(19), revisit at P9).
+Timeouts and retry honesty (P26a Group A — P0-1, P1-16): every request
+carries an explicit timeout (DEFAULT_TIMEOUT_S; the SDK's adaptive
+ten-minute default switches off under it), the SDK's own retry ladder is
+OFF (max_retries=0) so ours is the only one and CallResult.retries counts
+every retry that happened, and an exception with no HTTP status is a
+TRANSPORT error only when it is the SDK's connection/timeout class — any
+other status-less exception is an internal defect, surfaced on attempt
+one, never retried, never fallen back (an internal bug must not become
+extra spend).
+
+Deliberately absent, each with its closer: circuit breakers -> A6;
+rate-limit strategy beyond backoff -> A6; validation-error feedback
+loops -> stages own pend-and-report (B34(19), revisit at P9).
 """
 
 import datetime
@@ -33,6 +43,18 @@ from pathlib import Path
 
 from engine.llm.caller import CallResult, live_allowed
 from engine.llm.config import MODELS_YAML, model_prices
+
+
+def _is_transport_error(exc: BaseException) -> bool:
+    """The SDK's connection/timeout errors carry no status and ARE
+    transient; everything else status-less is not (P1-16)."""
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    try:
+        import anthropic  # deferred, like _get_client
+    except ImportError:  # pragma: no cover — the live path cannot run then
+        return False
+    return isinstance(exc, anthropic.APIConnectionError)
 
 
 class LiveCallError(RuntimeError):
@@ -53,6 +75,12 @@ class _TransportExhausted(LiveCallError):
 
 
 _BACKOFFS = (2.0, 4.0)  # three attempts total: try, +2s, +4s
+
+# P0-1: one request's wall-clock ceiling. max_tokens=8192 at a slow
+# ~60 tok/s is ~140s; 180s leaves queueing headroom without letting a
+# hung socket wedge the single job worker for the SDK's ten minutes.
+# One line + a B-entry to change (the upload-cap precedent, P25 item 6).
+DEFAULT_TIMEOUT_S = 180.0
 
 _SUBMIT_TOOL = {
     "name": "submit_result",
@@ -105,7 +133,8 @@ class LiveCaller:
     prices=model_prices()["prices"] — an untraced live call must not exist."""
 
     def __init__(self, *, models_yaml: Path = MODELS_YAML, client=None,
-                 max_tokens: int = 8192, sleep=None, today=None):
+                 max_tokens: int = 8192, sleep=None, today=None,
+                 timeout_s: float = DEFAULT_TIMEOUT_S):
         if not live_allowed():
             raise LiveCallError(
                 "live caller refused construction: RFP_LIVE=1 is not set "
@@ -132,15 +161,22 @@ class LiveCaller:
                 "from the environment. Nothing was called.")
         self._client = client  # injectable; the real one is built lazily
         self.max_tokens = max_tokens
+        self.timeout_s = float(timeout_s)
         self._sleep = sleep if sleep is not None else __import__("time").sleep
 
     # -- transport ---------------------------------------------------------
+
+    def _client_kwargs(self) -> dict:
+        """P0-1 / P1-16: the explicit timeout, and NO SDK-side retries —
+        our ladder is the only one, so `retries` on the CallResult (the
+        registered retry_rate metric's sole input) counts every retry."""
+        return {"timeout": self.timeout_s, "max_retries": 0}
 
     def _get_client(self):
         if self._client is None:
             import anthropic  # deferred: the suite never needs the package wired
 
-            self._client = anthropic.Anthropic()
+            self._client = anthropic.Anthropic(**self._client_kwargs())
         return self._client
 
     def _request(self, client, model: str, prompt: str, system: str):
@@ -197,6 +233,14 @@ class LiveCaller:
                 response = self._request(client, model, prompt, system)
             except Exception as exc:  # only the client call is inside the try
                 status = getattr(exc, "status_code", None)
+                if status is None and not _is_transport_error(exc):
+                    # P1-16: no HTTP status and not the SDK's connection or
+                    # timeout class = OUR defect, surfaced on attempt one —
+                    # never retried through the ladder, never fallen back
+                    raise LiveCallError(
+                        f"{model}: internal error before the request "
+                        f"completed ({type(exc).__name__}: {exc}) — not "
+                        f"retried, not fallen back") from exc
                 transient = (status in (408, 429)
                              or (isinstance(status, int) and status >= 500)
                              or status is None)

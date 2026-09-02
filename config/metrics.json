@@ -865,5 +865,63 @@
     ],
     "owner": "system_owner",
     "status": "active"
+  },
+  {
+    "metric_id": "requirement_coverage",
+    "name": "Requirement coverage",
+    "family": "quality",
+    "definition": "Share of drafted sections whose coverage check passed: every slot the plan owed is answered, omissions state their line, flagged slots carry their flag, and the canonical block is reproduced (engine/validation/checks.py's coverage rules). The cheapest honest answer to 'did the response address what the buyer asked?' (P26a, P0-15).",
+    "formula": "count(validation where check == 'coverage' and result == 'pass') / count(validation where check == 'coverage'), per run, over the production series.",
+    "source": {
+      "streams": [
+        "run_log"
+      ],
+      "fields": [
+        "validation.check",
+        "validation.result",
+        "target.section_id"
+      ],
+      "filters": [
+        "check == 'coverage'",
+        "run.mode == 'live'"
+      ]
+    },
+    "grain": "section",
+    "unit": "ratio",
+    "direction": "higher_is_better",
+    "dimensions": [
+      "section_type",
+      "engine_version",
+      "pursuit_type"
+    ],
+    "comparability": {
+      "hold_constant": [
+        "config_digest",
+        "engine_version",
+        "prompt_version"
+      ],
+      "excludes_run_modes": [
+        "replay",
+        "regression_bench",
+        "dry_run"
+      ],
+      "annotate_on_change": true
+    },
+    "reliability": {
+      "min_n": 5,
+      "estimated": false,
+      "known_failure_mode": "Section grain: one owed slot in a forty-slot section reads exactly like forty. Slot grain waits on a rule-grain validation line (a run-log schema change) \u2014 trigger: the first pilot request for per-slot coverage."
+    },
+    "target": {
+      "basis": "baseline",
+      "comparator": ">=",
+      "set_after_observation": true
+    },
+    "views": [
+      "system_owner"
+    ],
+    "owner": "system_owner",
+    "status": "active",
+    "introduced_in": "P26a"
   }
 ]

@@ -114,6 +114,41 @@ def check_assertion(records: list[dict], assertion: dict) -> tuple[bool, str]:
     raise ValueError(f"unknown trajectory assertion {kind!r}")
 
 
+def slice_call_pattern(workdir: Path | None = None) -> dict:
+    """P0-9's clause-2 inputs (P26a Group E): run the CI slice (FakeCaller,
+    dry_run, synthetic prices) into a scratch workspace and measure the
+    ENGINE'S call pattern per drafted section — cost and agent calls. The
+    numbers are deterministic for a given engine, so release-to-release
+    movement is a change in how many calls the pipeline makes, which is
+    exactly what the clause asks about; they are never a live cost."""
+    import tempfile
+
+    from engine.cli.slice import run_slice
+    from engine.runlog import read_run
+
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace = Path(workdir) if workdir else Path(tmp) / "ws"
+        result = run_slice(workspace, out=lambda *_a, **_k: None)
+        if result.status != "ok":
+            return {"status": result.status, "problems": result.problems}
+        root = workspace / "pur_demo"
+        cost, calls = 0.0, 0
+        for run_file in sorted((root / "runs").glob("*/run.jsonl")):
+            for record in read_run(run_file):
+                if record.get("record_type") == "agent_call":
+                    calls += 1
+                    cost += float(record.get("cost_usd", 0.0))
+        annotated = json.loads(
+            (root / "drafts" / "annotated-draft.json").read_text("utf-8"))
+        drafted = [s for s in annotated["sections"]
+                   if s.get("draft_status") == "drafted"]
+        n = max(1, len(drafted))
+        return {"status": "ok", "drafted_sections": len(drafted),
+                "agent_calls": calls, "cost_usd": round(cost, 6),
+                "cost_per_section": round(cost / n, 6),
+                "tool_calls_per_section": round(calls / n, 4)}
+
+
 def evaluate_trajectory_set(path: Path = CASES_PATH) -> dict:
     cases = load_cases(path)
     passed = 0

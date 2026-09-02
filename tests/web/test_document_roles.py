@@ -57,7 +57,7 @@ def test_role_declares_at_upload_and_persists(role_client):
 def test_declared_set_intakes_all_docs_and_routes_the_target(role_client):
     client, ws = role_client
     job = client.post("/api/pursuits/pur_roles/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_0" in wait_job(client, job["id"])["message"]
     brief = json.loads((ws / "pur_roles" / "brief.json").read_text())
     docs = {d["file"]: d for d in brief["intake"]["documents"]}
@@ -75,16 +75,16 @@ def test_declared_set_intakes_all_docs_and_routes_the_target(role_client):
     assert fc["cost_usd_estimate"] > 0
 
     ok = client.post("/api/pursuits/pur_roles/gate0",
-                     json={"decision": "approved", "at": FIXED_AT})
+                     json={"decision": "approved"})
     assert ok.status_code == 200, ok.text
     job = client.post("/api/pursuits/pur_roles/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_1" in wait_job(client, job["id"])["message"]
     r = client.post("/api/pursuits/pur_roles/gate1",
-                    json={"decision": "approved", "at": FIXED_AT, **ROLE})
+                    json={"decision": "approved", **ROLE})
     assert r.status_code == 200, r.text
     job = client.post("/api/pursuits/pur_roles/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_2" in wait_job(client, job["id"])["message"]
     # planning parsed the DECLARED target, not an accident of glob order —
     # slots.json records the source workbook's own digest
@@ -100,7 +100,7 @@ def test_declared_set_without_a_core_refuses(role_client):
                params={"role": "target"},
                content=DEMO_WORKBOOK.read_bytes())
     job = client.post("/api/pursuits/pur_nocore/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     done = wait_job(client, job["id"])
     assert done["state"] == "refused"
     assert "role=core" in done["message"]

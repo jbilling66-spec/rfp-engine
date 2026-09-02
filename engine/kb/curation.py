@@ -16,6 +16,8 @@ the same surface, in the same slice.
 
 from pathlib import Path
 
+from engine.contracts import append_fsync
+
 from engine.flywheel.proposals import ProposalStore
 
 STALE_SOON_DAYS = 90
@@ -347,6 +349,5 @@ def merge_batch(store, proposal_ids: list[str], *, operator: str,
             "snapshot_after": store.snapshot()}
     log = store.root / "curation-log.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(line, sort_keys=True) + "\n")
+    append_fsync(log, json.dumps(line, sort_keys=True))  # P0-6
     return line

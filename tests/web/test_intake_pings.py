@@ -49,7 +49,7 @@ def gapped_walk(tmp_path_factory):
         client.put(f"/api/pursuits/pur_ig/inbox/{name}",
                    content=path.read_bytes())
     job = client.post("/api/pursuits/pur_ig/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     done = wait_job(client, job["id"])
     assert "gate_0" in done["message"]
     yield client, ws
@@ -63,7 +63,7 @@ def test_intake_gap_pings_and_answers_pre_plan(gapped_walk):
                if g["target"] == "procurement.what_is_bought")
 
     r = client.post(f"/api/pursuits/pur_ig/gaps/{gap['gap_id']}/ping",
-                    json={"route_to": "sme", "at": FIXED_AT, **ROLE})
+                    json={"route_to": "sme", **ROLE})
     assert r.status_code == 200, r.text
     ping = r.json()
     assert ping["section_id"] == "intake"
@@ -76,14 +76,14 @@ def test_intake_gap_pings_and_answers_pre_plan(gapped_walk):
     assert gap_now["status"] == "open"
 
     # the inbox carries it, and the injected clock escalates it (>24h)
-    inbox = client.get("/api/pursuits/pur_ig/pings",
-                       params={"at": "2026-08-11T09:00:01"}).json()
+    client.app.state.clock = lambda: "2026-08-11T09:00:01"  # P2-47
+    inbox = client.get("/api/pursuits/pur_ig/pings").json()
+    client.app.state.clock = lambda: FIXED_AT
     row = next(x for x in inbox if x["gap_id"] == gap["gap_id"])
     assert row["escalated"] is True
 
     r = client.post(f"/api/pursuits/pur_ig/pings/{ping['ping_id']}/answer",
-                    json={"answer": "ERP managed services transition",
-                          "at": FIXED_AT, **ROLE})
+                    json={"answer": "ERP managed services transition", **ROLE})
     assert r.status_code == 200, r.text
     brief = json.loads((ws / "pur_ig" / "brief.json").read_text())
     gap_now = next(g for g in brief["intake"]["gaps"]
@@ -105,7 +105,7 @@ def test_intake_gap_pings_and_answers_pre_plan(gapped_walk):
 def test_unknown_intake_gap_409s(gapped_walk):
     client, _ = gapped_walk
     r = client.post("/api/pursuits/pur_ig/gaps/gap_nope_01/ping",
-                    json={"route_to": "sme", "at": FIXED_AT, **ROLE})
+                    json={"route_to": "sme", **ROLE})
     assert r.status_code == 409
     assert "no gap" in r.json()["detail"]
 
@@ -120,18 +120,18 @@ def test_frozen_brief_refuses_intake_pings(gapped_walk):
     assert open_gaps  # something left to ping after the earlier answer
 
     ok = client.post("/api/pursuits/pur_ig/gate0",
-                     json={"decision": "approved", "at": FIXED_AT})
+                     json={"decision": "approved"})
     assert ok.status_code == 200, ok.text
     job = client.post("/api/pursuits/pur_ig/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "gate_1" in wait_job(client, job["id"])["message"]
     r = client.post("/api/pursuits/pur_ig/gate1",
-                    json={"decision": "approved", "at": FIXED_AT, **ROLE})
+                    json={"decision": "approved", **ROLE})
     assert r.status_code == 200, r.text
     assert (ws / "pur_ig" / "brief.frozen.json").exists()
 
     r = client.post(
         f"/api/pursuits/pur_ig/gaps/{open_gaps[0]['gap_id']}/ping",
-        json={"route_to": "sme", "at": FIXED_AT, **ROLE})
+        json={"route_to": "sme", **ROLE})
     assert r.status_code == 409
     assert "settled once the brief freezes" in r.json()["detail"]

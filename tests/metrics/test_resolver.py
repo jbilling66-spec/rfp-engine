@@ -36,8 +36,8 @@ def test_every_registry_metric_has_a_resolver_slot(registry):
     """The bijection. A new metric_id cannot land unresolvable, and a
     resolver cannot outlive the registry entry it serves."""
     assert set(RESOLVERS) == set(registry)
-    assert len(registry) == 35, \
-        "the pin moved 30->35 at P13/C18 (B51's five §A6 metrics)"
+    assert len(registry) == 36, \
+        "the pin moved 30->35 at P13/C18 (B51's five §A6 metrics), 36 at P26a (P0-15)"
 
 
 def test_unresolved_slots_are_named_not_forgotten(registry):
@@ -45,7 +45,6 @@ def test_unresolved_slots_are_named_not_forgotten(registry):
     with an honest reason at the slot, not a missing key."""
     unresolved = sorted(k for k, v in RESOLVERS.items() if v is None)
     assert unresolved == [
-        "eval_pass_state",            # resolves from the release record
         "extraction_seconds_per_page",  # timing excluded from artifacts
         #   for kill/resume byte-identity; A1 instruments live runs
         "extraction_table_fidelity",  # bench/gate release record class,

@@ -23,7 +23,7 @@ import os
 import threading
 from pathlib import Path
 
-from engine.contracts import validate
+from engine.contracts import check_prose, validate
 from engine.contracts.validate import SCHEMAS_DIR
 
 _SCHEMA = json.loads(
@@ -100,6 +100,12 @@ class EventsLane:
                 os.fsync(f.fileno())
         return event
 
+    def finalized_by_cid(self) -> dict[str, dict]:
+        """cid -> the finalized comment/edit event (P1-14): a replayed
+        round commit consults this before appending, so the append-only
+        record carries each consumed pending item exactly once."""
+        return {e["cid"]: e for e in self.read() if e.get("cid")}
+
     # -- the pending store (comments/edits await a round) ------------------
 
     def _read_pending(self) -> dict:
@@ -147,6 +153,14 @@ class EventsLane:
                 f"edit_reason must be one of {EDIT_REASONS}")
         if actor_role not in ACTOR_ROLES:
             raise EventsError(f"actor_role must be one of {ACTOR_ROLES}")
+        for label, value in (("text", text), ("before", before),
+                             ("after", after)):
+            bad = check_prose(value) if value is not None else None
+            if bad:
+                # P26a Group B (P2-29b): a human edit is the one prose
+                # path with no model in the loop — refused at the door,
+                # never pended into the envelope
+                raise EventsError(f"{label}: {bad}")
         data = self._read_pending()
         entries = data["pending"]
         entry = {"cid": f"cmt_{data['next_cid']:04d}", "kind": kind,

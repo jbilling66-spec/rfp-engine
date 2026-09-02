@@ -69,7 +69,7 @@ def test_approval_stamps_confirms_and_checkpoints(clean):
     gates = [r["gate"] for r in records if r["record_type"] == "gate"]
     assert gates == [{"which": "gate_0_intake", "decision": "approved",
                       "actor": "Pat Lead", "auto_approved": False,
-                      "wait_ms": 0}]
+                      "wait_ms": 0, "notes": "read it"}]  # P1-15
     # Gate 1's fields stay Gate 1's: no created stamp, status untouched
     assert "created" not in brief
     assert brief["status"] == "draft"

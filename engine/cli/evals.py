@@ -18,7 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from engine.evals import run as _run
-from engine.evals.release import RELEASES_DIR, build_record, write_record
+from engine.evals.release import (
+    RELEASES_DIR,
+    build_record,
+    latest_prior,
+    write_record,
+)
 
 
 def _now_iso() -> str:
@@ -127,7 +132,22 @@ def run_eval_cli(args) -> int:
 
     version = engine_version()
     at = args.at or _now_iso()
-    record = build_record(lanes, engine_version=version, at=at)
+    releases_dir = Path(args.out) if args.out else RELEASES_DIR
+    prior = None if args.suite else latest_prior(releases_dir,
+                                                 exclude_version=version)
+    overrides = []
+    if args.override:
+        if not (args.by and args.note):
+            print("REFUSED: --override needs --by <owner> and --note <why> "
+                  "— a named owner's written override (E7)")
+            return 1
+        overrides = [{"gate_clause": int(c), "by": args.by, "at": at,
+                      "note": args.note} for c in args.override]
+    record = build_record(lanes, engine_version=version, at=at,
+                          prior=prior, overrides=overrides)
+    if prior is not None:
+        print(f"  regression prior: {prior['engine_version']} "
+              f"({prior['generated_at']})")
 
     for name, entry in record["suites"].items():
         line = f"  {name:14s} {entry['status']:16s} basis={entry['basis']}"
@@ -150,6 +170,13 @@ def run_eval_cli(args) -> int:
     if record["blocking_failures"]:
         print(f"BLOCKING: {', '.join(record['blocking_failures'])} — "
               f"cannot promote (E7 clause 1, no waiver path)")
+        return 1
+    if not record["eval_pass_state"]:
+        failing = [g["clause"] for g in record["gates"]
+                   if g["status"] == "fail"]
+        print(f"REGRESSION: clause(s) {failing} failed without an "
+              f"override — pass --override <clause> --by <owner> "
+              f"--note <why> to promote over it (E7 clauses 2–4)")
         return 1
     print("eval_pass_state: true")
     return 0
@@ -175,6 +202,14 @@ def register(sub) -> None:
                              "write their baselines; requires --live and "
                              "real spend (default target 'all' — one prompt "
                              "feeds both suites)")
+    parser.add_argument("--override", action="append", default=None,
+                        choices=["2", "3", "4"],
+                        help="promote over a failed regression clause "
+                             "(repeatable) — needs --by and --note")
+    parser.add_argument("--by", default=None,
+                        help="the named owner writing the override")
+    parser.add_argument("--note", default=None,
+                        help="the override's written reason (E7)")
     parser.add_argument("--live", action="store_true",
                         help="RFP_LIVE=1 flavor: the live model, real "
                              "spend. Only meaningful with --rebaseline")

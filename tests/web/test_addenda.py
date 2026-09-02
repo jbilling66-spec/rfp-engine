@@ -54,16 +54,14 @@ def test_note_only_routes_impacts_into_the_review_loop(amendable):
     pid = pursuit.pursuit_id
     r = client.post(f"/api/pursuits/{pid}/addenda/addm_01/decide",
                     json={"decision": "note_only",
-                          "note": "Fold into the next round.",
-                          "at": FIXED_AT})
+                          "note": "Fold into the next round."})
     assert r.status_code == 200
     pending = json.loads((pursuit.root / "events" / "pending.json"
                           ).read_text())["pending"]
     assert any("Addendum addm_01" in p.get("text", "") for p in pending)
     # a decided addendum refuses a second decision
     assert client.post(f"/api/pursuits/{pid}/addenda/addm_01/decide",
-                       json={"decision": "replan", "note": "x",
-                             "at": FIXED_AT}).status_code == 409
+                       json={"decision": "replan", "note": "x"}).status_code == 409
 
 
 def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
@@ -88,7 +86,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
                     json={"decision": "approved", **ROLE})
         wait_job(client, client.post(
             "/api/pursuits/pur_amend/jobs",
-            json={"kind": "advance", "at": FIXED_AT}).json()["id"],
+            json={"kind": "advance"}).json()["id"],
             timeout=180)
         g2 = client.get("/api/pursuits/pur_amend/gate2").json()
         dispose = [{"section_id": s["section_id"], "gap_id": g["gap_id"],
@@ -100,7 +98,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
             "edits": {"dispose": dispose}, **ROLE})
         wait_job(client, client.post(
             "/api/pursuits/pur_amend/jobs",
-            json={"kind": "advance", "at": FIXED_AT}).json()["id"],
+            json={"kind": "advance"}).json()["id"],
             timeout=180)
         old_frozen_sha = hashlib.sha256(
             (ws / "pur_amend" / "plan.frozen.json").read_bytes()
@@ -115,8 +113,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
                     content=b"AMENDMENT: scope change to the timeline.")
         r = client.post("/api/pursuits/pur_amend/addenda/addm_01/decide",
                         json={"decision": "replan",
-                              "note": "Timeline scope changed — replan.",
-                              "at": FIXED_AT})
+                              "note": "Timeline scope changed — replan."})
         assert r.status_code == 200
         plan = json.loads((ws / "pur_amend" / "plan.json").read_text())
         assert plan["status"] == "superseded"  # the first writer
@@ -129,7 +126,7 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
         # redo feedback, back to a decidable gate
         done = wait_job(client, client.post(
             "/api/pursuits/pur_amend/jobs",
-            json={"kind": "advance", "at": FIXED_AT}).json()["id"],
+            json={"kind": "advance"}).json()["id"],
             timeout=180)
         assert "awaiting_gate at gate_2" in done["message"]
         new_plan = json.loads(
@@ -172,14 +169,14 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
         # ARCHIVES the draft pair instead of trusting the hash alone.
         # the stale export is REFUSED (no current draft for this plan)
         r = client.post("/api/pursuits/pur_amend/export",
-                        json={"lane": "submission", "at": FIXED_AT})
+                        json={"lane": "submission"})
         assert r.status_code == 409, r.text
         assert not (root / "exports" / "submission").exists() or not any(
             (root / "exports" / "submission").iterdir())
         # the next advance drafts and validates against the CURRENT plan
         done = wait_job(client, client.post(
             "/api/pursuits/pur_amend/jobs",
-            json={"kind": "advance", "at": FIXED_AT}).json()["id"],
+            json={"kind": "advance"}).json()["id"],
             timeout=240)
         assert done["state"] == "done", done
         new_envelope = json.loads((root / "drafts" / "draft.json").read_text())
@@ -187,6 +184,6 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
         assert validation_is_current(pursuit)
         # whatever the export door says now, it is no longer staleness
         r = client.post("/api/pursuits/pur_amend/export",
-                        json={"lane": "submission", "at": FIXED_AT})
+                        json={"lane": "submission"})
         assert "different frozen plan" not in r.text
         assert "does not match" not in r.text

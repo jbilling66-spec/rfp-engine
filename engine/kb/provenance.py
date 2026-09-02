@@ -33,9 +33,10 @@ not an anonymous request.
 
 import json
 import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+from engine.contracts import write_bytes_atomic, write_json_atomic
 
 import yaml
 
@@ -124,16 +125,7 @@ class RestrictedStore:
         src_dir = self._source_dir()
         src_dir.mkdir(parents=True, exist_ok=True)
         path = src_dir / f"{doc_id}.src"
-        fd, tmp = tempfile.mkstemp(dir=src_dir, prefix=f".{path.name}.")
-        try:
-            with os.fdopen(fd, "wb") as f:
-                f.write(raw)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        write_bytes_atomic(path, raw)  # P0-6: the one primitive
         self._atomic_write(src_dir / f"{doc_id}.json", dict(meta))
 
     def source_exists(self, doc_id: str) -> bool:
@@ -219,17 +211,7 @@ class RestrictedStore:
 
     @staticmethod
     def _atomic_write(path: Path, obj: dict) -> None:
-        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(obj, f, indent=2, sort_keys=True)
-                f.write("\n")
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        write_json_atomic(path, obj)  # P0-6: the one primitive
 
     # -- the read paths (every one logs first, then authorizes) ------------
 

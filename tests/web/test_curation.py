@@ -106,8 +106,7 @@ def test_an_in_place_edit_mints_a_proposal_and_writes_no_card(client,
     still lands as a diff a steward sees."""
     response = client.post("/api/kb/proposals", json={
         "kb_id": "kb_alpha0001",
-        "changes": {"summary": "Seven mock conversions, reconciled."},
-        "at": FIXED_AT})
+        "changes": {"summary": "Seven mock conversions, reconciled."}})
     assert response.status_code == 200
     proposal = response.json()
     assert proposal["status"] == "proposed"
@@ -123,7 +122,7 @@ def test_an_in_place_edit_mints_a_proposal_and_writes_no_card(client,
 def test_governance_fields_refuse_an_edit(client):
     refused = client.post("/api/kb/proposals", json={
         "kb_id": "kb_alpha0001",
-        "changes": {"use_restriction": True}, "at": FIXED_AT})
+        "changes": {"use_restriction": True}})
     assert refused.status_code == 409
     assert "governance decision" in refused.json()["detail"]
 
@@ -131,7 +130,7 @@ def test_governance_fields_refuse_an_edit(client):
 def test_an_edit_that_changes_nothing_is_refused(client):
     refused = client.post("/api/kb/proposals", json={
         "kb_id": "kb_alpha0001",
-        "changes": {"summary": "Seven mock conversions."}, "at": FIXED_AT})
+        "changes": {"summary": "Seven mock conversions."}})
     assert refused.status_code == 409
     assert "nothing changed" in refused.json()["detail"]
 
@@ -162,7 +161,7 @@ def test_deprecation_is_refused_while_cited_and_names_the_pursuit(tmp_path):
 
 def test_an_uncited_card_deprecates_as_a_proposal_not_a_delete(client):
     response = client.post("/api/kb/proposals", json={
-        "kb_id": "kb_stale0001", "action": "deprecate", "at": FIXED_AT})
+        "kb_id": "kb_stale0001", "action": "deprecate"})
     assert response.status_code == 200
     assert response.json()["kind"] == "deprecate_card"
     # Nothing is erased — the card is still there pending the decision.
@@ -188,13 +187,12 @@ def test_mint_and_approve_ship_on_one_surface(client):
     sat published, valid and invisible to every draft."""
     proposal = client.post("/api/kb/proposals", json={
         "kb_id": "kb_alpha0001",
-        "changes": {"summary": "Seven mock conversions, reconciled."},
-        "at": FIXED_AT}).json()
+        "changes": {"summary": "Seven mock conversions, reconciled."}}).json()
 
     assert len(_proposals(client, status="proposed")) == 1
     decided = client.post(
         f"/api/kb/proposals/{proposal['proposal_id']}/decide",
-        json={"decision": "accepted", "at": FIXED_AT})
+        json={"decision": "accepted"})
     assert decided.status_code == 200
 
     detail = client.get("/api/kb/cards/kb_alpha0001").json()
@@ -204,11 +202,9 @@ def test_mint_and_approve_ship_on_one_surface(client):
 
 def test_a_rejection_keeps_the_proposal_and_the_card(client):
     proposal = client.post("/api/kb/proposals", json={
-        "kb_id": "kb_alpha0001", "changes": {"summary": "Rewritten."},
-        "at": FIXED_AT}).json()
+        "kb_id": "kb_alpha0001", "changes": {"summary": "Rewritten."}}).json()
     client.post(f"/api/kb/proposals/{proposal['proposal_id']}/decide",
-                json={"decision": "rejected", "note": "wrong",
-                      "at": FIXED_AT})
+                json={"decision": "rejected", "note": "wrong"})
     rejected = _proposals(client, status="rejected")
     assert len(rejected) == 1 and rejected[0]["decided"]["note"] == "wrong"
     assert client.get("/api/kb/cards/kb_alpha0001").json()[
@@ -217,15 +213,12 @@ def test_a_rejection_keeps_the_proposal_and_the_card(client):
 
 def test_a_batch_merge_writes_one_curation_log_line(client, tmp_path):
     first = client.post("/api/kb/proposals", json={
-        "kb_id": "kb_alpha0001", "changes": {"summary": "One."},
-        "at": FIXED_AT}).json()
+        "kb_id": "kb_alpha0001", "changes": {"summary": "One."}}).json()
     second = client.post("/api/kb/proposals", json={
-        "kb_id": "kb_stale0001", "changes": {"summary": "Two."},
-        "at": FIXED_AT}).json()
+        "kb_id": "kb_stale0001", "changes": {"summary": "Two."}}).json()
 
     merged = client.post("/api/kb/proposals/merge", json={
-        "proposal_ids": [first["proposal_id"], second["proposal_id"]],
-        "at": FIXED_AT}).json()
+        "proposal_ids": [first["proposal_id"], second["proposal_id"]]}).json()
     assert merged["by"] == "Sam Steward"
     assert merged["snapshot_before"] != merged["snapshot_after"]
 
@@ -238,13 +231,12 @@ def test_a_batch_merge_writes_one_curation_log_line(client, tmp_path):
 
 def test_deciding_twice_is_refused(client):
     proposal = client.post("/api/kb/proposals", json={
-        "kb_id": "kb_alpha0001", "changes": {"summary": "Once."},
-        "at": FIXED_AT}).json()
+        "kb_id": "kb_alpha0001", "changes": {"summary": "Once."}}).json()
     pid = proposal["proposal_id"]
     client.post(f"/api/kb/proposals/{pid}/decide",
-                json={"decision": "accepted", "at": FIXED_AT})
+                json={"decision": "accepted"})
     again = client.post("/api/kb/proposals/merge",
-                        json={"proposal_ids": [pid], "at": FIXED_AT})
+                        json={"proposal_ids": [pid]})
     assert again.status_code == 409
     assert "decision is made once" in again.json()["detail"]
 

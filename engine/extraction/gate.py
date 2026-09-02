@@ -21,6 +21,8 @@ import sys
 import time
 from pathlib import Path
 
+from engine.contracts import write_json_atomic
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 CELL_ACCURACY_BAR = 0.90  # complex tables, labeled subset (spec L65)
@@ -549,9 +551,7 @@ def main() -> int:
     report["kill_criteria"] = evaluate_kill_criteria(measures, report["venue"])
 
     MILESTONE_DIR.mkdir(parents=True, exist_ok=True)
-    (MILESTONE_DIR / "report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n"
-    )
+    write_json_atomic(MILESTONE_DIR / "report.json", report)  # P0-6
     verdict = report["kill_criteria"]["verdict"]
     print(f"§A2 gate verdict: {verdict}  (report: {MILESTONE_DIR / 'report.json'})")
     for c in report["kill_criteria"]["criteria"]:

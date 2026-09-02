@@ -34,7 +34,7 @@ import threading
 from collections import defaultdict
 from pathlib import Path
 
-from engine.contracts import ContractError
+from engine.contracts import ContractError, append_fsync, read_jsonl
 from engine.llm.caller import CostCeilingExceeded
 from engine.llm.handoff import HandoffTimeout
 from engine.llm.live import LiveCallError
@@ -66,16 +66,16 @@ class JobRunner:
 
     def _journal(self, job: dict) -> None:
         line = {k: job[k] for k in ("id", "kind", "pursuit", "by", "state",
-                                    "message", "at") if k in job}
-        with open(self.journal_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(line, sort_keys=True) + "\n")
+                                    "message", "at", "run_id") if k in job}
+        append_fsync(self.journal_path, json.dumps(line, sort_keys=True))
 
     def _rehydrate(self) -> None:
         if not self.journal_path.exists():
             return
         last: dict[str, dict] = {}
-        for raw in self.journal_path.read_text(encoding="utf-8").splitlines():
-            line = json.loads(raw)
+        records, torn = read_jsonl(self.journal_path)  # P1-17: a torn tail
+        self.journal_torn = torn                        # is reported, not fatal
+        for line in records:
             last[line["id"]] = line
         highest = 0
         for job in last.values():
@@ -84,6 +84,15 @@ class JobRunner:
                 job["state"] = "orphaned"
                 job["message"] = ("server restarted mid-run — "
                                   + job.get("message", ""))
+                # P2-20: the run the dead job left open is closed with a
+                # failed footer so the runs read model and the journal
+                # agree about what happened
+                try:
+                    self._close_open_run(job)
+                except Exception as exc:  # noqa: BLE001 — rehydrate must finish
+                    import sys
+                    sys.stderr.write(f"run close at rehydrate for {job['id']} "
+                                     f"failed: {type(exc).__name__}: {exc}\n")
                 self._journal(job)
             self._jobs[job["id"]] = job
         self._ids = itertools.count(highest + 1)
@@ -128,6 +137,26 @@ class JobRunner:
         self._queue.put((job, target))
         return dict(job)
 
+    def _close_open_run(self, job: dict) -> None:
+        """P2-20: a job that died (exception, or a server restart) leaves
+        its pursuit's newest run footerless; the job lane holds that
+        pursuit's guard for the job's whole execution, so the newest run
+        IS the job's. Close it `failed` and name it on the journal line.
+        Never touches a run that already has a footer."""
+        from engine.runlog import RunLogger
+        from engine.workspace.pursuit import latest_run_id_in
+        root = self.workspace / job["pursuit"]
+        run_id = latest_run_id_in(root / "runs")
+        if run_id is None:
+            return
+        try:
+            log = RunLogger(root, run_id, job["pursuit"], resume=True)
+        except ContractError:
+            return  # corruption the runbook owns, not the job lane
+        if not log.has_footer:
+            log.run_end(status="failed")
+        job["run_id"] = run_id
+
     # -- the worker --------------------------------------------------------
 
     def _work(self) -> None:
@@ -156,6 +185,13 @@ class JobRunner:
                         "not a bug")
                 except Exception as exc:  # noqa: BLE001 — the error lane
                     state, message = "error", f"{type(exc).__name__}: {exc}"
+                if state in ("refused", "error"):
+                    try:
+                        self._close_open_run(job)  # P2-20: no footerless runs
+                    except Exception as exc:  # noqa: BLE001 — never kill the worker
+                        import sys
+                        sys.stderr.write(f"run close after {job['id']} failed: "
+                                         f"{type(exc).__name__}: {exc}\n")
             if (job.get("cancel") and state == "done"
                     and str(message).startswith("cancelled")):
                 state = "cancelled"  # the badge follows the flow's report

@@ -14,27 +14,15 @@ provenance (B14).
 """
 
 import hashlib
-import os
-import tempfile
 from pathlib import Path
 
 import yaml
 
-from engine.contracts import validate
+from engine.contracts import validate, write_text_atomic
 from engine.kb.provenance import RestrictedStore
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+_atomic_write_text = write_text_atomic  # P0-6: one primitive, one home
 
 
 def render_card(card: dict, body: str) -> str:

@@ -4,4 +4,5 @@ from engine.runlog.writer import (  # noqa: F401
     config_digest,
     digest,
     read_run,
+    read_run_report,
 )

@@ -17,7 +17,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from engine.contracts import validate
+from engine.contracts import validate, write_json_atomic
 
 
 def proposal_id(source: dict, kind: str, kb_id: str | None,
@@ -64,8 +64,7 @@ class ProposalStore:
         # the flywheel runs repeatedly over a growing record and would
         # otherwise re-raise every lesson it has ever drawn.
         if not path.exists():
-            path.write_text(json.dumps(proposal, indent=1, sort_keys=True)
-                            + "\n", encoding="utf-8")
+            write_json_atomic(path, proposal, indent=1)  # P0-6
         return json.loads(path.read_text(encoding="utf-8"))
 
     def read(self, pid: str) -> dict:
@@ -89,7 +88,5 @@ class ProposalStore:
         if note:
             proposal["decided"]["note"] = note
         validate("kb_proposal", proposal)
-        self._path(pid).write_text(
-            json.dumps(proposal, indent=1, sort_keys=True) + "\n",
-            encoding="utf-8")
+        write_json_atomic(self._path(pid), proposal, indent=1)  # P0-6 RMW
         return proposal

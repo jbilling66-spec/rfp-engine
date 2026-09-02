@@ -30,7 +30,7 @@ import json
 import threading
 from pathlib import Path
 
-from engine.contracts import ContractError
+from engine.contracts import ContractError, write_json_atomic
 from engine.kb.lanes import ORG_PREFIX
 from engine.kb.store import KBStore, snapshot_id
 
@@ -64,8 +64,7 @@ def list_orgs(workspace: Path) -> list[dict]:
 def _write_org(workspace: Path, org: dict) -> dict:
     path = _org_file(workspace, org["org_id"])
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(org, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8")
+    write_json_atomic(path, org)  # P0-6: the buyer-identity map is a record
     return org
 
 

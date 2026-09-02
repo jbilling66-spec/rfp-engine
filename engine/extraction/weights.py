@@ -18,6 +18,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from engine.contracts import write_json_atomic
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHUNK = 1024 * 1024
 
@@ -87,9 +89,7 @@ def freeze(
         },
     }
     manifest_file.parent.mkdir(parents=True, exist_ok=True)
-    manifest_file.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    write_json_atomic(manifest_file, manifest)  # P0-6: the B55 continuity proof
     return manifest
 
 

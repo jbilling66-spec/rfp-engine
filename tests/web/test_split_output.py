@@ -67,7 +67,7 @@ def test_split_output_set_gets_both_lanes(split):
     body = client.get("/api/pursuits/pur_split/writeback/preview").json()
     assert len(body["files"]) == 2 and body["refused"] == []
     r = client.post("/api/pursuits/pur_split/writeback/confirm",
-                    json={"at": FIXED_AT})
+                    json={})
     assert r.status_code == 200, r.text
     confirmed = r.json()
     assert len(confirmed["files"]) == 2
@@ -103,7 +103,7 @@ def test_refused_lane_recorded_while_the_other_produces(split):
     client, pursuit = split
     (pursuit.root / "inbox" / "demo-twin.xlsx").write_bytes(b"tampered")
     r = client.post("/api/pursuits/pur_split/writeback/confirm",
-                    json={"at": FIXED_AT})
+                    json={})
     assert r.status_code == 200, r.text  # one deliverable DID produce
     confirmed = r.json()
     assert len(confirmed["files"]) == 1
@@ -119,7 +119,7 @@ def test_every_lane_refused_is_409_and_no_bundle(split):
     (pursuit.root / "inbox" / "demo-twin.xlsx").write_bytes(b"tampered")
     (pursuit.root / "inbox" / "qform-twin.docx").write_bytes(b"tampered")
     r = client.post("/api/pursuits/pur_split/writeback/confirm",
-                    json={"at": FIXED_AT})
+                    json={})
     assert r.status_code == 409
     assert not (pursuit.root / "exports"
                 / "submission-bundle.json").exists()
@@ -132,7 +132,7 @@ def test_downloads_read_the_bundle_not_the_directory(split):
     unshippable-file weakness, banned."""
     client, pursuit = split
     r = client.post("/api/pursuits/pur_split/writeback/confirm",
-                    json={"at": FIXED_AT})
+                    json={})
     assert r.status_code == 200, r.text
     rogue = pursuit.root / "exports" / "submission" / "rogue.docx"
     rogue.parent.mkdir(parents=True, exist_ok=True)

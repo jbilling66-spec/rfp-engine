@@ -28,6 +28,8 @@ import json
 import shutil
 from pathlib import Path
 
+from engine.contracts import write_json_atomic
+
 from engine.evals.mapper import evaluate_mapper_set
 from engine.kb.store import KBStore
 
@@ -106,9 +108,7 @@ def remeasure_mapper(questioner, *, workspace: Path,
         path = Path(record_path or
                     ROOT / "docs" / "uat" / "p17-remeasure-result.json")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(result | {"recorded": True},
-                                   indent=2, sort_keys=True) + "\n",
-                        encoding="utf-8")
+        write_json_atomic(path, result | {"recorded": True})  # P0-6
         result["recorded"] = True
         result["record_path"] = str(path)
     return result

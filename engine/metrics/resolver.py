@@ -20,7 +20,7 @@ Four disciplines the registry demands and this module enforces:
   filter is applied here rather than in each resolver, so forgetting it
   is not possible one metric at a time.
 
-Every one of the 30 registry entries gets a resolver function; the
+Every one of the registry's entries (36 since P26a) gets a resolver function; the
 bijection is test-enforced, so a new metric_id cannot land unresolvable
 and a resolver cannot outlive its registry entry.
 """
@@ -339,10 +339,16 @@ def _r_fact_sheet_staleness(corpus):
 
 
 def _r_injection_screen_flags(corpus):
+    """P1-34: FLAGS, not screens — the registry's formula counts
+    `result == 'flag'`, and zero forever is the liveness signal the
+    registry names; an empty corpus is absent, never 0.0."""
     lines = [r for r in corpus.runs()
              if r.get("record_type") == "validation"
              and r["validation"].get("check") == "injection_screen"]
-    return float(len(lines)), len(lines)
+    if not lines:
+        return None
+    flags = [r for r in lines if r["validation"].get("result") == "flag"]
+    return float(len(flags)), len(lines)
 
 
 def _r_anonymization_scan_result(corpus):
@@ -373,6 +379,36 @@ def _r_false_gap_rate(corpus):
     return None
 
 
+_r_false_gap_rate.absent_reason = (  # P2-43: the honest reason, not the generic
+    "sourced from the release record's mapper lane (docs/releases/), never "
+    "from pursuit records — see /api/telemetry/bench")
+
+
+def _r_eval_pass_state(corpus):
+    return None
+
+
+_r_eval_pass_state.absent_reason = (
+    "sourced from the release record (docs/releases/<engine_version>/"
+    "eval-results.json) — the bench view reads it there")
+
+
+def _r_requirement_coverage(corpus):
+    """P0-15: the share of drafted sections whose coverage check passed —
+    one validation line per section (check == 'coverage', result pass|
+    flag), so the grain is the SECTION: one owed slot reads like forty.
+    Slot grain waits on a rule-grain validation line (schema change);
+    the registry's known_failure_mode names the trigger. Absent, never
+    0.0, when no coverage line exists."""
+    lines = [r for r in corpus.runs()
+             if r.get("record_type") == "validation"
+             and r["validation"].get("check") == "coverage"]
+    if not lines:
+        return None
+    passed = sum(1 for r in lines if r["validation"].get("result") == "pass")
+    return round(passed / len(lines), 4), len(lines)
+
+
 def _r_submission_volume(corpus):
     ids = corpus.production_pursuit_ids()
     if not ids:
@@ -380,13 +416,9 @@ def _r_submission_volume(corpus):
     return float(len(ids)), len(ids)
 
 
-def _r_cycle_time_days(corpus):
-    totals = corpus.run_totals()
-    wall = sum(t.get("wall_ms", 0) for t in totals)
-    if not wall:
-        return None
-    ids = corpus.production_pursuit_ids() or {"unknown"}
-    return round(wall / 86_400_000 / len(ids), 4), len(ids)
+# P2-42: `_r_cycle_time_days` used to divide engine wall_ms by pursuits —
+# the registry's formula is submission_date − receipt_date over run_log
+# AND crm, and crm is unsourced; the slot is honestly unsourced now.
 
 
 def _unsourced(reason_key):
@@ -408,12 +440,19 @@ def _r_extraction_fabrication_count(corpus):
         artifact = pursuit.root / "extraction.json"
         if not artifact.exists():
             continue
-        payload = json.loads(artifact.read_text(encoding="utf-8"))
-        two_path = payload.get("two_path") or {}
-        if not two_path.get("tables_diffed"):
-            continue
-        seen += 1
-        total += len(two_path.get("findings") or [])
+        try:
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue  # M-23: one corrupt artifact never takes down the view
+        # P1-33: the writer keys two_path by FILENAME (brief.py); the
+        # reader used to look for tables_diffed on the outer dict and so
+        # could never fire
+        for review in (payload.get("two_path") or {}).values():
+            if not isinstance(review, dict) or \
+                    not review.get("tables_diffed"):
+                continue
+            seen += 1
+            total += len(review.get("findings") or [])
     if not seen:
         return None
     return total, seen
@@ -476,7 +515,7 @@ RESOLVERS = {
     "cost_delta_vs_baseline": _unsourced("manual_entry"),
     "cost_bps_of_deal_value": _unsourced("crm"),
     "cost_per_win": _unsourced("crm"),
-    "cycle_time_days": _r_cycle_time_days,
+    "cycle_time_days": _unsourced("crm"),  # P2-42: receipt_date is CRM's
     "compute_vs_human_wait": _r_compute_vs_human_wait,
     "cache_hit_ratio": _r_cache_hit_ratio,
     "retry_rate": _r_retry_rate,
@@ -488,7 +527,8 @@ RESOLVERS = {
     "submission_volume": _r_submission_volume,
     "run_success_rate": _r_run_success_rate,
     "anonymization_scan_result": _r_anonymization_scan_result,
-    "eval_pass_state": None,         # sourced from the release record
+    "eval_pass_state": _r_eval_pass_state,  # P2-43: absent WITH its reason
+    "requirement_coverage": _r_requirement_coverage,  # P0-15
     "injection_screen_flags": _r_injection_screen_flags,
     # P13/C18 (B51's carrier): the five §A6 extraction metrics. Two are
     # named-unresolved with reasons — the pattern the unresolved-slots

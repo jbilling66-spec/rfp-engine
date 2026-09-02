@@ -71,7 +71,7 @@ def test_comment_then_revise_over_http(reviewing):
     m = client.get(f"/api/pursuits/{pid}/review").json()
     row = next(s for s in m["sections"] if s["section_id"] == sid)
     assert [p["cid"] for p in row["pending"]] == [entry["cid"]]
-    r = client.post(f"/api/pursuits/{pid}/revise", json={"at": FIXED_AT})
+    r = client.post(f"/api/pursuits/{pid}/revise", json={})
     assert r.status_code == 202
     job = wait_job(client, r.json()["id"])
     assert job["state"] == "done", job["message"]
@@ -96,7 +96,7 @@ def test_comment_then_revise_over_http(reviewing):
 def test_empty_revise_refuses_over_http(reviewing):
     client, pursuit = reviewing
     r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/revise",
-                    json={"at": FIXED_AT})
+                    json={})
     job = wait_job(client, r.json()["id"])
     assert job["state"] == "refused"
     assert "revision_n never bumps" in job["message"]

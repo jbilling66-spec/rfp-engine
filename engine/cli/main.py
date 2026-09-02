@@ -15,9 +15,17 @@ def _cmd_version(_args) -> int:
 
 def _cmd_check_run(args) -> int:
     from engine.contracts import ContractError, check_runlog_payloads, validate
-    from engine.runlog import assert_seq_gapless, read_run
+    from engine.runlog import assert_seq_gapless, read_run_report
 
-    records = read_run(Path(args.path))
+    try:
+        records, torn = read_run_report(Path(args.path))
+    except ContractError as e:  # a torn or invalid line before the tail
+        print(f"CORRUPT: {e}", file=sys.stderr)
+        return 1
+    if torn:
+        print(f"TORN: {torn} — the next resume repairs it (P0-14 runbook)",
+              file=sys.stderr)
+        return 1
     try:
         for record in records:
             validate("run_log", record)

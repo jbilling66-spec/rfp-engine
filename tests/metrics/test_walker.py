@@ -76,15 +76,20 @@ def test_corruption_that_is_not_the_last_line_still_raises(tmp_path):
             "at": "2026-08-01T00:00:00Z", "actor_role": "pursuit_lead"}
     (root / "events" / "events.jsonl").write_text(
         '{"broken": \n' + json.dumps(good) + "\n", encoding="utf-8")
-    with pytest.raises(json.JSONDecodeError):
+    # P26a Group C (P1-17): one rule, one home — the typed refusal names
+    # the line, and it is the contract's error, not a bare decode error
+    from engine.contracts import ContractError
+    with pytest.raises(ContractError, match="line 1 is not a JSON record"):
         read_pursuit(root)
 
 
 def test_run_headers_index_by_run_id():
     records = walk(FIXTURE_WS)[0].runs
     headers = run_headers(records)
-    assert set(headers) == {"run_0001", "run_0002", "run_0003"}
-    assert headers["run_0003"]["mode"] == "regression_bench"
+    assert set(headers) == {("pur_metrics", "run_0001"),
+                            ("pur_metrics", "run_0002"),
+                            ("pur_metrics", "run_0003")}  # P1-32: (pursuit, run)
+    assert headers[("pur_metrics", "run_0003")]["mode"] == "regression_bench"
 
 
 def test_production_only_drops_bench_runs():

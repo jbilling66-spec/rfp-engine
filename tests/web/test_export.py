@@ -126,7 +126,7 @@ def test_export_refuses_tampered_frozen_brief(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         sign_in(client, "Eddy Exporter")
         r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/export",
-                        json={"lane": "both", "at": FIXED_AT})
+                        json={"lane": "both"})
     assert r.status_code == 409
     assert "fails verification" in r.json()["detail"]
     assert not (pursuit.root / "exports" / "submission").exists() or not any(
@@ -151,16 +151,16 @@ def test_both_exit_doors_refuse_stale_bindings(tmp_path):
         draft.write_text(json.dumps({**envelope, "plan_sha256": "0" * 64}),
                          encoding="utf-8")
         r = client.post(f"/api/pursuits/{pid}/writeback/confirm",
-                        json={"at": FIXED_AT})
+                        json={})
         assert r.status_code == 409 and "different frozen plan" in r.text
         r = client.post(f"/api/pursuits/{pid}/export",
-                        json={"lane": "both", "at": FIXED_AT})
+                        json={"lane": "both"})
         assert r.status_code == 409 and "different frozen plan" in r.text
         draft.write_bytes(good)
         draft.write_text(draft.read_text(encoding="utf-8") + "\n",
                          encoding="utf-8")  # the envelope moved on
         r = client.post(f"/api/pursuits/{pid}/export",
-                        json={"lane": "review", "at": FIXED_AT})
+                        json={"lane": "review"})
         assert r.status_code == 409 and "does not match" in r.text
     assert not (pursuit.root / "exports" / "submission").exists() or not any(
         (pursuit.root / "exports" / "submission").iterdir())

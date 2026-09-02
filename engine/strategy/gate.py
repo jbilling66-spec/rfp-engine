@@ -134,6 +134,12 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
         raise ValueError(f"gate_1 'at' must be ISO 8601: {at!r}") from exc
     if decision == "approved_with_edits" and not edits:
         raise ContractError("approved_with_edits requires edits")
+    if decision == "rejected" and not (notes or "").strip():
+        # P1-15: the asymmetry closed — Gate 1's decline carried no
+        # rationale rule while Gates 0 and 2 required one
+        raise ContractError(
+            "gate_1 rejection requires notes — the decline's reason is "
+            "the record (P26a, P1-15)")
     try:
         brief = pursuit.read_artifact("brief.json")
     except FileNotFoundError:
@@ -210,6 +216,8 @@ def approve_gate1(pursuit, log, *, decision: str, actor: str, at: str,
         })
     gate = {"which": "gate_1_strategy", "decision": decision, "actor": actor,
             "auto_approved": auto_approved, "wait_ms": wait_ms}
+    if notes:
+        gate["notes"] = notes  # P1-15
     summary = _summary(edits)
     if summary:
         gate["edits_summary"] = summary

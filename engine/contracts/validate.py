@@ -38,6 +38,7 @@ _KINDS = {
     "eval_results": "eval-results.schema.json",
     "kb_proposal": "kb-proposal.schema.json",
     "canonical_doc": "canonical-doc.schema.json",
+    "hand_fill": "hand-fill.schema.json",
 }
 
 

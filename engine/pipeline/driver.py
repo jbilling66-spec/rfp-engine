@@ -263,8 +263,9 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
         pack_path = None
         if research_pack is not None:
             pack_path = root / "inbox" / research_pack.name
-            if pack_path != research_pack:
-                pack_path.write_bytes(research_pack.read_bytes())
+            if pack_path != research_pack:  # M-11: atomic, P0-6's class
+                pursuit.write_bytes(f"inbox/{research_pack.name}",
+                                    research_pack.read_bytes())
         cfg_mode = effective_config()["research_mode"]
         research = run_research(pursuit, stage.caller, stage.log, stage.lanes,
                                 mode=cfg_mode, pack=pack_path)

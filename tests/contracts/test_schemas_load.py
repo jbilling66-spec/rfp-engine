@@ -23,6 +23,7 @@ EXPECTED = {
     "eval-case.schema.json",
     "eval-results.schema.json",
     "feedback-event.schema.json",
+    "hand-fill.schema.json",
     "kb-card.schema.json",
     "kb-proposal.schema.json",
     "manifest.schema.json",

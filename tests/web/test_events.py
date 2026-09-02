@@ -235,7 +235,7 @@ def test_mutating_event_and_share_routes_serialize_under_the_guard():
     import engine.web.server as server
     src = inspect.getsource(server)
     for func in ("add_event", "record_outcome", "record_effort",
-                 "create_share"):
+                 "create_share", "revoke_share"):
         start = src.index(f"    def {func}(")
         end = src.index("\n    @app.", start)
         assert "with _mutate(pursuit_id):" in src[start:end], func

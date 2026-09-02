@@ -429,6 +429,8 @@ def approve_gate2(pursuit, log, *, decision: str, actor: str, at: str,
     summary = _summary(edits)
     if summary:
         gate_payload["edits_summary"] = summary
+    if notes:
+        gate_payload["notes"] = notes  # P1-15: survives the next decision
     log.emit("gate", stage="gate_2", gate=gate_payload)
 
     if decision == "rejected":

@@ -275,8 +275,12 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
         pursuit.clear_checkpoint("bid_brief")
         gate = {"which": "gate_0_intake", "decision": decision,
                 "actor": actor, "auto_approved": auto_approved,
-                "wait_ms": wait_ms}
+                "wait_ms": wait_ms, "notes": notes}  # P1-15: the rationale
         log.emit("gate", stage="gate_0", gate=gate)
+        # P1-15: the redo screen reads the LAST rejection here; the run
+        # log keeps every one
+        pursuit.checkpoint("gate_0_rejection", {
+            "decision": decision, "actor": actor, "at": at, "notes": notes})
         log.emit("stage_end", stage="gate_0")
         return Gate0Result(decision=decision)
 
@@ -327,6 +331,8 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
         log.emit("gap", stage="gate_0", gap=gap)
     gate = {"which": "gate_0_intake", "decision": decision, "actor": actor,
             "auto_approved": auto_approved, "wait_ms": wait_ms}
+    if notes:
+        gate["notes"] = notes  # P1-15
     if summary_parts:
         gate["edits_summary"] = " ".join(summary_parts)
     log.emit("gate", stage="gate_0", gate=gate)

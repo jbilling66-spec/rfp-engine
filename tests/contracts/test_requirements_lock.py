@@ -30,7 +30,9 @@ def _lock_pins() -> dict[str, str]:
         if not line or line.startswith("#") or "==" not in line:
             continue
         name, _, version = line.partition("==")
-        pins[_norm(name)] = version.strip()
+        # P26a P0-12: a hashed lock continues each pin with ` \` and
+        # `--hash=` lines — the version is the first token
+        pins[_norm(name)] = version.split()[0].strip()
     return pins
 
 

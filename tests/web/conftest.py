@@ -49,13 +49,13 @@ def advance_past_gate0(client, pursuit_id, at=FIXED_AT, timeout=120.0):
     lands wherever the pre-P15 first advance used to land. Walks that
     exercise gate_0 itself post to /gate0 directly instead."""
     job = client.post(f"/api/pursuits/{pursuit_id}/jobs",
-                      json={"kind": "advance", "at": at}).json()
+                      json={"kind": "advance"}).json()
     done = wait_job(client, job["id"], timeout=timeout)
     if "gate_0" not in done.get("message", ""):
         return done
     r = client.post(f"/api/pursuits/{pursuit_id}/gate0",
-                    json={"decision": "approved", "at": at})
+                    json={"decision": "approved"})
     assert r.status_code == 200, r.text
     job = client.post(f"/api/pursuits/{pursuit_id}/jobs",
-                      json={"kind": "advance", "at": at}).json()
+                      json={"kind": "advance"}).json()
     return wait_job(client, job["id"], timeout=timeout)

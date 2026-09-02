@@ -104,10 +104,17 @@ directly against the engine and hands you the result:
 - Rendering the submission documents: `POST /api/pursuits/{pursuit_id}/export`
 - Listing what may go to the buyer: `GET /api/pursuits/{pursuit_id}/downloads`
 - Fetching one file: `GET /api/pursuits/{pursuit_id}/download/{name:path}`
-- Filling the buyer's own forms: `POST /api/pursuits/{pursuit_id}/writeback/confirm`
+- Filling the buyer's own forms, or the firm's template: `POST /api/pursuits/{pursuit_id}/writeback/confirm`
+- Entering the values only a person supplies on a firm-template response — the cover block (client, RFP title, dates, contact), the pricing grid, the case block, the payment line: `PUT /api/pursuits/{pursuit_id}/writeback/hand-fill` (and `GET /api/pursuits/{pursuit_id}/writeback/hand-fill` lists what is still owed)
 - A guest review link for someone outside the pilot: `POST /api/pursuits/{pursuit_id}/share`
 
 Ask the pilot host when a pursuit reaches the point of producing files.
+
+A firm-template response is a working copy first: it lists under the
+internal heading, with the template's own instructions already stripped,
+until every section has drafted prose and every hand-entered value is in.
+Only then does the buyer copy appear under the buyer heading — a document
+that still says "replace with the drafted section" never lists there.
 
 ## The ground rules
 

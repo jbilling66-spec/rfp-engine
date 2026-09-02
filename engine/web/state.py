@@ -11,29 +11,58 @@ absent is ABSENT from the payload, never defaulted — a default here
 becomes a claim on screen.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
+from engine.contracts import ContractError
 from engine.runlog import read_run
+from engine.workspace.pursuit import latest_run_id_in
 from engine.workspace import PursuitDir
 
 _STAGE_ORDER = ("intake", "gate_0", "research", "gate_1", "planning",
                 "gate_2", "drafting", "validation")
 
 
-def _read_json(path: Path) -> dict | None:
+class _Corrupt(list):
+    """Per-row collector: the files a board row could not read (P26a
+    Group C, P2-49/M-23) — one corrupt file names itself on ITS row
+    instead of 500ing the whole board."""
+
+
+def _read_json(path: Path, corrupt: list | None = None) -> dict | None:
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        if corrupt is None:
+            raise
+        corrupt.append(f"{path.name}: {exc.__class__.__name__} — see the "
+                       "recovery runbook")
+        return None
 
 
-def _run_totals(root: Path) -> dict:
+def _sha256(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _run_totals(root: Path, corrupt: list | None = None) -> dict:
     cost, calls, runs = 0.0, 0, 0
     runs_dir = root / "runs"
     if runs_dir.exists():
         for run_file in sorted(runs_dir.glob("*/run.jsonl")):
             runs += 1
-            for record in read_run(run_file):
+            try:
+                records = read_run(run_file)
+            except ContractError as exc:
+                if corrupt is None:
+                    raise
+                corrupt.append(f"runs/{run_file.parent.name}: {exc}")
+                continue
+            for record in records:
                 if record.get("record_type") == "agent_call":
                     calls += 1
                     cost += record.get("cost_usd", 0.0)
@@ -41,22 +70,29 @@ def _run_totals(root: Path) -> dict:
             "cost_source": "run_totals"}
 
 
-def _last_run_status(root: Path) -> str | None:
+def _last_run_status(root: Path, corrupt: list | None = None) -> str | None:
     runs_dir = root / "runs"
-    run_files = sorted(runs_dir.glob("*/run.jsonl")) if runs_dir.exists() \
-        else []
-    if not run_files:
+    run_id = latest_run_id_in(runs_dir)  # M-25: numeric, not lexicographic
+    if run_id is None:
         return None
-    records = read_run(run_files[-1])
+    try:
+        records = read_run(runs_dir / run_id / "run.jsonl")
+    except ContractError as exc:
+        if corrupt is None:
+            raise
+        corrupt.append(f"runs/{run_id}: {exc}")
+        return "corrupt"
     footer = records[-1] if records else None
     if footer and footer.get("record_type") == "run_end":
         return footer["run"]["status"]
     return "in_flight"  # an open run: honest, not a guess
 
 
-def _stage_and_next(root: Path, brief, plan) -> tuple[str, str]:
+def _stage_and_next(root: Path, brief, plan,
+                    corrupt: list | None = None) -> tuple[str, str]:
     """Where the pursuit stands and what a human does next — decided
-    HERE, from completed artifacts, exactly the driver's skip logic."""
+    HERE, from completed artifacts bound the way the driver binds them
+    (P25 item 8's predicates, mirrored in P1-35)."""
     if brief is None:
         return "intake", "upload the RFP package and run intake"
     done = {p.stem for p in (root / "checkpoints").glob("*.json")}
@@ -78,11 +114,18 @@ def _stage_and_next(root: Path, brief, plan) -> tuple[str, str]:
         if plan is not None and plan.get("status") == "gate2_pending":
             return "gate_2", "decide Gate 2 (plan + gap dispositions)"
         return "planning", "advance: build the pursuit plan"
-    envelope = _read_json(root / "drafts" / "draft.json")
-    if envelope is None or envelope.get("status") != "complete":
+    # P1-35: decided on the HASH BINDINGS the driver decides on (P25 item
+    # 8), never on existence — a replanned pursuit's old draft or
+    # annotation reads as "draft again" / "validate again", not "review"
+    envelope = _read_json(root / "drafts" / "draft.json", corrupt)
+    if (envelope is None or envelope.get("status") != "complete"
+            or envelope.get("plan_sha256")
+            != _sha256(root / "plan.frozen.json")):
         return "drafting", "advance: draft sections"
-    annotated = _read_json(root / "drafts" / "annotated-draft.json")
-    if annotated is None:
+    annotated = _read_json(root / "drafts" / "annotated-draft.json", corrupt)
+    if (annotated is None
+            or annotated.get("draft_sha256")
+            != _sha256(root / "drafts" / "draft.json")):
         return "validation", "advance: validate the draft"
     if annotated.get("packaging", {}).get("blocked"):
         return "review", "review: packaging BLOCKED on tier-1 claims"
@@ -97,12 +140,13 @@ def board(workspace: Path) -> list[dict]:
     for root in sorted(p for p in workspace.iterdir() if p.is_dir()):
         if not (root / "brief.json").exists() and not (root / "inbox").exists():
             continue  # not a pursuit workspace (e.g. kb/, support/)
-        brief = _read_json(root / "brief.json")
-        plan = _read_json(root / "plan.json")
-        stage, next_action = _stage_and_next(root, brief, plan)
+        corrupt = _Corrupt()
+        brief = _read_json(root / "brief.json", corrupt)
+        plan = _read_json(root / "plan.json", corrupt)
+        stage, next_action = _stage_and_next(root, brief, plan, corrupt)
         row = {"pursuit_id": root.name, "stage": stage, "next": next_action,
-               "totals": _run_totals(root)}
-        run_status = _last_run_status(root)
+               "totals": _run_totals(root, corrupt)}
+        run_status = _last_run_status(root, corrupt)
         if run_status is not None:
             row["last_run_status"] = run_status
         if plan is not None:
@@ -110,31 +154,55 @@ def board(workspace: Path) -> list[dict]:
                     for g in s.get("gaps", [])]
             row["open_gaps"] = sum(
                 1 for g in gaps if g.get("status") in ("open", "pinged"))
-        envelope = _read_json(root / "drafts" / "draft.json")
+        envelope = _read_json(root / "drafts" / "draft.json", corrupt)
         if envelope is not None:
             row["revision_n"] = envelope.get("revision_n")
-        annotated = _read_json(root / "drafts" / "annotated-draft.json")
-        if annotated is not None:
+        annotated = _read_json(root / "drafts" / "annotated-draft.json",
+                               corrupt)
+        if annotated is not None and stage == "review":
+            # P1-35: packaging is published only when the annotation is
+            # CURRENT (the stage says so); a superseded one says nothing
             row["packaging"] = annotated.get("packaging")
+        if corrupt:
+            row["corrupt"] = list(corrupt)
+            row["stage"], row["next"] = "corrupt", (
+                "a workspace file is unreadable — see the recovery "
+                "runbook: " + "; ".join(corrupt))
         rows.append(row)
     return rows
 
 
-def _claim_mark(claim: dict) -> dict:
+GUEST_STRIPPED = ("waived_by", "waiver_reason")  # P0-21: never to a guest
+
+
+def _claim_mark(claim: dict, *, include_internal: bool = True) -> dict:
     """F9 (the owner's J4 ask): a MARK + ONE-LINE reason leads; the full
     forensic row nests under detail, on demand. The artifact itself is
-    untouched — this is rendering, never record."""
+    untouched — this is rendering, never record. The guest rendering
+    (include_internal=False) carries neither the waiving operator nor
+    the waiver reason ANYWHERE — line or detail (P26a, P0-21: the line
+    used to be built before the detail strip)."""
     disposition = claim.get("disposition", "")
     mark = {"block": "block", "flag": "review",
             "waived": "waived"}.get(disposition, "ok")
     line = f"{claim.get('status', '?')}: {claim.get('text', '')[:70]}"
+    detail = claim
     if mark == "waived":
-        line = f"waived by {claim.get('waived_by', '?')}: " \
-               f"{claim.get('text', '')[:60]}"
+        if include_internal:
+            line = f"waived by {claim.get('waived_by', '?')}: " \
+                   f"{claim.get('text', '')[:60]}"
+        else:
+            line = f"waived: {claim.get('text', '')[:60]}"
+    if not include_internal:
+        detail = {k: v for k, v in claim.items() if k not in GUEST_STRIPPED}
+        if mark == "waived":
+            # the audit trail names the waiver too ("… by <actor> at …")
+            # — a guest gets the verdict, never the trail
+            detail.pop("reasons", None)
     return {"kind": "claim", "mark": mark, "line": line,
             "claim_id": claim.get("claim_id"),
             "slot_id": claim.get("slot_id"),
-            "detail": claim}
+            "detail": detail}
 
 
 def _finding_mark(finding: dict) -> dict:
@@ -174,12 +242,9 @@ def review(workspace: Path, pursuit_id: str, *,
                 item["section_id"], []).append(item)
     sections = []
     for section in annotated.get("sections", []):
-        marks = [_claim_mark(c) for c in section.get("claims", [])]
+        marks = [_claim_mark(c, include_internal=include_internal)
+                 for c in section.get("claims", [])]
         marks += [_finding_mark(f) for f in section.get("findings", [])]
-        if not include_internal:
-            for mark in marks:  # strip waiver identity from the guest view
-                mark["detail"] = {k: v for k, v in mark["detail"].items()
-                                  if k not in ("waived_by",)}
         row = {"section_id": section["section_id"],
                "title": section.get("title", ""),
                "draft_status": section.get("draft_status"),

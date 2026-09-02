@@ -45,7 +45,8 @@ jobs:
       - name: Bootstrap (the documented path)
         run: |
           uv venv --python 3.11 .venv
-          uv pip install -r requirements.lock -e .
+          uv pip install --require-hashes -r requirements.lock
+          uv pip install --no-deps -e .
 
       - name: Restricted-token list
         # Private repo: the TRIPWIRE_TOKENS secret (one token per line)

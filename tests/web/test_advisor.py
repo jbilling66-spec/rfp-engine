@@ -59,7 +59,7 @@ def test_answer_flows_and_the_lane_is_unmixable(advised):
     runs_before = sorted((pursuit.root / "runs").glob("*"))
     r = client.post("/api/advisor", json={
         "question": "How do I run the next stage?",
-        "pursuit_id": pursuit.pursuit_id, "at": FIXED_AT})
+        "pursuit_id": pursuit.pursuit_id})
     assert r.status_code == 200
     out = r.json()
     assert out["kind"] == "answer"
@@ -82,13 +82,13 @@ def test_decline_arm_carries_no_answer_and_feeds_the_worklist(advised):
         {"kind": "not_covered", "topic": "invoice reconciliation",
          "answer": "smuggled!", "closest_sources": ["getting-started.md"]})
     r = client.post("/api/advisor", json={
-        "question": "How do I reconcile the invoices?", "at": FIXED_AT})
+        "question": "How do I reconcile the invoices?"})
     assert r.status_code == 200
     out = r.json()
     assert out["kind"] == "not_covered"
     assert "answer" not in out  # the union arm structurally cannot carry it
     r = client.post("/api/advisor", json={
-        "question": "Invoices again?", "at": FIXED_AT})
+        "question": "Invoices again?"})
     gaps = client.get("/api/advisor/gaps").json()
     assert gaps[0] == {"topic": "invoice reconciliation", "count": 2,
                        "last_at": FIXED_AT}
@@ -99,14 +99,12 @@ def test_advisor_guards(advised):
     workspace = pursuit.root.parent
     # unknown pursuit: 404 WITHOUT creating a phantom directory
     r = client.post("/api/advisor", json={
-        "question": "What about pur_ghost?", "pursuit_id": "pur_ghost",
-        "at": FIXED_AT})
+        "question": "What about pur_ghost?", "pursuit_id": "pur_ghost"})
     assert r.status_code == 404
     assert not (workspace / "pur_ghost").exists()
     # a scalar wire (the P8 bug class) is a recorded ERROR, not a crash
     client.app.state.advisor_caller = FakeCaller({"advisor": "null"})
-    r = client.post("/api/advisor", json={"question": "Anything?",
-                                          "at": FIXED_AT})
+    r = client.post("/api/advisor", json={"question": "Anything?"})
     assert r.status_code == 502
     lines = [json.loads(l) for l in (
         workspace / "support" / "traces.jsonl").read_text().splitlines()]

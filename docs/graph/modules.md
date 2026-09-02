@@ -114,19 +114,19 @@ is the pursuit-memory store. Both are drawn because the rule draws them.)*
 
 | door | imports |
 |---|---|
-| assistant | flywheel, intake, kb, llm, runlog, support |
+| assistant | contracts, flywheel, intake, kb, llm, runlog, support |
 | cli | contracts, drafting, evals, extraction, intake, kb, llm, metrics, pipeline, runlog, validation, web, workspace |
-| evals | contracts, intake, kb, llm, planning, runlog, structure, validation, workspace |
+| evals | cli, contracts, intake, kb, llm, planning, runlog, structure, validation, workspace |
 | web | assembly, assistant, cli, contracts, evals, flywheel, intake, kb, llm, metrics, pipeline, planning, revision, runlog, strategy, structure, support, validation, workspace |
 
 ### Foundation fan-in (edges INTO foundation packages from non-door packages, omitted from the diagram)
 
 | foundation | imported by |
 |---|---|
-| contracts | assembly, drafting, flywheel, intake, kb, planning, research, revision, runlog, strategy, structure, validation, workspace |
+| contracts | assembly, drafting, extraction, flywheel, intake, kb, metrics, planning, research, revision, runlog, strategy, structure, validation, workspace |
 | llm | drafting, intake, kb, pipeline, planning, research, revision, strategy |
 | runlog | kb, llm, pipeline |
-| workspace | intake, kb, pipeline |
+| workspace | intake, kb, pipeline, revision |
 
 ## The caller seam
 

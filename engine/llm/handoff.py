@@ -47,6 +47,18 @@ class HandoffTimeout(HandoffError):
     pass
 
 
+def _int_field(file: str, name: str, value):
+    """None passes through (estimated later); anything else must be a
+    non-negative integer — a bool, a float, a string count refuses."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise HandoffError(
+            f"{file}: '{name}' must be a non-negative integer when given "
+            f"(got {value!r})")
+    return value
+
+
 def _atomic_write_json(path: Path, obj: dict) -> None:
     # Twin of engine/workspace/pursuit.py's _atomic_write_json, copied
     # rather than imported: an llm -> workspace edge would close an
@@ -164,14 +176,19 @@ class HandoffCaller:
         text = payload.get("text")
         if not isinstance(text, str):
             raise HandoffError(f"{name}: 'text' must be a string")
-        input_tokens = payload.get("input_tokens")
-        output_tokens = payload.get("output_tokens")
+        # P26a Group A (P2-14): a hand-typed count that is not an integer
+        # is a typed refusal here, never a bare ValueError out of int()
+        # that turns the pilot's own lane into a job traceback
+        input_tokens = _int_field(name, "input_tokens",
+                                  payload.get("input_tokens"))
+        output_tokens = _int_field(name, "output_tokens",
+                                   payload.get("output_tokens"))
         return CallResult(
             text=text,
             model=f"handoff/{model}",
-            input_tokens=(int(input_tokens) if input_tokens is not None
+            input_tokens=(input_tokens if input_tokens is not None
                           else max(1, (len(system) + len(prompt)) // 4)),
-            output_tokens=(int(output_tokens) if output_tokens is not None
+            output_tokens=(output_tokens if output_tokens is not None
                            else max(1, len(text) // 4)),
         )
 

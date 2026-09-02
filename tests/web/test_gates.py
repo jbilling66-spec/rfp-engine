@@ -115,7 +115,7 @@ def test_gate1_screen_shows_procurement_red_flags(walked):
 def test_gate2_model_shows_the_plan_and_decision_freezes(walked):
     client, ws = walked
     job = client.post("/api/pursuits/pur_walk/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     assert "awaiting_gate at gate_2" in wait_job(client, job["id"])["message"]
     model = client.get("/api/pursuits/pur_walk/gate2").json()
     assert model["decidable"] is True
@@ -145,7 +145,7 @@ def test_gate2_model_shows_the_plan_and_decision_freezes(walked):
 def test_walk_completes_to_review_through_http(walked):
     client, ws = walked
     job = client.post("/api/pursuits/pur_walk/jobs",
-                      json={"kind": "advance", "at": FIXED_AT}).json()
+                      json={"kind": "advance"}).json()
     done = wait_job(client, job["id"], timeout=120)
     assert done["state"] == "done" and "advance complete" in done["message"]
     row = next(x for x in client.get("/api/pursuits").json()
@@ -169,12 +169,14 @@ def test_gate_refusals_surface_as_409(walked):
                           **ROLE})
     assert r.status_code == 409, r.text
     # a settled gate 2 refuses a NEW decision (a same-args resubmission
-    # would converge idempotently per B22(10) — so probe with a new at)
+    # would converge idempotently per B22(10) — so probe with different
+    # EDITS; since P25 item 1 the clock is outside the digest, and since
+    # P0-11 the server stamps it)
     r = client.post("/api/pursuits/pur_walk/gate2", json={
         "decision": "approved_with_edits",
         "edits": {"dispose": [{"section_id": "x", "gap_id": "y",
                                "action": "answered", "answer": "z"}]},
-        "at": "2026-08-09T10:00:00", **ROLE})
+        **ROLE})
     assert r.status_code == 409, r.text
     assert "already decided" in r.json()["detail"]
 
@@ -194,7 +196,7 @@ def test_gate2_rejection_is_the_redo_door_over_http(tmp_path):
         client.post("/api/pursuits/pur_redo/gate1",
                     json={"decision": "approved", **ROLE})
         job = client.post("/api/pursuits/pur_redo/jobs",
-                          json={"kind": "advance", "at": FIXED_AT}).json()
+                          json={"kind": "advance"}).json()
         wait_job(client, job["id"])
         # reject without notes refuses — feedback is the point of the redo
         no_notes = client.post("/api/pursuits/pur_redo/gate2",
@@ -209,7 +211,7 @@ def test_gate2_rejection_is_the_redo_door_over_http(tmp_path):
         assert plan["status"] == "draft"  # the redo door, not a terminal
         # advancing again genuinely replans back to the gate
         job = client.post("/api/pursuits/pur_redo/jobs",
-                          json={"kind": "advance", "at": FIXED_AT}).json()
+                          json={"kind": "advance"}).json()
         assert "awaiting_gate at gate_2" in wait_job(
             client, job["id"])["message"]
 

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rfp-engine-v2"
-version = "0.2.0"
+version = "0.3.0"
 description = "RFP Response Engine v2 — sales engine: draft boldly, verify at the boundary, learn from every review"
 readme = "README.md"
 license = "Apache-2.0"
@@ -28,6 +28,10 @@ dependencies = [
     "python-docx>=1.1,<2",
     "openpyxl>=3.1,<4",
     "pypdf>=5,<7",
+    # P25 item 6 / P26a P0-12: openpyxl and python-docx switch to defusedxml's
+    # entity-safe parsers when it is importable — no import of ours, but a
+    # declared dependency, never an orphan the lock happened to carry
+    "defusedxml>=0.7,<1",
 ]
 
 [project.optional-dependencies]

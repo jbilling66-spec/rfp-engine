@@ -32,6 +32,7 @@
     },
     "before": { "type": "string", "description": "Text before the change (edit/accept/reject kinds)." },
     "after": { "type": "string", "description": "Text after the change." },
+    "cid": { "type": "string", "description": "The pending-store id (cmt_NNNN) a finalized comment/edit event consumed (P26a, P1-14): a replayed round commit dedupes on it, so the append-only record carries each consumed item exactly once." },
     "comment_text": { "type": "string", "description": "The reviewer's inline comment (comment kind)." },
     "agent_reply": { "type": "string", "description": "Revision Agent's response to the comment." },
     "outcome": {

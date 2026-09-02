@@ -22,6 +22,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from engine.contracts import read_jsonl
+
 
 @dataclass
 class PursuitRecords:
@@ -34,21 +36,11 @@ class PursuitRecords:
 
 
 def _read_jsonl(path: Path, torn: list[str]) -> list[dict]:
-    if not path.exists():
-        return []
-    lines = path.read_text(encoding="utf-8").splitlines()
-    records: list[dict] = []
-    for index, line in enumerate(lines):
-        if not line.strip():
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            if index == len(lines) - 1:
-                # A writer caught mid-append. Recorded, never silent.
-                torn.append(f"{path}: torn final line skipped")
-                continue
-            raise
+    # P26a Group C: the tolerant read lives in engine/contracts/jsonl.py
+    # (one rule, one home); this keeps the walker's torn-lines report.
+    records, reason = read_jsonl(path)
+    if reason is not None:
+        torn.append(f"{path}: {reason}")
     return records
 
 
@@ -93,7 +85,9 @@ def run_headers(records: list[dict]) -> dict[str, dict]:
     """run_id -> the run_start payload, so a caller can filter records by
     the mode of the run that produced them. O3's exclusion rule needs
     this join: mode lives on the header, not on every line."""
-    return {r["run_id"]: r["run"]
+    # P1-32: a run id is unique only WITHIN a pursuit (each mints its own
+    # run_0001); across the flattened corpus the key is the pair
+    return {(r.get("pursuit_id"), r["run_id"]): r["run"]
             for r in records if r.get("record_type") == "run_start"}
 
 
@@ -107,6 +101,7 @@ def production_only(records: list[dict],
     bench run leak into a production series through a missing header —
     exactly the failure the rule exists to prevent."""
     headers = run_headers(records)
-    keep = {run_id for run_id, header in headers.items()
+    keep = {key for key, header in headers.items()
             if header.get("mode") not in excluded_modes}
-    return [r for r in records if r.get("run_id") in keep]
+    return [r for r in records
+            if (r.get("pursuit_id"), r.get("run_id")) in keep]

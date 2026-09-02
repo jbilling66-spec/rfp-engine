@@ -42,7 +42,7 @@ unpriced model refuses to run rather than bill at a guess.
 ## Changing dependencies
 
 Dependency changes are deliberate: edit `pyproject.toml`, re-pin
-`requirements.lock` (splice, don't reformat — the lock's line order is
+`requirements.lock` (regenerate with `make lock` and review the diff — since P26a the lock carries hashes, and hand-splicing a hashed lock is not a thing; the lock's line order is
 part of its diff hygiene), rebuild the gate image so the extraction
 lock re-freezes, and let the suite's lock test confirm the environment
 matches the pins. A dependency nothing imports gets removed, not kept.

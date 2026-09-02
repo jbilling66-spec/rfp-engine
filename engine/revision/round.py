@@ -23,7 +23,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from engine.contracts import ContractError
+from engine.contracts import ContractError, validate, write_bytes_atomic
+from engine.workspace.pursuit import _serialize
 from engine.drafting import route
 from engine.drafting.compose import VOICE_DEFAULT, load_voice_spec
 from engine.kb import UseRestrictedCard, targeted_open
@@ -89,7 +90,24 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
     except ContractError as exc:
         return _refuse(log, report, "frozen_verification_failed", str(exc))
     draft_sha = pursuit.file_sha256("drafts/draft.json")
-    if annotated.get("draft_sha256") != draft_sha:
+    # P26a Group B (P1-14): the round's checkpoint binds the envelope it
+    # started from (draft_sha256_in) and, once the commit has written the
+    # new envelope, the one it produced (draft_sha256_out). A crash AFTER
+    # the draft write used to re-key the checkpoint out of existence and
+    # trip stale_annotation forever; now that state resumes ITS round's
+    # commit from the annotated rebuild on.
+    resume_commit = False
+    ckpt_key = None
+    for stage in sorted(pursuit.completed_stages()):
+        if not stage.startswith("review_round_"):
+            continue
+        payload = pursuit.checkpoint_payload(stage)
+        if payload.get("draft_sha256_out") == draft_sha:
+            ckpt_key, resume_commit = stage, True
+            break
+        if payload.get("draft_sha256_in") == draft_sha:
+            ckpt_key = stage
+    if not resume_commit and annotated.get("draft_sha256") != draft_sha:
         return _refuse(log, report, "stale_annotation",
                        "annotated draft does not match the envelope — "
                        "re-run validation first")
@@ -118,15 +136,16 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                     and gap.get("slot_id") in waits:
                 answered_gaps.setdefault(
                     section["section_id"], []).append(gap)
-    if not consumable and not answered_gaps:
+    if not consumable and not answered_gaps and not resume_commit:
         return _refuse(log, report, "empty_round",
                        "no pending comments, edits, or newly answered "
                        "gaps — a round that would change nothing refuses; "
                        "revision_n never bumps over unchanged bytes")
 
-    round_n = envelope["revision_n"] + 1
+    round_n = (envelope["revision_n"] if resume_commit
+               else envelope["revision_n"] + 1)
     report.round_n = round_n
-    ckpt_key = f"review_round_{round_n}"
+    ckpt_key = ckpt_key or f"review_round_{round_n}"
 
     path = frozen_plan["path"]
     slots_by_id: dict = {}
@@ -154,7 +173,15 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
     voice_text = load_voice_spec(voice_path)
     ckpt = (pursuit.checkpoint_payload(ckpt_key)
             if ckpt_key in pursuit.completed_stages()
-            else {"sections": {}, "complete": False})
+            else {"sections": {}, "complete": False,
+                  "round_n": round_n, "draft_sha256_in": draft_sha})
+    # a checkpointed section's REVISED ENTRY is restored into the
+    # in-memory envelope on resume — the outcome alone re-committed the
+    # old prose under a "revised" label (P1-14)
+    for section_id, done in ckpt["sections"].items():
+        if done.get("entry") is not None and section_id in entries:
+            entries[section_id].clear()
+            entries[section_id].update(done["entry"])
 
     # --- per touched section: revise ------------------------------------
     for section_id, items in sorted(by_section.items()):
@@ -317,6 +344,8 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
         if section_result["outcome"] != "pended":
             section_result["outcome"] = "revised" if edited else "kept"
         section_result["warnings"] = warnings
+        if section_result["outcome"] == "revised":
+            section_result["entry"] = json.loads(json.dumps(entry))
         ckpt["sections"][section_id] = section_result
         pursuit.checkpoint(ckpt_key, ckpt)
 
@@ -374,19 +403,41 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
         ckpt["reval_done"] = True
         pursuit.checkpoint(ckpt_key, ckpt)
 
-    # --- transactional commit -------------------------------------------
+    # --- convergent commit (P1-14) ----------------------------------------
+    # Every step below is safe to replay: the archives and the envelope
+    # write happen once (skipped when this run resumes a commit whose
+    # envelope already landed), the annotated rebuild is idempotent, the
+    # finalize dedupes on cid, the round record is kept from the first
+    # attempt, the plan write is idempotent, and the checkpoint is
+    # cleared LAST — a crash anywhere converges on the next run with
+    # zero model calls.
     rev_dir = pursuit.root / "revisions"
     rev_dir.mkdir(exist_ok=True)
-    prior_n = envelope["revision_n"]
-    (rev_dir / f"draft.rev{prior_n}.json").write_bytes(
-        (pursuit.root / "drafts" / "draft.json").read_bytes())
-    (rev_dir / f"annotated.rev{prior_n}.json").write_bytes(
-        (pursuit.root / annotate.VALIDATION_NAME).read_bytes())
-
-    envelope["revision_n"] = round_n
-    draft_path = pursuit.write_artifact("draft", envelope,
-                                        name="drafts/draft.json")
-    new_sha = hashlib.sha256(draft_path.read_bytes()).hexdigest()
+    prior_n = round_n - 1
+    draft_path = pursuit.root / "drafts" / "draft.json"
+    if not resume_commit:
+        for name, src in ((f"draft.rev{prior_n}.json", draft_path),
+                          (f"annotated.rev{prior_n}.json",
+                           pursuit.root / annotate.VALIDATION_NAME)):
+            if not (rev_dir / name).exists():  # archived once, never rewritten
+                write_bytes_atomic(rev_dir / name, src.read_bytes())
+        envelope["revision_n"] = round_n
+        validate("draft", envelope)
+        new_bytes = _serialize(envelope).encode("utf-8")
+        new_sha = hashlib.sha256(new_bytes).hexdigest()
+        # the binding is recorded BEFORE the write, so a crash between the
+        # two leaves a checkpoint the next run resolves either way
+        ckpt["draft_sha256_out"] = new_sha
+        pursuit.checkpoint(ckpt_key, ckpt)
+        draft_path = pursuit.write_artifact("draft", envelope,
+                                            name="drafts/draft.json")
+        assert hashlib.sha256(draft_path.read_bytes()).hexdigest() == new_sha
+    else:
+        new_sha = draft_sha
+        report.warnings.append(
+            f"round {round_n}: resumed its commit after a crash — the "
+            "envelope had already landed; finishing from the annotated "
+            "rebuild")
     log.emit("artifact", stage=STAGE, artifact={
         "kind": "draft", "path": str(draft_path), "revision_n": round_n,
         "sha256": new_sha})
@@ -455,8 +506,13 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
     all_replies = {cid: reply for r in ckpt["sections"].values()
                    for cid, reply in r.get("replies", {}).items()}
 
+    already = lane.finalized_by_cid()  # P1-14: replay never re-appends
+
     def _finalize(item, *, with_reply: bool):
-        fields = {"section_id": item["section_id"],
+        if item["cid"] in already:
+            return already[item["cid"]]
+        fields = {"cid": item["cid"],
+                  "section_id": item["section_id"],
                   "section_type": entries[item["section_id"]]
                   .get("section_type")}
         if item["kind"] == "comment":
@@ -497,6 +553,13 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                 and item["section_id"] not in report.pended):
             dismissed_ids.append((item, _finalize(item, with_reply=False)))
     lane.drop_pending(consumed_cids | {i["cid"] for i, _ in dismissed_ids})
+    if resume_commit and not consumed_ids:
+        # the pending items were consumed and dropped before the crash;
+        # the finalized events (each carrying its cid) are the record of
+        # what this round consumed
+        consumed_ids = [(e, e) for e in already.values()
+                        if e.get("revision") == prior_n
+                        and e.get("kind") in ("comment", "edit")]
 
     # the round record (D6): code-validated, the artifact kind `revision`
     record = {
@@ -532,8 +595,15 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
              for s in live_plan.get("sections", [])],
             sort_keys=True).encode("utf-8")).hexdigest()[:12],
     }
-    record_path = pursuit.write_json(
-        f"revisions/round_{round_n}.json", record)
+    record_name = f"revisions/round_{round_n}.json"
+    if (pursuit.root / record_name).exists():
+        # the first attempt's record stands (its `at` is the commit's
+        # own clock); a replay completes the round around it
+        record_path = pursuit.root / record_name
+        report.warnings.append(
+            f"round {round_n}: record kept from the first attempt")
+    else:
+        record_path = pursuit.write_json(record_name, record)
     log.emit("artifact", stage=STAGE, artifact={
         "kind": "revision", "path": str(record_path),
         "revision_n": round_n,
@@ -546,6 +616,7 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                 and section.get("draft_status") == "in_review":
             section["draft_status"] = "validated"
     pursuit.write_artifact("pursuit_plan", live_plan)
+    pursuit.clear_checkpoint(ckpt_key)  # the round is committed (P1-14)
 
     log.emit("stage_end", stage=STAGE)
     return report

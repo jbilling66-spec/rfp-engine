@@ -36,6 +36,7 @@ SYSTEM_OWNER_WEEKLY = [
     "run_success_rate",
     "injection_screen_flags",
     "anonymization_scan_result",
+    "requirement_coverage",  # P26a P0-15
 ]
 
 # Bench results get their own view (REPORTING_SPEC:19) — visible, but
@@ -86,4 +87,8 @@ def render_view(name: str, corpus: Corpus, *, registry=None) -> dict:
         "absent_count": sum(1 for r in rows if r["status"] == "absent"),
         "count_only": [r["metric_id"] for r in rows
                        if r["status"] == "count_only"],
+        # P2-44: the walker's "recorded, never silent" torn-line report
+        # finally has a reader — a torn run_end drops a run's totals
+        # from every totals metric, and the view says so
+        "torn_lines": [line for p in corpus.pursuits for line in p.torn_lines],
     }

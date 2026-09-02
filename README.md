@@ -29,7 +29,8 @@ platform (macOS or Linux; the Makefile assumes `.venv/bin/python`).
 
 ```
 uv venv --python 3.11 .venv
-uv pip install -r requirements.lock -e .
+uv pip install --require-hashes -r requirements.lock
+uv pip install --no-deps -e .
 make check
 ```
 

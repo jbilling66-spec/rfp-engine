@@ -29,13 +29,14 @@ from engine.web.fake_script import revision_script
 from engine.intake.brief import IntakeDoc, IntakePackage
 from engine.llm import FakeCaller, TracedCaller
 from engine.pipeline import advance
-from engine.runlog import read_run
+from engine.runlog import read_run, read_run_report
 from engine.version import engine_version
 from engine.web import state as state_models
 from engine.web.auth import AuthSeam
-from engine.contracts import ContractError
+from engine.contracts import ContractError, write_bytes_atomic, write_json_atomic
 from engine.web.events import EventsError, EventsLane
 from engine.web import limits
+from engine.web.payload import field
 from engine.web.headers import SecurityHeadersMiddleware
 from engine.web.jobs import JobConflict, JobNotFound, JobRunner
 from engine.workspace import PursuitDir, orgs as org_registry
@@ -106,8 +107,27 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     def operator(request: Request) -> str:
         return seam.operator(request)
 
+    app.state.clock = now  # the injectable clock (tests move it here)
+
+    def now() -> str:  # noqa: F811 — shadows the parameter on purpose
+        return app.state.clock()
+
     def _at(payload: dict | None) -> str:
-        return (payload or {}).get("at") or now()
+        """P26a Group D (P0-11): the SERVER stamps every mutating door's
+        clock. A client `at` in a mutating payload is refused, not
+        silently ignored — the door is visibly closed (the browser never
+        sent one; tests inject through create_app(now=)). Read-time
+        staleness inputs use _read_at, never this."""
+        if payload and payload.get("at") is not None:
+            raise HTTPException(
+                422, "the server stamps the clock — a client-supplied 'at' "
+                     "is refused on every mutating door (P0-11)")
+        return now()
+
+    def _read_at(at: str | None) -> str:
+        """A read-time staleness probe (KB card staleness) — the one place
+        a caller may name a moment, because nothing is recorded."""
+        return at or now()
 
     def _pursuit_root(pursuit_id: str) -> Path:
         # P25 item 4 (P2-17): the id shape is checked at every door, not
@@ -159,17 +179,28 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         root = _pursuit_root(pursuit_id)
         out = []
         runs_dir = root / "runs"
-        for run_file in sorted(runs_dir.glob("*/run.jsonl")) \
+        busy = runner.busy(pursuit_id) is not None
+        for run_file in sorted(runs_dir.glob("*/run.jsonl"),
+                               key=lambda p: int(p.parent.name[4:])
+                               if p.parent.name[4:].isdigit() else -1) \
                 if runs_dir.exists() else []:
-            records = read_run(run_file)
+            records, torn = read_run_report(run_file)
             header = records[0]["run"] if records else {}
             footer = records[-1]["run"] if records and \
                 records[-1].get("record_type") == "run_end" else None
-            out.append({"run_id": run_file.parent.name,
-                        "mode": header.get("mode"),
-                        "records": len(records),
-                        "status": (footer or {}).get("status", "in_flight"),
-                        "totals": (footer or {}).get("totals")})
+            row = {"run_id": run_file.parent.name,
+                   "mode": header.get("mode"),
+                   "records": len(records),
+                   # P2-20: footerless = in_flight only while a job holds
+                   # this pursuit; otherwise the run is honestly UNCLOSED
+                   # (the job lane and rehydrate close crashed runs, so
+                   # this names a hard kill the runbook owns)
+                   "status": (footer or {}).get(
+                       "status", "in_flight" if busy else "unclosed"),
+                   "totals": (footer or {}).get("totals")}
+            if torn:
+                row["torn_tail"] = torn  # P1-17: reported, never hidden
+            out.append(row)
         return out
 
     @app.get("/api/pursuits/{pursuit_id}/runs/{run_id}")
@@ -186,7 +217,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/pursuits")
     def create_pursuit(payload: dict, who: str = Depends(operator)):
-        pursuit_id = payload.get("pursuit_id", "")
+        _at(payload)  # P0-11: a client clock is refused here too
+        pursuit_id = field(payload, "pursuit_id", "str", default="")
         if not PURSUIT_ID.match(pursuit_id):
             raise HTTPException(
                 422, "pursuit_id must match pur_[a-z0-9][a-z0-9_-]{1,40}")
@@ -249,15 +281,13 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         with _mutate(pursuit_id):  # P1-22: the inbox write + roles RMW
             target = root / "inbox" / clean
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(body)
+            write_bytes_atomic(target, body)  # P0-6
             if role is not None:
                 roles_path = root / "inbox" / "roles.json"
                 roles = (json.loads(roles_path.read_text(encoding="utf-8"))
                          if roles_path.exists() else {})
                 roles[clean] = role
-                roles_path.write_text(
-                    json.dumps(roles, indent=2, sort_keys=True),
-                    encoding="utf-8")
+                write_json_atomic(roles_path, roles)  # P0-6: a record
         out = {"stored": f"inbox/{clean}", "bytes": len(body), "by": who}
         if role is not None:
             out["role"] = role
@@ -439,7 +469,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 digest = pursuit_digest(workspace, pursuit_id)
             except FileNotFoundError:
                 raise HTTPException(404, f"no pursuit {pursuit_id!r}")
-        history = payload.get("history") or []
+        history = field(payload, "history", "list", default=[])
         result = _advisor_call(
             build_user_prompt(question, digest=digest, history=history),
             system_prompt())
@@ -543,7 +573,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         from engine.kb.curation import cards_view
         return {"cards": cards_view(_kb_store(), q=q, layer=layer,
                                     staleness_filter=staleness, sort=sort,
-                                    at=_at({"at": at}))}
+                                    at=_read_at(at))}
 
     @app.get("/api/kb/cards/{kb_id}")
     def kb_card(kb_id: str, at: str | None = None):
@@ -552,7 +582,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         if not store.card_exists(kb_id):
             raise HTTPException(status_code=404, detail=f"no card {kb_id}")
         return card_detail(store, kb_id, records=_workspace_records(),
-                           at=_at({"at": at}))
+                           at=_read_at(at))
 
     @app.get("/api/kb/proposals")
     def kb_proposals(status: str | None = None):
@@ -564,7 +594,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         from engine.kb.curation import (CurationRefused, propose_deprecation,
                                         propose_edit)
         store = _kb_store()
-        kb_id = payload.get("kb_id", "")
+        kb_id = field(payload, "kb_id", "str", default="")
         if not store.card_exists(kb_id):
             raise HTTPException(status_code=404, detail=f"no card {kb_id}")
         at = _at(payload)
@@ -574,7 +604,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                     store, kb_id, operator=who, at=at,
                     records=_workspace_records(),
                     note=payload.get("note", ""))
-            return propose_edit(store, kb_id, payload.get("changes") or {},
+            return propose_edit(store, kb_id,
+                                field(payload, "changes", "dict", default={}),
                                 operator=who, at=at,
                                 note=payload.get("note", ""))
         except CurationRefused as refusal:
@@ -600,7 +631,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/kb/proposals/merge")
     def kb_merge(payload: dict, who: str = Depends(operator)):
         from engine.kb.curation import CurationRefused, merge_batch
-        ids = payload.get("proposal_ids") or []
+        ids = field(payload, "proposal_ids", "list", default=[])
         if not ids:
             raise HTTPException(status_code=400,
                                 detail="no proposal_ids given")
@@ -777,6 +808,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         bundle = _bundle_record(root)
         if bundle:
             for entry in bundle["deliverables"]:
+                if entry["name"] == clean and entry["status"] == "refused":
+                    # P26a item 1 (P1-27): a withheld buyer copy names
+                    # what remains — never a bare 404 over a real record
+                    raise HTTPException(409, entry.get("reason", "refused"))
                 if entry["name"] == clean and entry["status"] == "produced":
                     path = root / entry["path"]  # served by the RECORD's
                     if not path.resolve().is_relative_to(root.resolve()):
@@ -850,7 +885,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         files, refused = [], []
         for binding in bindings:
             try:
-                files.append(_preview_one(pursuit, binding, at or now()))
+                files.append(_preview_one(pursuit, binding, _read_at(at)))
             except (ContractError, FileNotFoundError) as exc:
                 refused.append({"lane": binding["lane"],
                                 "file": binding["file"],
@@ -906,6 +941,80 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             log.run_end(status="completed")
         return {"files": files, "bundle": bundle}
 
+    # -- the hand-completion door (P26a item 1, P1-27; the owner's call) ---
+
+    from engine.assembly.hand_fill import (
+        catalogue as _hand_catalogue,
+        read_hand_fill,
+        write_hand_fill,
+    )
+
+    def _hand_context(pursuit) -> tuple[dict, str]:
+        """The firm_default container + the template digest the plan was
+        built against — the same binding the fill itself verifies."""
+        frozen = pursuit.read_frozen("pursuit_plan")
+        container = pursuit.read_artifact(
+            frozen.get("slots_ref", "slots.json"))
+        if container.get("source_mode") != "firm_default":
+            raise ContractError(
+                "hand completion is the firm_default lane — a buyer-provided "
+                "target ships through write-back")
+        try:
+            ref_sha = pursuit.checkpoint_payload("path_b_outline").get(
+                "reference_sha256")
+        except FileNotFoundError:
+            ref_sha = None
+        if not ref_sha:
+            raise ContractError(
+                "no firm-template digest on record — plan against the "
+                "firm template before entering values")
+        return container, ref_sha
+
+    @app.get("/api/pursuits/{pursuit_id}/writeback/hand-fill")
+    def hand_fill_read(pursuit_id: str):
+        """The record plus the owed catalogue: every slot a human
+        completes, with its fields and whether it is filled — the
+        reader remaining_by_hand never had."""
+        _pursuit_root(pursuit_id)
+        pursuit = PursuitDir(workspace, pursuit_id)
+        try:
+            container, ref_sha = _hand_context(pursuit)
+        except (ContractError, FileNotFoundError) as exc:
+            raise HTTPException(409, str(exc))
+        record = read_hand_fill(pursuit)
+        values = (record.get("values", {}) if record
+                  and record.get("template_sha256") == ref_sha else {})
+        return {"record": record,
+                "slots": _hand_catalogue(container, values)}
+
+    @app.put("/api/pursuits/{pursuit_id}/writeback/hand-fill")
+    def hand_fill_write(pursuit_id: str, payload: dict,
+                        who: str = Depends(operator)):
+        """Enter the values only a human supplies (metadata record,
+        pricing grid, case block, inline line). Server-stamped: the
+        session names entered_by and the server clock names at — a
+        client `at` or `entered_by` is ignored (P0-11's rule). Last
+        write wins per slot; an empty value clears a slot."""
+        _pursuit_root(pursuit_id)
+        pursuit = PursuitDir(workspace, pursuit_id)
+        values = payload.get("values")
+        if not isinstance(values, dict):
+            raise HTTPException(422, "values must be an object of "
+                                     "slot_id -> value")
+        with _mutate(pursuit_id):
+            try:
+                container, ref_sha = _hand_context(pursuit)
+            except (ContractError, FileNotFoundError) as exc:
+                raise HTTPException(409, str(exc))
+            try:
+                record = write_hand_fill(
+                    pursuit, container=container, template_sha256=ref_sha,
+                    entered_by=who, at=_at(payload), values=values)
+            except ContractError as exc:
+                raise HTTPException(422, str(exc))
+        return {"record": record,
+                "slots": _hand_catalogue(container, record["values"])}
+
     # -- share links with guest commenting (D16, Q1 override; c13b) --------
 
     from engine.intake.screen import screen_text
@@ -937,11 +1046,12 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/pursuits/{pursuit_id}/share/{link_id}/revoke")
     def revoke_share(pursuit_id: str, link_id: str, payload: dict,
                      who: str = Depends(operator)):
-        try:
-            out = _share_lane(pursuit_id).revoke(
-                link_id=link_id, by=who, at=_at(payload))
-        except ShareDenied as exc:
-            raise HTTPException(exc.status, exc.reason)
+        with _mutate(pursuit_id):  # P0-13's residual gap (B104): serialized
+            try:
+                out = _share_lane(pursuit_id).revoke(
+                    link_id=link_id, by=who, at=_at(payload))
+            except ShareDenied as exc:
+                raise HTTPException(exc.status, exc.reason)
         return {k: v for k, v in out.items() if k != "token"}
 
     def _resolve_share(token: str, at: str, action: str) -> tuple:
@@ -1000,8 +1110,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                             action="comment", granted=False,
                             detail="empty or over the 2000-char cap")
             raise HTTPException(422, "comment text must be 1-2000 chars")
+        section_id = field(payload, "section_id", "str", default="")
         plan, sections = _plan_sections(pursuit_id)
-        section_id = payload.get("section_id", "")
         if section_id not in sections:
             lane.log_access(at=when, link_id=record["link_id"],
                             action="comment", granted=False,
@@ -1118,14 +1228,15 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 kb_root=kb_root))
 
     @app.get("/api/pursuits/{pursuit_id}/pings")
-    def pursuit_pings(pursuit_id: str, at: str | None = None):
+    def pursuit_pings(pursuit_id: str):
         _pursuit_root(pursuit_id)
-        return PingLane(PursuitDir(workspace, pursuit_id)).inbox(
-            at=at or now())
+        # P2-47: escalation is measured on the SERVER clock — a caller
+        # cannot query a moment at which nothing looks overdue
+        return PingLane(PursuitDir(workspace, pursuit_id)).inbox(at=now())
 
     @app.get("/api/pings")
-    def ping_inbox(at: str | None = None):
-        return cross_pursuit_inbox(workspace, at=at or now())
+    def ping_inbox():
+        return cross_pursuit_inbox(workspace, at=now())
 
     # -- the review loop on the web (D6/D7, F9; c12) -----------------------
 
@@ -1381,11 +1492,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             try:
                 result = approve_gate0(
                     pursuit, log, decision=payload.get("decision", ""),
-                    actor=who, at=at, notes=payload.get("notes"),
-                    corrections=payload.get("corrections"),
-                    answers=payload.get("answers"),
-                    skips=payload.get("skips"),
-                    wait_ms=int(payload.get("wait_ms", 0)),
+                    actor=who, at=at, notes=field(payload, "notes", "str"),
+                    corrections=field(payload, "corrections", "list"),
+                    answers=field(payload, "answers", "list"),
+                    skips=field(payload, "skips", "list"),
+                    wait_ms=field(payload, "wait_ms", "int", default=0),
                     kb_root=kb_root, org=payload.get("org"))
             except (ContractError, ValueError) as exc:
                 log.run_end(status="failed")
@@ -1432,9 +1543,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             try:
                 result = approve_gate1(
                     pursuit, log, decision=payload.get("decision", ""),
-                    actor=who, at=at, notes=payload.get("notes"),
-                    edits=payload.get("edits"),
-                    wait_ms=int(payload.get("wait_ms", 0)))
+                    actor=who, at=at, notes=field(payload, "notes", "str"),
+                    edits=field(payload, "edits", "dict"),
+                    wait_ms=field(payload, "wait_ms", "int", default=0))
             except (ContractError, ValueError) as exc:
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
@@ -1559,9 +1670,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             try:
                 result = approve_gate2(
                     pursuit, log, decision=payload.get("decision", ""),
-                    actor=who, at=at, notes=payload.get("notes"),
-                    edits=payload.get("edits"),
-                    wait_ms=int(payload.get("wait_ms", 0)),
+                    actor=who, at=at, notes=field(payload, "notes", "str"),
+                    edits=field(payload, "edits", "dict"),
+                    wait_ms=field(payload, "wait_ms", "int", default=0),
                     gates_collapsed=bool(payload.get("gates_collapsed")))
             except (ContractError, ValueError) as exc:
                 log.run_end(status="failed")
@@ -1577,8 +1688,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         _pursuit_root(pursuit_id)
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
-        claim_id = payload.get("claim_id", "")
-        reason = payload.get("reason", "")
+        claim_id = field(payload, "claim_id", "str", default="")
+        reason = field(payload, "reason", "str", default="")
         if not claim_id or not reason:
             raise HTTPException(422, "claim_id and reason are required — "
                                      "the reason is the record")
@@ -1646,8 +1757,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/pursuits/{pursuit_id}/comments")
     def add_comment(pursuit_id: str, payload: dict,
                     who: str = Depends(operator)):
+        at = _at(payload)  # P0-11: refused before any state is consulted
+        section_id = field(payload, "section_id", "str", default="")
         plan, sections = _plan_sections(pursuit_id)
-        section_id = payload.get("section_id", "")
         if section_id not in sections:
             raise HTTPException(400, f"unknown section {section_id!r}")
         lane = _lane(pursuit_id)
@@ -1657,7 +1769,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                     kind=payload.get("kind", "comment"),
                     section_id=section_id, actor=who,
                     actor_role=payload.get("actor_role", ""),
-                    at=_at(payload), slot_id=payload.get("slot_id"),
+                    at=at, slot_id=payload.get("slot_id"),
                     text=payload.get("text"),
                     before=payload.get("before"),
                     after=payload.get("after"),
@@ -1718,6 +1830,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         review_rounds_to_accept computes from it. Refuses while packaging
         is blocked: the Q2 control reaches the exit door."""
         root = _pursuit_root(pursuit_id)
+        at = _at(payload)  # P0-11: refused before any state is consulted
         annotated_path = root / "drafts" / "annotated-draft.json"
         if not annotated_path.exists():
             raise HTTPException(409, "nothing to accept — the pursuit has "
@@ -1732,7 +1845,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         with _mutate(pursuit_id):
             try:
                 event = lane.append(
-                    "accept", at=_at(payload), actor=who,
+                    "accept", at=at, actor=who,
                     actor_role=payload.get("actor_role", ""))
             except (EventsError, ContractError) as exc:
                 raise HTTPException(422, str(exc))

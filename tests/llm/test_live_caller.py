@@ -223,6 +223,45 @@ def test_fallback_also_dead_raises_named(live_env):
     assert len(client.requests) == 4
 
 
+# -- P26a Group A: internal vs transport, and the SDK ladder off ---------
+
+
+def test_internal_error_surfaces_on_attempt_one_without_fallback(live_env):
+    """P1-16: an exception with no HTTP status that is NOT the SDK's
+    connection/timeout class is our defect — one request, no sleeps, no
+    second model, a LiveCallError that says so."""
+    sleeps = []
+    client = StubClient([TypeError("kwargs built wrong")])
+    caller = LiveCaller(client=client, sleep=sleeps.append)
+    with pytest.raises(LiveCallError, match="internal error") as e:
+        caller.call_for("a", tier="frontier", prompt="p")
+    assert "not retried, not fallen back" in str(e.value)
+    assert len(client.requests) == 1 and sleeps == []
+
+
+def test_sdk_connection_and_timeout_errors_are_transient(live_env):
+    """The status-less exceptions that ARE transport: the SDK's
+    APIConnectionError and its APITimeoutError subclass, retried through
+    the ladder like a 503."""
+    anthropic = pytest.importorskip("anthropic")
+    import httpx
+    req = httpx.Request("POST", "https://api.invalid/v1/messages")
+    client = StubClient([anthropic.APITimeoutError(request=req),
+                         anthropic.APIConnectionError(request=req),
+                         _response({"ok": True})])
+    sleeps = []
+    result = LiveCaller(client=client, sleep=sleeps.append).call_for(
+        "a", tier="mid", prompt="p")
+    assert result.retries == 2 and sleeps == [2.0, 4.0]
+    assert len(client.requests) == 3
+
+
+def test_builtin_timeout_is_transient_too(live_env):
+    client = StubClient([TimeoutError("socket"), _response({"ok": 1})])
+    result = _caller(client).call_for("a", tier="fast", prompt="p")
+    assert result.retries == 1
+
+
 # -- coercion unit + env loader ------------------------------------------
 
 

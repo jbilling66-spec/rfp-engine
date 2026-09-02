@@ -243,3 +243,45 @@ def test_traced_handoff_call_lands_as_a_zero_cost_agent_call(tmp_path):
     assert records[0]["model"] == "handoff/claude-opus-5"
     assert records[0]["cost_usd"] == 0.0
     assert records[0]["model_tier"] == "frontier"
+
+
+# -- P26a Group A (P2-14): the acceptor's typed refusals ---------------
+
+
+@pytest.mark.parametrize("override, match", [
+    ({"model": ""}, "'model' must be a non-empty string"),
+    ({"model": 7}, "'model' must be a non-empty string"),
+    ({"text": ["not", "text"]}, "'text' must be a string"),
+    ({"input_tokens": "many"}, "'input_tokens' must be a non-negative integer"),
+    ({"input_tokens": 12.5}, "'input_tokens' must be a non-negative integer"),
+    ({"input_tokens": True}, "'input_tokens' must be a non-negative integer"),
+    ({"output_tokens": -1}, "'output_tokens' must be a non-negative integer"),
+])
+def test_malformed_response_fields_refuse_typed(tmp_path, override, match):
+    """A hand-typed response file with a wrong-shaped field is a
+    HandoffError naming the field — never a ValueError out of int()
+    escaping the caller's boundary as a job traceback."""
+    state = {"first": True}
+
+    def operator():
+        if state["first"]:
+            state["first"] = False
+            _answer(pending, 1, **override)
+
+    caller, pending = _caller(tmp_path, timeout=2.0, on_sleep=operator)
+    with pytest.raises(HandoffError, match=match):
+        caller.call_for("a", tier="fast", prompt="p")
+
+
+def test_non_object_response_refuses_typed(tmp_path):
+    def operator():
+        target = pending / "call-0001.response.json"
+        if not target.exists():
+            tmp = pending / (target.name + ".tmp")
+            tmp.write_text(json.dumps(["not", "an", "object"]),
+                           encoding="utf-8")
+            os.replace(tmp, target)
+
+    caller, pending = _caller(tmp_path, timeout=2.0, on_sleep=operator)
+    with pytest.raises(HandoffError, match="must be a JSON object"):
+        caller.call_for("a", tier="fast", prompt="p")

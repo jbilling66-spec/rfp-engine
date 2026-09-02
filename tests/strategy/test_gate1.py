@@ -151,7 +151,8 @@ def test_failed_edit_instruction_raises(pending):
 
 
 def test_rejection_declines_brief(tmp_path):
-    pursuit, _ = run_strategy_package(tmp_path, gate="rejected")
+    pursuit, _ = run_strategy_package(tmp_path, gate="rejected",
+                                      notes="Not our market.")  # P1-15
     brief = pursuit.read_artifact("brief.json")
     validate("bid_brief", brief)
     assert brief["status"] == "declined"
@@ -185,7 +186,7 @@ def test_conflicting_decision_raises(approved):
     pursuit, _ = approved
     with pytest.raises(ContractError, match="already decided"):
         approve_gate1(pursuit, _reopen_log(pursuit), decision="rejected",
-                      actor=ACTOR, at=GATE_AT)
+                      actor=ACTOR, at=GATE_AT, notes="changed mind")  # P1-15
 
 
 def test_resubmit_with_fresh_at_converges_and_keeps_original_at(approved):

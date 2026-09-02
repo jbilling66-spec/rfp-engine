@@ -125,6 +125,17 @@ def _entry(pursuit, binding: dict, refusals: list[dict]) -> dict:
             return out
     facts_path = pursuit.root / binding["facts_name"]
     output_path = pursuit.root / binding["output_name"]
+    if binding["lane"] == "template_fill" and facts_path.is_file():
+        facts = pursuit.read_artifact(binding["facts_name"])
+        if not facts.get("buyer_copy_produced", True):
+            # P26a item 1 (P1-27): the fill ran and WITHHELD the buyer
+            # copy — scaffolding or hand-completion still owed; the
+            # working copy lists under internal_do_not_send instead
+            from engine.assembly.template_fill import withheld_reason
+            out["status"] = "refused"
+            out["reason"] = withheld_reason(facts)
+            out["facts_path"] = binding["facts_name"]
+            return out
     if facts_path.is_file() and output_path.is_file():
         facts = pursuit.read_artifact(binding["facts_name"])
         out["status"] = "produced"

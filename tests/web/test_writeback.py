@@ -113,7 +113,7 @@ def test_writeback_refuses_pricing_cells(wired):
     # the preview wrote NOTHING
     assert not (pursuit.root / "exports" / "writeback").exists()
     r = client.post("/api/pursuits/pur_wb/writeback/confirm",
-                    json={"at": FIXED_AT, **ROLE})
+                    json={**ROLE})
     assert r.status_code == 200, r.text
     confirmed = r.json()
     facts = confirmed["files"][0]
@@ -152,7 +152,7 @@ def test_unconfirmed_writeback_refuses(wired):
     client, pursuit, _ = wired
     bare = TestClient(client.app, base_url="http://127.0.0.1")  # no operator session: S7 unconfirmed
     assert bare.post("/api/pursuits/pur_wb/writeback/confirm",
-                     json={"at": FIXED_AT, **ROLE}).status_code == 401
+                     json={**ROLE}).status_code == 401
     assert not (pursuit.root / "exports" / "writeback").exists()
 
 

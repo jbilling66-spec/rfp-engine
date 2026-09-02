@@ -17,7 +17,14 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from engine.contracts import ContractError, check_runlog_payloads, validate
+from engine.contracts import (
+    ContractError,
+    check_runlog_payloads,
+    read_jsonl,
+    torn_tail_offset,
+    validate,
+    write_json_atomic,
+)
 
 
 def digest(text: str) -> str:
@@ -37,10 +44,19 @@ def _now() -> str:
     )
 
 
+def read_run_report(run_jsonl: Path) -> tuple[list[dict], str | None]:
+    """(records, torn): the tolerant read (P26a Group C, P1-17) — a torn
+    FINAL line is reported, never skipped silently; a torn earlier line
+    raises ContractError (corruption)."""
+    return read_jsonl(run_jsonl)
+
+
 def read_run(run_jsonl: Path) -> list[dict]:
-    """Read a run.jsonl back into records (already seq-ordered on disk)."""
-    lines = run_jsonl.read_text(encoding="utf-8").splitlines()
-    return [json.loads(line) for line in lines if line.strip()]
+    """Read a run.jsonl back into records (already seq-ordered on disk).
+    A torn final line is tolerated (the writer caught mid-append); use
+    read_run_report when the caller must surface it."""
+    records, _torn = read_jsonl(run_jsonl)
+    return records
 
 
 RUN_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -93,11 +109,34 @@ class RunLogger:
         }
         self._first_ts: str | None = None
         self._last_ts: str | None = None
+        self.has_footer = False
+        repaired = None
         if self.path.exists():
-            records = read_run(self.path)
+            records, torn = read_run_report(self.path)
+            if torn is not None:
+                # P1-17: a crash mid-append left a torn final line. The
+                # resume truncates the file to the last COMPLETE line
+                # (fsync'd) and records the repair as the first line of
+                # the resumed run — the bytes dropped are named, never
+                # silently absorbed into the next append.
+                cut = torn_tail_offset(self.path)
+                dropped = self.path.stat().st_size - (cut or 0)
+                with open(self.path, "r+b") as f:
+                    f.truncate(cut or 0)
+                    f.flush()
+                    os.fsync(f.fileno())
+                repaired = dropped
             if records:
                 self._seq = records[-1]["seq"] + 1
                 self._replay_totals(records)
+                self.has_footer = records[-1].get("record_type") == "run_end"
+        if repaired is not None:
+            self.emit("error", error={
+                "code": "torn_tail_truncated", "recoverable": True,
+                "action_taken": "surfaced_to_human",
+                "message": (f"{repaired} bytes of a torn final line dropped "
+                            "on resume — the writer crashed mid-append; "
+                            "every complete record before it stands")})
 
     def _replay_totals(self, records: list[dict]) -> None:
         for rec in records:
@@ -154,9 +193,7 @@ class RunLogger:
         """Open the run: persist the effective config beside the log and emit
         the header carrying its digest (O4)."""
         config_path = self.run_dir / "config.json"
-        config_path.write_text(
-            json.dumps(config, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        write_json_atomic(config_path, config)  # P0-6: digest-attested record
         return self.emit(
             "run_start",
             run={
@@ -174,7 +211,9 @@ class RunLogger:
         totals = {**self._totals, **totals_extra}
         if "wall_ms" not in totals:
             totals["wall_ms"] = self._wall_ms()
-        return self.emit("run_end", run={"status": status, "totals": totals})
+        seq = self.emit("run_end", run={"status": status, "totals": totals})
+        self.has_footer = True
+        return seq
 
     def _wall_ms(self) -> int:
         """The run's own span, first line to last. Wall clock is honest

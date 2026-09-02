@@ -30,6 +30,8 @@ Three properties are structural rather than remembered:
 import json
 from pathlib import Path
 
+from engine.contracts import append_fsync
+
 from engine.evals import claim_extraction as _claim_extraction
 from engine.kb import KBStore
 from engine.runlog import RunLogger
@@ -119,8 +121,7 @@ def append_history(baseline_path: Path, *, spec: dict,
 
     out_path = history_path(baseline_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(line, sort_keys=True) + "\n")
+    append_fsync(out_path, json.dumps(line, sort_keys=True))  # P0-6
     return out_path
 
 

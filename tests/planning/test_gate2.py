@@ -114,7 +114,8 @@ def test_gate_line_and_artifacts(approved):
     assert gate["gate"] == {"which": "gate_2_plan",
                             "decision": "approved_with_edits",
                             "actor": ACTOR, "auto_approved": False,
-                            "wait_ms": 0, "edits_summary": "dispose:2"}
+                            "wait_ms": 0, "edits_summary": "dispose:2",
+                            "notes": "strong plan"}  # P1-15
     shas = [r["artifact"]["sha256"] for r in records
             if r["record_type"] == "artifact"
             and r.get("stage") == "gate_2"]

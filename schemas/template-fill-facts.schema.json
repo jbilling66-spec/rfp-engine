@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rfp-engine.invalid/rfp-engine-v2/template-fill-facts.schema.json",
   "title": "TemplateFillFacts",
-  "description": "The in-place firm-template fill's decision record (P17/C8, B75§3c) — the writeback-facts pattern for the firm_default lane, in its own vocabulary: a fill records SECTIONS replaced (guidance stripped, placeholder removed), not cells written. Every section the template carries appears exactly once — filled, honestly left carrying its guidance, or refused with the reason — so 'what still needs a human?' is answerable by looking (remaining_guidance is v1's reporter made contract). The template at config/ is never mutated; output_file is the copy under exports/submission/.",
+  "description": "The in-place firm-template fill's decision record (P17/C8, B75§3c) — the writeback-facts pattern for the firm_default lane, in its own vocabulary: a fill records SECTIONS replaced (guidance stripped, placeholder removed), not cells written. Every section the template carries appears exactly once — filled by the engine, filled by hand from the hand-completion record (P26a item 1, P1-27), honestly left carrying its guidance, owed to a human, or refused with the reason — so 'what still needs a human?' is answerable by looking (remaining_guidance + remaining_by_hand). The template at config/ is never mutated. Every fill writes the WORKING copy (working_copy, under exports/review/: authoring scaffolding stripped, hand values in, unfilled guidance kept for the hand-drafter); the buyer copy (output_file, under exports/submission/) is written ONLY when nothing remains — buyer_copy_produced says which happened.",
   "type": "object",
   "required": ["pursuit_id", "plan_sha256", "draft_sha256", "revision_n", "confirmed_by", "at", "template_file", "template_sha256", "output_file", "sections", "remaining_guidance"],
   "additionalProperties": false,
@@ -15,7 +15,10 @@
     "at": { "type": "string", "format": "date-time" },
     "template_file": { "type": "string", "description": "The firm template the copy was made FROM (config/templates/…)." },
     "template_sha256": { "type": "string", "description": "Must equal the reference_sha256 the path_b_outline checkpoint recorded — the fill only touches the EXACT template the plan was built against (the digest-bound-source rule, B74§3b)." },
-    "output_file": { "type": "string", "description": "The filled copy under exports/submission/ — for firm_default pursuits this IS the to-the-buyer document (B75§1d: it replaces the generated response.docx)." },
+    "output_file": { "type": "string", "description": "The buyer copy under exports/submission/ — for firm_default pursuits this IS the to-the-buyer document (B75§1d: it replaces the generated response.docx). Written only when buyer_copy_produced is true; the path is named either way so the record reads the same." },
+    "working_copy": { "type": "string", "description": "The working copy under exports/review/ — written on EVERY fill: front matter and instruction text stripped, hand values rendered, guidance kept for sections a human still drafts. Listed under internal_do_not_send, never to the buyer." },
+    "buyer_copy_produced": { "type": "boolean", "description": "true = output_file was written this fill because nothing remained; false = withheld (the bundle records the deliverable as refused with the itemized reason)." },
+    "scaffolding_removed": { "type": "array", "items": { "type": "string" }, "description": "The authoring scaffolding stripped from both copies, by text: the template title, the 'How to Use This Template' heading, its instruction paragraph — every body element before the first numbered section except the metadata table." },
     "sections": {
       "type": "array",
       "items": {
@@ -26,7 +29,8 @@
           "section_id": { "type": "string", "description": "The plan section whose prose fed (or should have fed) this template section." },
           "slot_id": { "type": "string", "description": "The template slot (s-hNN…) the section bound through based_on." },
           "docx_anchor": { "type": "string", "description": "The template heading, verbatim — placement is re-derived by reparse (guidance_box_map), never persisted." },
-          "decision": { "type": "string", "enum": ["filled", "kept_guidance", "fill_by_hand", "refused_unnamed"], "description": "filled = section prose REPLACED the guidance box and the placeholder table was removed (replacement-not-insertion); kept_guidance = no drafted prose for this section, so its guidance survives IDENTICAL — the honest outcome, reported in remaining_guidance; fill_by_hand = the shape has no automated fill (grids, case blocks, the metadata table, inline bracketed paragraphs — B75§1e) and a human finishes it; refused_unnamed = the frozen plan names no section for this template anchor." },
+          "decision": { "type": "string", "enum": ["filled", "filled_by_hand", "kept_guidance", "fill_by_hand", "refused_unnamed"], "description": "filled = section prose REPLACED the guidance box and the placeholder table was removed (replacement-not-insertion); filled_by_hand = the hand-completion record (exports/hand-fill.json) supplied every field and the values were rendered in place; kept_guidance = no drafted prose for this section, so its guidance survives IDENTICAL in the working copy — the honest outcome, reported in remaining_guidance; fill_by_hand = a human still owes this slot (metadata record, grid, case block, inline bracketed line — B75§1e) and it is reported in remaining_by_hand; refused_unnamed = the frozen plan names no section for this template anchor." },
+          "fields_written": { "type": "array", "items": { "type": "string" }, "description": "filled_by_hand / fill_by_hand: the field keys whose values were rendered (a partial record renders what it has and stays owed)." },
           "reason": { "type": "string" },
           "paragraphs": { "type": "integer", "minimum": 0, "description": "filled: how many delivered paragraphs replaced the guidance box." },
           "placeholder_removed": { "type": "boolean", "description": "filled: the '[ Replace with … ]' placeholder table was deleted too — the v1 gap fixed (v1 shipped documents still carrying them)." }
@@ -36,7 +40,12 @@
     "remaining_guidance": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "The guidance texts still in the output — the sections a human still owns (v1's remaining_guidance reporter, now on the record). Includes fill_by_hand shapes."
+      "description": "The guidance texts still in the working copy — the prose sections a human still drafts (v1's remaining_guidance reporter, now on the record). Hand-completed shapes report under remaining_by_hand, not here."
+    },
+    "remaining_by_hand": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The hand-completion slots still owed, one line each — path plus the missing fields — the itemized reason the buyer copy is withheld. Enter them through PUT /api/pursuits/{pursuit_id}/writeback/hand-fill."
     }
   }
 }

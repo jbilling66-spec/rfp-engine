@@ -10,7 +10,7 @@ import json
 import textwrap
 from pathlib import Path
 
-from engine.contracts import validate
+from engine.contracts import validate, write_json_atomic
 
 
 def load_cases(path: Path) -> list[dict]:
@@ -269,6 +269,5 @@ def write_report(report: dict, path: Path) -> Path:
     human."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=1, sort_keys=True) + "\n",
-                    encoding="utf-8")
+    write_json_atomic(path, report, indent=1)  # P0-6
     return path

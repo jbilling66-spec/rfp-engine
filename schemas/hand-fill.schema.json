@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/hand-fill.schema.json",
+  "title": "HandFill",
+  "description": "The hand-completion record for the firm_default lane (P26a item 1, P1-27 — the owner's call, 2026-09-02): the values a human typed for the template slots the engine never drafts — the proposal-metadata record, the pricing grid, the case block, the inline bracketed line. One artifact per pursuit under exports/, last write wins per slot, every value server-stamped (entered_by from the session, at from the server clock). The fill renders these values into the template in place; nothing here is computed — a fee is a string a human typed (P3-1 pricing scope untouched). Bound to the exact template the plan was built against: template_sha256 must equal the path_b_outline checkpoint's reference_sha256 or the fill refuses.",
+  "type": "object",
+  "required": ["pursuit_id", "template_sha256", "entered_by", "at", "values"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "template_sha256": { "type": "string", "description": "sha256 of the firm template these values address (the digest-bound-source rule, B74§3b) — a mismatch at fill time refuses." },
+    "entered_by": { "type": "string", "description": "The operator who made the LAST write (session identity, server-stamped — never a client field)." },
+    "at": { "type": "string", "format": "date-time", "description": "The server clock at the last write (P0-11: the client never supplies a clock)." },
+    "values": {
+      "type": "object",
+      "description": "slot_id -> value. A record slot takes {field_key: text}; a table slot (grid or case block) takes [{field_key: text}, …] — one object per row or entry; the inline bracketed line takes a string. Keys are the slot's own response_fields keys; the door refuses any other slot, key, or shape.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "object", "additionalProperties": { "type": "string" } },
+          { "type": "array", "items": { "type": "object", "additionalProperties": { "type": "string" } } }
+        ]
+      }
+    }
+  }
+}

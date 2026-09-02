@@ -38,7 +38,7 @@ def test_advance_job_stops_at_each_gate_in_order(demo_client):
     the next advance to gate_1 exactly as before."""
     client, ws = demo_client
     r = client.post("/api/pursuits/pur_webdemo/jobs",
-                    json={"kind": "advance", "at": FIXED_AT})
+                    json={"kind": "advance"})
     assert r.status_code == 202
     job = wait_job(client, r.json()["id"])
     assert job["state"] == "done"
@@ -55,11 +55,11 @@ def test_advance_job_stops_at_each_gate_in_order(demo_client):
     assert model["decidable"] is True
     assert model["assumptions"]  # the register is on the screen
     ok = client.post("/api/pursuits/pur_webdemo/gate0",
-                     json={"decision": "approved", "at": FIXED_AT})
+                     json={"decision": "approved"})
     assert ok.status_code == 200 and ok.json()["decision"] == "approved"
 
     r = client.post("/api/pursuits/pur_webdemo/jobs",
-                    json={"kind": "advance", "at": FIXED_AT})
+                    json={"kind": "advance"})
     job = wait_job(client, r.json()["id"])
     assert "awaiting_gate at gate_1" in job["message"]
     row = next(x for x in client.get("/api/pursuits").json()
@@ -90,7 +90,7 @@ def test_one_job_per_pursuit_409(demo_client):
                           by="test", at=FIXED_AT, target=slow)
     try:
         r = client.post("/api/pursuits/pur_webdemo/jobs",
-                        json={"kind": "advance", "at": FIXED_AT})
+                        json={"kind": "advance"})
         assert r.status_code == 409
         assert "one job per pursuit" in r.json()["detail"]
         assert first["id"] in r.json()["detail"]
