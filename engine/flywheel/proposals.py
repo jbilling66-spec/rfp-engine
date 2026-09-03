@@ -15,6 +15,7 @@ rubber-stamping.
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from engine.contracts import validate, write_json_atomic
@@ -31,6 +32,22 @@ def proposal_id(source: dict, kind: str, kb_id: str | None,
     return "prop_" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 
+PROPOSAL_ID = re.compile(r"prop_[a-z0-9][a-z0-9_-]{0,40}")
+
+
+class IdShapeError(ValueError):
+    """P2-23 (P26b-1, B112): an id that is not the shape `proposal_id`
+    mints — refused before it can name a path. (The KB store has its
+    twin in engine/kb/identity.py; the graph has no flywheel→kb edge.)"""
+
+
+def require_proposal_id(value) -> str:
+    if not isinstance(value, str) or PROPOSAL_ID.fullmatch(value) is None:
+        raise IdShapeError(
+            f"not a proposal_id: {value!r} (expected prop_ + [a-z0-9_-], path-safe)")
+    return value
+
+
 class ProposalStore:
     """One JSON file per proposal under <kb_root>/proposals/."""
 
@@ -38,7 +55,8 @@ class ProposalStore:
         self.root = Path(kb_root) / "proposals"
 
     def _path(self, pid: str) -> Path:
-        return self.root / f"{pid}.json"
+        # P2-23: every read and write door names its path through here.
+        return self.root / f"{require_proposal_id(pid)}.json"
 
     def open(self, *, source: dict, target: str, kind: str, at: str,
              kb_id: str | None = None, diff: dict | None = None,

@@ -33,12 +33,16 @@ def test_fresh_path_a_shape(planned):
     """Hand-derived: 7 answerable slots -> 7 kb_retrieval lines; the
     structured twin covers no manifest obligation (its sheets ask about
     background/integration/pricing, not delivery obligations) -> 7
-    obligation gap lines; zero agent calls anywhere."""
+    obligation gap lines; zero agent calls anywhere. P26b-1 (B112):
+    the twin's formula-only rows (sheet 2 row 6, EC-5a, first) are
+    parser warnings, drained as ONE recoverable error record for the
+    file before the slots artifact — one record however many lines."""
     pursuit, _ = planned
     shape = [(r["record_type"], r.get("stage")) for r in _records(pursuit)]
     assert shape == [
         ("run_start", None),
         ("stage_start", "path_a_map"),
+        ("error", "path_a_map"),             # parser_warnings (P1-23)
         ("artifact", "path_a_map"),          # slots.json (target_slots)
         *[("kb_retrieval", "path_a_map")] * 7,
         *[("gap", "path_a_map")] * 7,

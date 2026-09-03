@@ -8,12 +8,15 @@ explicit warning for PDF pages that yield no text (a half-scanned document
 must not silently thin), and datetime cells rendered via isoformat (never
 str(cell) → "2026-03-01 00:00:00").
 
-Hidden workbook SHEETS and ROWS are extracted AND marked — hidden COLUMNS are extracted but not yet marked (register P1-26, closes at P26); the original claim read broader than the code (v1 iterated hidden sheets
-and rows silently — exactly the surface an injection screen must see).
+Hidden workbook SHEETS, ROWS and COLUMNS are extracted AND marked (v1
+iterated hidden sheets and rows silently — exactly the surface an
+injection screen must see; columns joined at P26b-1, P1-26).
 """
 
+import contextlib
 import datetime
 import importlib.metadata
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -91,6 +94,7 @@ def _extract_xlsx(path: Path, doc: ExtractedDoc) -> None:
     except Exception as exc:  # openpyxl raises a zoo of types on bad bytes
         raise UnreadableRfp(path, f"unparseable xlsx: {exc}") from exc
     lines: list[str] = []
+    cached_wb = None  # P1-25: loaded once, only if a formula cell exists
     for ws in wb.worksheets:
         lines.append(f"## Sheet: {ws.title}")  # verbatim — trailing spaces are real
         sheet_hidden = ws.sheet_state != "visible"
@@ -99,12 +103,40 @@ def _extract_xlsx(path: Path, doc: ExtractedDoc) -> None:
         merged_anchors = {
             (rng.min_row, rng.min_col): str(rng) for rng in ws.merged_cells.ranges
         }
+        # P1-26 (P26b-1, B112): a hidden column dimension covers min..max.
+        hidden_cols: set[int] = set()
+        for dim in ws.column_dimensions.values():
+            if dim.hidden:
+                hidden_cols.update(range(dim.min, dim.max + 1))
+        col_segments: dict[int, list[str]] = {}
         for row in ws.iter_rows():
             texts = []
             for cell in row:
                 if cell.value is None:
                     continue
                 rendered = _cell_text(cell.value)
+                if cell.column in hidden_cols:
+                    col_segments.setdefault(cell.column, []).append(rendered)
+                    rendered = f"[hidden col] {rendered}"
+                if isinstance(cell.value, str) and cell.value.startswith("="):
+                    # P1-25 (P26b-1, B112): a formula is MARKED so the
+                    # model never mistakes its source for what the
+                    # human sees; the cached value (what Excel saved)
+                    # rides beside it when one exists, and its absence
+                    # is a warning. The source text stays (EC-5: never
+                    # thinned; the KB lane refuses, intake reads).
+                    if cached_wb is None:
+                        cached_wb = load_workbook(path, data_only=True)
+                    cached = cached_wb[ws.title][cell.coordinate].value
+                    if cached is None or str(cached) == "":
+                        rendered = f"[formula, no cached value] {rendered}"
+                        doc.warnings.append(
+                            f"{ws.title}!{cell.coordinate}: formula cell without "
+                            "a cached value — the human's view of this cell is "
+                            "unknown to the engine (paste values, or open and "
+                            "save in Excel)")
+                    else:
+                        rendered = f"[formula {rendered} → {_cell_text(cached)}]"
                 anchor = merged_anchors.get((cell.row, cell.column))
                 if anchor:
                     rendered += f" (merged {anchor})"
@@ -120,15 +152,54 @@ def _extract_xlsx(path: Path, doc: ExtractedDoc) -> None:
             if row_hidden:
                 line = "[hidden row] " + line
             lines.append(line)
+        for col, col_texts in sorted(col_segments.items()):
+            doc.hidden_segments.append({
+                "text": " ".join(col_texts),
+                "location": f"{doc.file}: {ws.title}!{get_column_letter(col)}",
+            })
     doc.text = "\n".join(lines)
+
+
+class _PypdfWarnings(logging.Handler):
+    """P2-26 (P26b-1, B112): pypdf reports recovery (a bad startxref, a
+    rebuilt xref, an odd object) on its `pypdf` loggers and nothing in
+    this engine listened — a partially-recovered PDF looked clean. This
+    handler is attached for the duration of ONE read and removed in
+    `finally`; the engine's first and only use of `logging`, scoped, with
+    no global configuration."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+@contextlib.contextmanager
+def _capture_pypdf_warnings():
+    logger = logging.getLogger("pypdf")
+    handler = _PypdfWarnings()
+    prior_level = logger.level
+    logger.addHandler(handler)
+    if logger.getEffectiveLevel() > logging.WARNING:
+        logger.setLevel(logging.WARNING)
+    try:
+        yield handler.messages
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(prior_level)
 
 
 def _extract_pdf(path: Path, doc: ExtractedDoc) -> None:
     try:
-        reader = pypdf.PdfReader(path)
-        pages = [(page.extract_text() or "") for page in reader.pages]
+        with _capture_pypdf_warnings() as recovered:
+            reader = pypdf.PdfReader(path)
+            pages = [(page.extract_text() or "") for page in reader.pages]
     except Exception as exc:
         raise UnreadableRfp(path, f"unparseable pdf: {exc}") from exc
+    for message in recovered:
+        doc.warnings.append(f"pdf recovery: {message}")
     for number, text in enumerate(pages, start=1):
         if not text.strip():
             doc.warnings.append(f"page {number} produced no text (image-only or empty)")
@@ -147,7 +218,14 @@ def _extract_docx(path: Path, doc: ExtractedDoc) -> None:
         document = Document(path)
     except Exception as exc:
         raise UnreadableRfp(path, f"unparseable docx: {exc}") from exc
-    lines: list[str] = []
+    from engine.structure.docx_parts import header_footer_text, text_box_text
+
+    # P2-27 (P26b-1, B112): headers first, footers last, text boxes
+    # inline after their anchor — every part the injection screen must
+    # see, marked so the model knows where the words sat.
+    parts = header_footer_text(document)
+    lines: list[str] = [f"[header] {text}" for kind, text in parts
+                        if kind == "header"]
     # iter_inner_content preserves paragraph/table interleaving —
     # .paragraphs/.tables lose document order (v1 lesson)
     for item in document.iter_inner_content():
@@ -158,11 +236,16 @@ def _extract_docx(path: Path, doc: ExtractedDoc) -> None:
                 lines.append("#" * int(match.group(1)) + " " + item.text)
             elif item.text.strip():
                 lines.append(item.text)
+            lines.extend(f"[text box] {text}" for text in text_box_text(item._p))
         elif isinstance(item, Table):
             for row in item.rows:
                 texts = [c.text.replace("\n", " ") for c in row.cells if c.text.strip()]
                 if texts:
                     lines.append("| " + " | ".join(texts) + " |")
+                for cell in row.cells:
+                    lines.extend(f"[text box] {text}"
+                                 for text in text_box_text(cell._tc))
+    lines.extend(f"[footer] {text}" for kind, text in parts if kind == "footer")
     doc.text = "\n".join(lines)
 
 

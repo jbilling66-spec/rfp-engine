@@ -33,6 +33,11 @@ class ParsedWorkbook:
     source_sha256: str
     slots: list[dict] = field(default_factory=list)
     global_constraints: dict | None = None
+    # P26b-1 (B112): every row a parser dropped or degraded, as
+    # "<sheet>!row N: <kind>" — addresses and kinds, never cell text.
+    # Drained by the planner into PlanReport.warnings + one recoverable
+    # error record per file; not part of the slots artifact.
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def slot_count(self) -> int:
@@ -49,9 +54,11 @@ def parse_workbook(path: Path) -> ParsedWorkbook:
     conv = learn_conventions(facts)
 
     slots: list[dict] = []
+    warnings: list[str] = []
     last_answer_row: dict[str, int] = {}
     for sheet in facts.sheets:
-        sheet_slots = parse_sheet(sheet, conv.sheets[sheet.name], conv, facts.file)
+        sheet_slots = parse_sheet(sheet, conv.sheets[sheet.name], conv, facts.file,
+                                  warnings=warnings)
         slots.extend(sheet_slots)
         rows = [
             int(m.group(1))
@@ -81,4 +88,5 @@ def parse_workbook(path: Path) -> ParsedWorkbook:
         source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
         slots=slots,
         global_constraints=global_constraints,
+        warnings=warnings,
     )

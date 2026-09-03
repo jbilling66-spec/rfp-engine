@@ -37,6 +37,28 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(normalize(text).encode("utf-8")).hexdigest()
 
 
+# The three lanes' prefixes (engine/kb/lanes.py: firm `kb_`, pursuit
+# `pkb_`, org `okb_`) — listed here rather than imported, so identity
+# stays the leaf module; tests/kb/test_id_shape.py pins the agreement.
+KB_ID = re.compile(r"(?:kb|pkb|okb)_[a-z0-9][a-z0-9_-]{0,40}")
+
+
+class IdShapeError(ValueError):
+    """P2-23 (P26b-1, B112): an id that is not the shape this engine
+    mints — refused at the store boundary, BEFORE it can name a path."""
+
+
+def require_kb_id(value) -> str:
+    """Prefixed and path-safe — the pursuit-id precedent: `kb_` then
+    lowercase alphanumerics, `_` or `-`, at most 41 chars. `kb_id_for` mints
+    the hex subset; fixtures and seeds use readable ids of the same shape.
+    No `/`, `.`, upper case, whitespace or non-string can name a path."""
+    if not isinstance(value, str) or KB_ID.fullmatch(value) is None:
+        raise IdShapeError(
+            f"not a kb_id: {value!r} (expected kb_/pkb_/okb_ + [a-z0-9_-], path-safe)")
+    return value
+
+
 def kb_id_for(text: str) -> str:
     return "kb_" + content_hash(text)[:10]
 

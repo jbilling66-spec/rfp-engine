@@ -16,6 +16,7 @@ from openpyxl import load_workbook
 
 from tests.fixtures.intake_twins import (
     GOLDENS,
+    HIDDEN_COLUMN_DIRECTIVE,
     HIDDEN_ROW_DIRECTIVE,
     HIDDEN_SHEET_DIRECTIVE,
     INJECTION_SENTENCE,
@@ -91,6 +92,8 @@ def test_hidden_twin_content_is_actually_hidden():
     ws = wb["Vendor Questions"]
     assert ws.row_dimensions[4].hidden is True
     assert ws["B4"].value == HIDDEN_ROW_DIRECTIVE
+    assert ws.column_dimensions["C"].hidden is True  # P1-26
+    assert ws["C2"].value == HIDDEN_COLUMN_DIRECTIVE
 
 
 @pytest.mark.parametrize("name", sorted(GOLDENS))

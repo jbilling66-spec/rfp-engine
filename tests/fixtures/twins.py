@@ -68,6 +68,13 @@ def _freeze(workbook: Workbook, path: Path) -> None:
 def build_structured_twin(path: Path) -> Path:
     """The Path-A questionnaire twin: an ERP implementation services
     workbook with designated answer cells."""
+    _freeze(_structured_workbook(), path)
+    return path
+
+
+def _structured_workbook() -> Workbook:
+    """The structured twin's workbook, unfrozen — shared with the formula
+    twin (P1-24) so the two differ ONLY by the planted cached value."""
     wb = Workbook()
 
     # Instructions sheet with a length constraint + sheet-scoped footnote (EC-7)
@@ -131,9 +138,44 @@ def build_structured_twin(path: Path) -> Path:
         p[f"A{i}"] = phase
         p[f"B{i}"] = hours
     p["B5"] = "=SUM(B2:B4)"  # EC-5b: must survive write-back untouched
+    return wb
 
+
+B6_CACHED = "Provide an overview of your firm and ERP practice."  # = sheet 1 B2
+_B6_EMPTY = b"<c r=\"B6\"><f>'1. Company Background'!B2</f><v></v></c>"
+_B6_CACHED = (b"<c r=\"B6\" t=\"str\"><f>'1. Company Background'!B2</f><v>"
+              + B6_CACHED.encode() + b"</v></c>")
+
+
+def build_formula_twin(path: Path) -> Path:
+    """P1-24 (P26b-1, B112): the structured twin with row 6 of sheet 2
+    made a QUESTION ROW (ref 2.0.9) whose question is the cross-sheet
+    formula — and, spliced into the sheet XML after the save, the cached
+    value Excel would have stored (openpyxl cannot write one). The
+    parser must emit the slot from the cache; the structured twin, which
+    has no cache, must warn instead."""
+    wb = _structured_workbook()
+    wb["2. Integration "]["A6"] = "2.0.9"
     _freeze(wb, path)
+    _splice_member(path, "xl/worksheets/sheet3.xml", _B6_EMPTY, _B6_CACHED)
     return path
+
+
+def _splice_member(path: Path, member: str, old: bytes, new: bytes) -> None:
+    """Rewrite one zip member's bytes, keeping EC-8's pinned timestamps
+    and member order (the frozen container, edited in place)."""
+    buffer = io.BytesIO(path.read_bytes())
+    with zipfile.ZipFile(buffer) as src, zipfile.ZipFile(
+        path, "w", zipfile.ZIP_DEFLATED
+    ) as dst:
+        for name in sorted(src.namelist()):
+            data = src.read(name)
+            if name == member:
+                assert data.count(old) == 1, (member, data.count(old))
+                data = data.replace(old, new)
+            info = zipfile.ZipInfo(name, date_time=_PINNED_DATE)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            dst.writestr(info, data)
 
 
 def build_nofill_twin(path: Path) -> Path:
@@ -293,6 +335,7 @@ GOLDENS = {
     "nofill-twin.xlsx": build_nofill_twin,
     "gapcase-twin.xlsx": build_gapcase_twin,
     "demo-twin.xlsx": build_demo_twin,
+    "formula-twin.xlsx": build_formula_twin,  # P1-24 (P26b-1)
 }
 
 

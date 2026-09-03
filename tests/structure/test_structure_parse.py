@@ -60,7 +60,9 @@ def test_structured_twin_matches_golden():
     assert appendix["question_text"].startswith("Provide your integration governance")
 
     # EC-5: neither formula cell (cross-sheet title B6, =SUM total B5)
-    # produced a slot.
+    # produced a slot. Still true under P1-24 (2.1.0): this twin is
+    # openpyxl-built, so B6 carries NO cached value — it is recorded as a
+    # parser warning instead; formula-twin.xlsx is the slot-emitting case.
     assert not any(
         s["source_locator"].get("cell") in ("B6", "B5") for s in parsed.slots
     )

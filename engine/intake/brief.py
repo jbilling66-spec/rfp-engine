@@ -193,7 +193,7 @@ def _merge_flags(model_flags: list[dict], screen_flags, docs: list[ExtractedDoc]
         for seg in doc.hidden_segments:
             merged.append({
                 "kind": "hidden_content",
-                "detail": "content hidden in the buyer file (hidden sheet or row)",
+                "detail": "content hidden in the buyer file (hidden sheet, row or column)",
                 "excerpt": seg["text"][:200],
                 "source_location": seg["location"],
                 "detected_by": "screen",

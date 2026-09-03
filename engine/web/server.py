@@ -607,12 +607,28 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         from engine.flywheel.proposals import ProposalStore
         return {"proposals": ProposalStore(kb_root).list(status=status)}
 
+    def _kb_id_shape(value) -> str:
+        """P2-23 (P26b-1, B112): the store refuses a malformed id before it
+        can name a path; the door turns that into a 422 naming the shape."""
+        from engine.kb.identity import IdShapeError, require_kb_id
+        try:
+            return require_kb_id(value)
+        except IdShapeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    def _proposal_id_shape(value) -> str:
+        from engine.flywheel.proposals import IdShapeError, require_proposal_id
+        try:
+            return require_proposal_id(value)
+        except IdShapeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
     @app.post("/api/kb/proposals")
     def kb_propose(payload: dict, who: str = Depends(operator)):
         from engine.kb.curation import (CurationRefused, propose_deprecation,
                                         propose_edit)
         store = _kb_store()
-        kb_id = field(payload, "kb_id", "str", default="")
+        kb_id = _kb_id_shape(field(payload, "kb_id", "str", default=""))
         if not store.card_exists(kb_id):
             raise HTTPException(status_code=404, detail=f"no card {kb_id}")
         at = _at(payload)
@@ -633,6 +649,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     def kb_decide(proposal_id: str, payload: dict,
                   who: str = Depends(operator)):
         from engine.flywheel.proposals import ProposalStore
+        proposal_id = _proposal_id_shape(proposal_id)  # P2-23
         decision = payload.get("decision")
         if decision not in ("accepted", "rejected"):
             raise HTTPException(status_code=400,
@@ -653,6 +670,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         if not ids:
             raise HTTPException(status_code=400,
                                 detail="no proposal_ids given")
+        ids = [_proposal_id_shape(pid) for pid in ids]  # P2-23: each element
         try:
             return merge_batch(_kb_store(), ids, operator=who,
                                at=_at(payload))
@@ -912,7 +930,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         for binding in bindings:
             try:
                 files.append(_preview_one(pursuit, binding, _read_at(at)))
-            except (ContractError, FileNotFoundError) as exc:
+            # P2-30 (P26b-1): a StructureError (a ValueError) from the
+            # write-back re-derivation is the parser's typed refusal —
+            # a ragged buyer table — and lands as a lane refusal here
+            # exactly as it already did on confirm.
+            except (ContractError, FileNotFoundError, ValueError) as exc:
                 refused.append({"lane": binding["lane"],
                                 "file": binding["file"],
                                 "reason": str(exc)})
@@ -1149,6 +1171,14 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                             action="comment", granted=False,
                             detail=f"unknown section {section_id!r}")
             raise HTTPException(400, f"unknown section {section_id!r}")
+        try:
+            _slot_in_section(sections, section_id, payload.get("slot_id"))
+        except HTTPException as exc:
+            lane.log_access(at=when, link_id=record["link_id"],
+                            action="comment", granted=False,
+                            detail=f"slot not in section {section_id!r}")
+            raise HTTPException(400, f"slot is not a slot of section "
+                                     f"{section_id!r}") from exc
         flags = screen_text(text, source=f"share:{record['link_id']}")
         events_lane = EventsLane(PursuitDir(workspace, pursuit_id))
         with _mutate(pursuit_id):
@@ -1785,6 +1815,17 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
         return plan, {s["section_id"]: s for s in plan.get("sections", [])}
 
+    def _slot_in_section(sections: dict, section_id: str, slot_id) -> None:
+        """P3-14 (P26b-1, B112): a comment's slot_id must be one of ITS
+        section's slots — a foreign slot would tag a later revision round
+        onto the wrong target. None is fine (a section-level comment)."""
+        if slot_id is None:
+            return
+        if not isinstance(slot_id, str) or \
+                slot_id not in sections[section_id].get("slot_ids", []):
+            raise HTTPException(
+                400, f"slot {slot_id!r} is not a slot of section {section_id!r}")
+
     @app.post("/api/pursuits/{pursuit_id}/comments")
     def add_comment(pursuit_id: str, payload: dict,
                     who: str = Depends(operator),
@@ -1794,6 +1835,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         plan, sections = _plan_sections(pursuit_id)
         if section_id not in sections:
             raise HTTPException(400, f"unknown section {section_id!r}")
+        _slot_in_section(sections, section_id, payload.get("slot_id"))  # P3-14
         lane = _lane(pursuit_id)
         with _mutate(pursuit_id):
             try:

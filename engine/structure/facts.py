@@ -29,6 +29,12 @@ class CellFact:
     formula: str | None
     merged_range: str | None
     bold: bool
+    # P1-24 (P26b-1, B112): a formula cell's CACHED value (what Excel
+    # last computed and saved), read by a second data_only load; None
+    # when the writer left no cache (openpyxl-built files) or the cell is
+    # not a formula. When present, `text` carries it and `formula` keeps
+    # the source — the cell stays is_formula for every answer-side rule.
+    cached_text: str | None = None
 
 
 @dataclass
@@ -78,7 +84,9 @@ def fill_signature(cell) -> str | None:
 
 def collect_workbook_facts(path: Path) -> WorkbookFacts:
     """Read every interesting cell (text, fill, or formula) with
-    byte-exact sheet names. data_only=False so formulas stay formulas."""
+    byte-exact sheet names. data_only=False so formulas stay formulas;
+    a second data_only=True pass (P1-24) supplies each formula cell's
+    cached value, when the writer saved one."""
     check_office_zip(path)  # P0-8: the container before the parser
     wb = load_workbook(path, data_only=False, read_only=False)
     facts = WorkbookFacts(file=path.name)
@@ -112,4 +120,20 @@ def collect_workbook_facts(path: Path) -> WorkbookFacts:
                     bold=bool(cell.font is not None and cell.font.bold),
                 )
         facts.sheets.append(sheet)
+    # P1-24: cached values for formula cells, one extra load only when a
+    # formula exists. openpyxl-built files carry no cache → None.
+    if any(f.is_formula for s in facts.sheets for f in s.cells.values()):
+        import dataclasses
+        cached_wb = load_workbook(path, data_only=True, read_only=False)
+        for sheet in facts.sheets:
+            ws_cached = cached_wb[sheet.name]
+            for coord, fact in list(sheet.cells.items()):
+                if not fact.is_formula:
+                    continue
+                value = ws_cached[coord].value
+                cached = None if value is None or str(value) == "" else str(value)
+                if cached is not None:
+                    sheet.cells[coord] = dataclasses.replace(
+                        fact, text=cached, cached_text=cached)
+
     return facts

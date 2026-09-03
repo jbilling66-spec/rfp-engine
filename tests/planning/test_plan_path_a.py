@@ -61,7 +61,7 @@ def test_slots_container_written_and_counted(planned):
     pursuit, _ = planned
     container = pursuit.read_artifact("slots.json")
     assert container["slot_count"] == len(container["slots"]) == 8
-    assert container["parser_version"] == "2.0.0"
+    assert container["parser_version"] == "2.1.0"  # bumped at P26b-1 (B112)
     for slot in container["slots"]:
         validate("target_slot", slot)
 

@@ -78,7 +78,20 @@ class InContainerBackend:
             res = run_production_conversion(Path(path), mode, Path(td))
         if res.status != "ok":
             raise ExtractionFailed(f"{path}: {res.status}: {res.error}")
-        return ExtractionView.from_dict(res.result)
+        return _view_or_fail(path, res.result)  # P1-29: the same guard
+
+
+def _view_or_fail(path: Path, view) -> ExtractionView:
+    """P1-29: a view the model rejects is a DOCUMENT failure, typed."""
+    if not isinstance(view, dict):
+        raise ExtractionFailed(
+            f"{path}: worker result carries no view ({type(view).__name__})")
+    try:
+        return ExtractionView.from_dict(view)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ExtractionFailed(
+            f"{path}: worker view malformed ({type(exc).__name__}: {exc})"
+        ) from exc
 
 
 class DockerBackend:
@@ -102,19 +115,37 @@ class DockerBackend:
         ]
 
     def convert(self, path: Path, mode: str = "deterministic") -> ExtractionView:
-        proc = subprocess.run(
-            self.command(path, mode),
-            capture_output=True, text=True,
-            timeout=PRODUCTION_TIMEOUT_S + 120,
-        )
+        # P1-29 (P26b-1, B112): every way the worker's result can be
+        # malformed — a timeout, empty stdout, a non-JSON last line, a
+        # result without `view`, a view the model rejects — is
+        # ExtractionFailed, the ONE type the intake lane degrades on;
+        # anything else escaped and killed the whole intake job.
+        try:
+            proc = subprocess.run(
+                self.command(path, mode),
+                capture_output=True, text=True,
+                timeout=PRODUCTION_TIMEOUT_S + 120,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ExtractionFailed(
+                f"{path}: worker timed out after {exc.timeout}s") from exc
         if proc.returncode != 0 and not proc.stdout.strip():
             raise ExtractionFailed(
                 f"{path}: container run failed: {proc.stderr.strip()[-600:]}"
             )
-        out = json.loads(proc.stdout.strip().splitlines()[-1])
-        if out.get("status") != "ok":
-            raise ExtractionFailed(f"{path}: {out.get('status')}: {out.get('error')}")
-        return ExtractionView.from_dict(out["view"])
+        try:
+            out = json.loads(proc.stdout.strip().splitlines()[-1])
+        except (IndexError, ValueError) as exc:  # JSONDecodeError is a ValueError
+            raise ExtractionFailed(
+                f"{path}: worker result malformed ({type(exc).__name__}; "
+                f"exit {proc.returncode}): stdout tail "
+                f"{proc.stdout.strip()[-200:]!r}; stderr "
+                f"{proc.stderr.strip()[-300:]}") from exc
+        if not isinstance(out, dict) or out.get("status") != "ok":
+            status = out.get("status") if isinstance(out, dict) else type(out).__name__
+            error = out.get("error") if isinstance(out, dict) else out
+            raise ExtractionFailed(f"{path}: {status}: {error}")
+        return _view_or_fail(path, out.get("view"))
 
 
 def resolve_backend(image: str = GATE_IMAGE):

@@ -98,6 +98,8 @@ def _stated_weight(text: str) -> float | None:
 
 
 def _events(document):
+    from engine.structure.docx_parts import text_box_text
+
     for child in document.element.body.iterchildren():
         if child.tag.endswith("}p"):
             para = Paragraph(child, document)
@@ -106,20 +108,43 @@ def _events(document):
             if text:
                 yield ("heading" if _HEADING_STYLE.match(style) else "para",
                        text)
+            for boxed in text_box_text(child):  # P2-27: a text box's words
+                yield ("para", boxed)          # belong to the section they float in
         elif child.tag.endswith("}tbl"):
             yield ("table", Table(child, document))
 
 
-def _question_table_slots(table, table_index: int, section) -> list[dict]:
+def _row_cells(table_index: int, row_index: int, row, width: int) -> list:
+    """P2-30 (P26b-1, B112): a body row narrower than the header is a
+    RAGGED table — an OOXML row with fewer <w:tc> than the grid. Indexing
+    it by header width raised a bare IndexError past the parser and
+    500'd the write-back doors; now it is the parser's own typed
+    refusal, and the human repairs the table or completes by hand."""
+    cells = list(row.cells)
+    if len(cells) < width:
+        raise StructureError(
+            f"table {table_index} row {row_index}: {len(cells)} cells, header "
+            f"has {width} — the buyer table is ragged; repair the table or "
+            "complete by hand")
+    return cells
+
+
+def _question_table_slots(table, table_index: int, section,
+                          warnings: list[str] | None = None) -> list[dict]:
     """One slot per open Question|Response row; pre-filled rows are the
-    buyer's own examples, never asks."""
+    buyer's own examples, never asks — both skips are RECORDED (P1-23)."""
     header = [c.text.strip() for c in table.rows[0].cells]
     answer_col = len(header) - 1
     slots = []
     for r, row in enumerate(table.rows[1:], start=1):
-        question = row.cells[0].text.strip()
-        answer = row.cells[answer_col].text.strip()
+        cells = _row_cells(table_index, r, row, len(header))
+        question = cells[0].text.strip()
+        answer = cells[answer_col].text.strip()
         if not question or answer:
+            if warnings is not None:
+                kind = ("pre-filled row skipped (the buyer's example)" if answer
+                        else "row without a question skipped")
+                warnings.append(f"table {table_index} row {r}: {kind}")
             continue
         slots.append(_slot(
             slot_id=f"s-t{table_index:02d}-r{r:02d}",
@@ -183,7 +208,8 @@ def _fillin_slot(table, table_index: int, anchor: str,
     header = [c.text.strip() for c in table.rows[0].cells]
     if not all(header):
         return None
-    body = [[c.text.strip() for c in row.cells] for row in table.rows[1:]]
+    body = [[c.text.strip() for c in _row_cells(table_index, r, row, len(header))]
+            for r, row in enumerate(table.rows[1:], start=1)]
     filled_cols = [i for i in range(len(header))
                    if all(row[i] for row in body)]
     empty_cols = [i for i in range(len(header))
@@ -212,13 +238,29 @@ def _fillin_slot(table, table_index: int, anchor: str,
     )
 
 
+def _table_drop_reason(table) -> str:
+    """Why a non-question table yielded no slot — re-derived from the
+    table so the helpers stay pure (P1-23). Order mirrors the helpers."""
+    if not table.rows or len(table.rows) < 2:
+        return "table with fewer than two rows skipped"
+    header = [c.text.strip() for c in table.rows[0].cells]
+    if not all(header):
+        return "table with an incomplete header row skipped"
+    body = [[c.text.strip() for c in row.cells] for row in table.rows[1:]]
+    if all(cell for row in body for cell in row):
+        return "filled table skipped (buyer content, not an ask)"
+    return "partially answered table skipped (not a clean fill-in ask)"
+
+
 def _table_slots_for(table, t_index: int, section: dict | None,
-                     anchor: str, parent: str | None) -> list[dict]:
-    """Classification order: question table → empty grid → fill-in."""
+                     anchor: str, parent: str | None,
+                     warnings: list[str] | None = None) -> list[dict]:
+    """Classification order: question table → empty grid → fill-in.
+    A table that yields nothing is RECORDED once with its reason."""
     header_first = (table.rows[0].cells[0].text.strip().lower()
                     if table.rows else "")
     if header_first == "question" and len(table.columns) >= 2:
-        found = _question_table_slots(table, t_index, section)
+        found = _question_table_slots(table, t_index, section, warnings)
     else:
         grid = _grid_slot(table, t_index, section)
         if grid:
@@ -226,6 +268,8 @@ def _table_slots_for(table, t_index: int, section: dict | None,
         else:
             fillin = _fillin_slot(table, t_index, anchor, parent)
             found = [fillin] if fillin else []
+            if not found and warnings is not None:
+                warnings.append(f"table {t_index}: {_table_drop_reason(table)}")
     for slot in found:  # orphans anchor to their nearest heading
         if not slot["source_locator"].get("docx_anchor"):
             slot["source_locator"]["docx_anchor"] = anchor
@@ -250,8 +294,17 @@ def parse_buyer_docx(path: Path, *, core_scan: bool = False) -> ParsedWorkbook:
     # section (a form document without headings, a fill-in table under
     # a prose heading) are kept as orphans with their nearest heading
     # as anchor.
+    from engine.structure.docx_parts import header_footer_text
+
     sections: list[dict] = []
     orphans: list[tuple[int, object, str]] = []
+    warnings: list[str] = []  # P1-23: every table row or table dropped
+    parts = header_footer_text(document)
+    if parts:  # P2-27: read by intake (brief + screen), not slot-bearing here
+        warnings.append(
+            f"header/footer text present ({len(parts)} line(s), "
+            f"{sum(len(t) for _, t in parts)} chars): read by intake, not "
+            "parsed for slots")
     current: dict | None = None
     last_heading = ""
     table_index = -1
@@ -301,7 +354,7 @@ def parse_buyer_docx(path: Path, *, core_scan: bool = False) -> ParsedWorkbook:
         for t_index, table in section["tables"]:
             table_slots.extend(_table_slots_for(
                 table, t_index, section, section["anchor"],
-                section["slot_id"]))
+                section["slot_id"], warnings))
 
         header_only = bool(table_slots) or (has_children and not instructions)
         if header_only:
@@ -343,7 +396,8 @@ def parse_buyer_docx(path: Path, *, core_scan: bool = False) -> ParsedWorkbook:
         slots.extend(table_slots)
 
     for t_index, table, anchor in orphans:
-        for slot in _table_slots_for(table, t_index, None, anchor, None):
+        for slot in _table_slots_for(table, t_index, None, anchor, None,
+                                     warnings):
             slot["source_locator"]["file"] = path.name
             slots.append(slot)
 
@@ -359,6 +413,7 @@ def parse_buyer_docx(path: Path, *, core_scan: bool = False) -> ParsedWorkbook:
         parser_version=DOCX_PARSER_VERSION,
         source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
         slots=slots,
+        warnings=warnings,
     )
 
 
@@ -380,10 +435,11 @@ def question_cell_map(path: Path) -> dict[str, dict]:
                  if table.rows else "")
         if first != "question" or len(table.columns) < 2:
             continue
-        answer_col = len(table.rows[0].cells) - 1
+        width = len(table.rows[0].cells)
+        answer_col = width - 1
         for r, row in enumerate(table.rows[1:], start=1):
-            if not row.cells[0].text.strip() or (
-                    row.cells[answer_col].text.strip()):
+            row_cells = _row_cells(table_index, r, row, width)  # P2-30, at write-back too
+            if not row_cells[0].text.strip() or row_cells[answer_col].text.strip():
                 continue
             cells[f"s-t{table_index:02d}-r{r:02d}"] = {
                 "table_index": table_index, "row": r, "column": answer_col,

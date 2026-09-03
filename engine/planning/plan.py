@@ -306,6 +306,27 @@ def _run_path_a(pursuit, log, store, frozen: dict, manifest, feedback,
         elif scanned.slots:
             parsed_list.append(scanned)
 
+    # P1-23 (P26b-1, B112): every parser drop is a recorded warning —
+    # in the plan report (the human's copy) and as ONE recoverable error
+    # record per file (the run log's copy; no `warning` record type
+    # exists and the recoverable-error idiom is the repo's channel). A
+    # core-document scan that found no slots still drains its warnings.
+    drained = list(parsed_list)
+    if structure == "mixed" and core_doc is not None and scanned is not None \
+            and scanned not in drained:
+        drained.append(scanned)
+    for parsed in drained:
+        if not parsed.warnings:
+            continue
+        report.warnings.extend(f"{parsed.file}: {w}" for w in parsed.warnings)
+        log.emit("error", stage="path_a_map", error={
+            "code": "parser_warnings",
+            "message": (f"{parsed.file}: {len(parsed.warnings)} parser "
+                        f"warning(s) — " + "; ".join(parsed.warnings)),
+            "recoverable": True,
+            "action_taken": "surfaced_to_human",
+        })
+
     for parsed in parsed_list:
         for slot in parsed.slots:
             validate("target_slot", slot)

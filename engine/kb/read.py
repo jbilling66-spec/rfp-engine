@@ -47,9 +47,16 @@ def _read_docx(path: Path) -> SourceText:
     from docx.text.paragraph import Paragraph
 
     check_office_zip(path)  # P0-8: the container before the parser
+    from engine.structure.docx_parts import header_footer_text, text_box_text
+
     document = docx.Document(str(path))
     lines: list[str] = []
     elements: list[Element] = []
+    parts = header_footer_text(document)  # P2-27: headers first, footers last
+    for kind, text in parts:
+        if kind == "header":
+            lines.append(f"[header] {text}")
+            elements.append(Element(kind="paragraph", text=text))
     for item in document.iter_inner_content():
         if isinstance(item, Paragraph):
             style = item.style.name if item.style is not None else ""
@@ -63,6 +70,9 @@ def _read_docx(path: Path) -> SourceText:
                 lines.append(item.text)
                 elements.append(Element(kind="paragraph",
                                         text=item.text.strip()))
+            for boxed in text_box_text(item._p):  # P2-27
+                lines.append(f"[text box] {boxed}")
+                elements.append(Element(kind="paragraph", text=boxed))
         elif isinstance(item, Table):
             for row in item.rows:
                 texts = [c.text.replace("\n", " ") for c in row.cells
@@ -71,6 +81,10 @@ def _read_docx(path: Path) -> SourceText:
                     lines.append("| " + " | ".join(texts) + " |")
                     elements.append(Element(kind="table_row",
                                             text=" | ".join(texts)))
+    for kind, text in parts:  # P2-27: footers last
+        if kind == "footer":
+            lines.append(f"[footer] {text}")
+            elements.append(Element(kind="paragraph", text=text))
     try:
         images = len(document.part.package.image_parts)
     except AttributeError:

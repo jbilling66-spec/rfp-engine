@@ -8,14 +8,18 @@ workbook directly and never hardcode colors or cell addresses.
 """
 
 # Bumped whenever classification rules change (the P10 unseen-twin
-# contract keys on it). FROZEN through P16 (B73§4): the xlsx path is
-# byte-pinned; the docx parsers version independently below.
-PARSER_VERSION = "2.0.0"
+# contract keys on it). Frozen through P16 (B73§4) and byte-pinned;
+# bumped 2.1.0 at P26b-1 (B112, the owner's call): formula question cells
+# parse from cached values — the pin was re-captured in the same commit,
+# per tests/planning/test_pre_p16_pin.py's own procedure. The docx
+# parsers version independently below.
+PARSER_VERSION = "2.1.0"
 
 # The docx parsers' own version (P16): bumping one never moves the
 # other's pinned bytes.
 DOCX_PARSER_VERSION = "1.0.0"
 
+from engine.structure.docx_parts import header_footer_text, text_box_text  # noqa: F401  (P2-27)
 from engine.structure.parse import ParsedWorkbook, StructureError, parse_workbook  # noqa: E402
 from engine.structure.docx_default import parse_default_template  # noqa: E402
 from engine.structure.docx_buyer import parse_buyer_docx  # noqa: E402

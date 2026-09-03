@@ -287,11 +287,52 @@ def build_narrative_twin(path: Path) -> Path:
     return _freeze(doc, path)
 
 
+# ----------------------------------------------------------------- parts
+
+HEADER_DIRECTIVE = "All responses are due by 5:00 PM local time; late submissions are void."
+FOOTER_TEXT = "Confidential — for the named bidder only."
+TEXT_BOX_DIRECTIVE = (
+    "Note to bidders: describe your data-residency controls in Section 2."
+)
+
+_VML_TEXT_BOX = (
+    '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+    'xmlns:v="urn:schemas-microsoft-com:vml">'
+    '<w:pict><v:shape><v:textbox><w:txbxContent><w:p><w:r><w:t>{text}</w:t></w:r>'
+    '</w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r>'
+)
+
+
+def build_parts_twin(path: Path) -> Path:
+    """P2-27 (P26b-1, B112): a questionnaire whose buyer instructions sit
+    in the parts a body-only walk never reads — a header, a footer and a
+    VML text box anchored under a body paragraph (python-docx has no
+    text-box API, so the run is raw OOXML). The body itself is the qform
+    shape: two numbered sections, one Question|Response table."""
+    from docx.oxml import parse_xml
+
+    doc = Document()
+    doc.sections[0].header.paragraphs[0].text = HEADER_DIRECTIVE
+    doc.sections[0].footer.paragraphs[0].text = FOOTER_TEXT
+    doc.add_heading("1. Company Background", level=1)
+    anchor = doc.add_paragraph("Answer each question in the table below.")
+    anchor._p.append(parse_xml(_VML_TEXT_BOX.format(text=TEXT_BOX_DIRECTIVE)))
+    _table(doc, [
+        ["Question", "Response"],
+        ["Describe your company's history and ownership structure.", ""],
+        ["Describe your data-residency controls.", ""],
+    ])
+    doc.add_heading("2. Project Management Approach", level=1)
+    doc.add_paragraph("Describe your project governance model.")
+    return _freeze(doc, path)
+
+
 GOLDENS = {
     "template-twin.docx": build_template_twin,
     "outline-twin.docx": build_outline_twin,
     "qform-twin.docx": build_qform_twin,
     "narrative-twin.docx": build_narrative_twin,
+    "parts-twin.docx": build_parts_twin,  # P2-27 (P26b-1)
 }
 
 

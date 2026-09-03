@@ -246,7 +246,7 @@ def write_prior_plan(tmp_root, *, pursuit_id="pur_prior", question_text=None,
         prior.write_json("slots.json", {
             "pursuit_id": pursuit_id,
             "source_mode": "client_provided",
-            "parser_version": "2.0.0",
+            "parser_version": "2.1.0",
             "source_sha256": "0" * 64,
             "slot_count": 1,
             "slots": [slot],

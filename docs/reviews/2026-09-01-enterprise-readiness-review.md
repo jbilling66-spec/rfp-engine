@@ -678,3 +678,52 @@ semantics, focus management, poll error handling — stays open in the P27
 row) · **P1-7's UI half** (the ping inbox has a screen; the delivery channel
 is still the owner's choice — the id stays open on that half). Suite at
 close: 1728. Ids remain permanent labels; nothing here renumbers.
+
+### 5.10 P26b split three ways; P26b-1 kickoff — no new ids, four citations sharpened (2026-09-03, B112)
+
+*Read at P26b-1 planning against `be2a393`. The thirty-three P26b ids
+now have three homes — P26b-1 parser fidelity (P1-23, P1-24, P1-25,
+P1-26, P2-26, P2-27, P2-30, P1-29, P2-23, P3-14), P26b-2 KB integrity +
+flywheel (P1-13, P1-21, P1-37, P1-38, P1-39, P1-40, P1-41, P2-45, P2-50,
+P2-46, M-27, M-28, M-29, M-30), P26b-3 eval integrity + output boundary
+(P2-35, P2-36, P2-37, M-19, M-20, M-21, M-26, P1-19, P3-15) — the
+owner's call on the sizing recorded in B112 §1. P1-37, P1-38 and M-27
+move from the parser group to P26b-2: they are ingest/reconcile items
+sharing files with P2-46. The eval-integrity trio lands last because two
+eval lanes score the parser directly (`engine/evals/structure.py`,
+`engine/evals/intake.py`) and P26b-1 moves those numbers. Ids remain
+permanent labels; nothing here renumbers.*
+
+**Citations sharpened at `be2a393` (the rows above are not edited; this
+note supersedes their `where` cells):** P2-30's write-back re-derivation
+`question_cell_map` is called from `engine/assembly/docx_writeback.py`
+(`compute_docx_facts`), not `writeback.py`; the write-back PREVIEW door
+catches only `ContractError`/`FileNotFoundError`, so even a typed refusal
+500s there today — P26b-1 widens it. P1-23's forecast path is
+`_preflight` in `engine/web/server.py` (~:1454), a gate-time cost forecast
+with no run log that swallows every parse failure by design; it stays
+unwarned — the plan-time parse is the recorded one. P1-25's precedent is
+`engine/kb/xlsx.py` ~:139-143. P1-29 has two escapes the row does not
+list — `KeyError` on a worker result missing `view`, and the same
+unguarded `from_dict` in `InContainerBackend.convert` — and a third gap
+(a non-zero exit WITH stdout falls through to the parse). P1-26's
+docstring half landed at P25 item 6 as hedged wording; the code gap is
+the remaining half. P1-23's class has a fourth silent drop the row does
+not cite — `engine/structure/conventions.py` `answer_cells` drops a whole
+row when a formula sits in a labeled column (the grid TOTAL row); it is
+inside P1-23's stated class ("every row that falls through … dropped
+with zero record") and closes with it, no new id.
+
+**P1-24's scope (the owner's call):** a formula question cell becomes a
+slot from the cached value a second `data_only=True` load supplies;
+`PARSER_VERSION` 2.0.0 → 2.1.0 with the pre-P16 byte pin re-pinned in the
+same commit, per that test's own procedure; no cached value → a warning,
+no slot. The structure eval's golden set (the P16 four) is unchanged — no
+committed twin carries a cached value; the new formula twin is a unit
+fixture.
+
+### 5.11 P26b-1 closure (2026-09-03, B113)
+
+**Closed by P26b-1, each with a named test:** **P1-23** (`tests/structure/test_parse_warnings.py`, `test_docx_parse_warnings.py`, `tests/planning/test_plan_warnings_drain.py`) · **P1-24** (`tests/structure/test_formula_questions.py`; PARSER_VERSION 2.1.0, the pre-P16 pin re-captured in the same commit) · **P1-25** (`tests/intake/test_extract_formulas.py`) · **P1-26** (`tests/intake/test_hidden_columns.py`) · **P2-26** (`tests/intake/test_pdf_recovery.py`) · **P1-29** (`tests/extraction/test_worker_result.py`) · **P2-27** (`tests/structure/test_docx_parts.py`, `test_docx_buyer_parts.py`, `tests/intake/test_extract_docx_parts.py`, `tests/kb/test_read_docx_parts.py`) · **P2-30** (`tests/structure/test_docx_buyer_ragged.py`, `tests/web/test_writeback_ragged.py`) · **P2-23** (`tests/kb/test_id_shape.py`, `tests/web/test_kb_id_doors.py`) · **P3-14** (`tests/web/test_comment_slot_id.py`). Suite at close: 1810. Ids remain permanent labels; nothing here renumbers.
+
+**Stated limits (B113):** the gate-time forecast (`_preflight`) still parses without a log and stays unwarned by design; the firm template parser's drops (`docx_default.py`) are outside P1-23's buyer-document class; the id shape is "prefixed and path-safe", of which the minted hex form is a subset; P1-25 keeps formula source text in the intake output (EC-5's never-thinned contract) — marked, with the cached value beside it or a warning in its place; headers/footers are read by intake and KB and recorded as present by the buyer parser, which bears no slots from them.

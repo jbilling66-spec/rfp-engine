@@ -19,6 +19,7 @@ from pathlib import Path
 import yaml
 
 from engine.contracts import validate, write_text_atomic
+from engine.kb.identity import require_kb_id
 from engine.kb.provenance import RestrictedStore
 
 
@@ -73,7 +74,8 @@ class KBStore:
         self.restricted = restricted or RestrictedStore(self.root)
 
     def _card_path(self, kb_id: str) -> Path:
-        return self.cards_dir / f"{kb_id}.md"
+        # P2-23: every read and write door names its path through here.
+        return self.cards_dir / f"{require_kb_id(kb_id)}.md"
 
     def write_card(
         self, card: dict, body: str, provenance: dict, identifiers: dict[str, str]

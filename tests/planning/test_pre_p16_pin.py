@@ -26,15 +26,18 @@ from tests.planning.fixtures.plans import run_planning_package
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 # Captured 2026-08-28 at 561acbc, before any P16 commit.
+# Re-captured 2026-09-03 at 94b134f for PARSER_VERSION 2.1.0 (P26b-1, B112 §1b:
+# formula question cells parse from cached values — the deliberate bump this
+# docstring names; the digests moved with parser_version, the slots did not).
 CHAIN_PIN = {
-    "slots.json": "9db1c8f0a69784eca5d77ec3fd92d7e5c345defda9f8a89dfc57b96bee086545",
+    "slots.json": "b2d41bc508788ee22441377bffd88c5e730faea50e50660dc9d464ce8bffaa3e",
     "plan.json": "888b94b08dbd9367bcde3f5ad91f8a03834b75432a5cef934b4009653a1b93f7",
 }
 PARSE_PIN = {
-    "demo-twin.xlsx": "c640e5e1047471532df9a197ba4ef64f86398cd3988fd9b5d909b5e9fb7c3fb2",
-    "structured-twin.xlsx": "52103473e79e5ee6b84d5d6823f7412e90e9ce54aeb5b8d8a3d1bfa7589b6669",
-    "gapcase-twin.xlsx": "3af9fcb13662bd4bad64da71deedc403f8d3d1c588c4f6bfbccde48d426b329e",
-    "nofill-twin.xlsx": "c8d83001888b616b71aae2fcf413baa75d40075901a2a966e4a4f0a20cb3a1f4",
+    "demo-twin.xlsx": "6dd6363aecf37e7ec33d72b2a491f1c22af6629197b1a0689a23648da8e45f33",
+    "structured-twin.xlsx": "b19abd652cf8672295d1c30b78328cd5cae6a7cd36c86446ad4973d8a3cff7c9",
+    "gapcase-twin.xlsx": "2906ed0060dbdc782d3118f3c1047bbbd570465ee5a5d0ef64243be9151a6948",
+    "nofill-twin.xlsx": "0c73e96149417d1bb53d1c33ea0ce8cd8ae040f8959e44f48f78aaef1d95ee4e",
 }
 
 

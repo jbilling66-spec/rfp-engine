@@ -178,8 +178,13 @@ def _current_parent(last_by_depth: dict[int, str]) -> str | None:
 
 
 def parse_sheet(
-    sheet: SheetFacts, sc: SheetConventions, conv: Conventions, file_name: str
+    sheet: SheetFacts, sc: SheetConventions, conv: Conventions, file_name: str,
+    *, warnings: list[str] | None = None,
 ) -> list[dict]:
+    """`warnings` (P26b-1, B112): the sink for every row that carried
+    content and matched no rule — the P10-F16 class at the structure
+    layer. Entries name the sheet, the row and the kind; never a cell's
+    text. None keeps the pre-P26b behaviour (silent)."""
     slots: list[dict] = []
     if sc.kind == "instructions":
         return slots
@@ -214,17 +219,27 @@ def parse_sheet(
                 continue
             # A ref-carrying label row falls through: header slot below.
 
-        # Furniture above the first label row (titles, banners).
+        # Furniture above the first label row (titles, banners) — RECORDED
+        # when the row carries a ref, i.e. looks like a question the
+        # buyer placed above the header (P1-23); bare titles stay silent.
         if sc.first_label_row is not None and row_num < sc.first_label_row:
+            if warnings is not None and row_ref(row_facts, sc.ref_col) is not None:
+                warnings.append(f"{sheet.name.strip()}!row {row_num}: row above "
+                                "the first label row skipped (carries a ref)")
             continue
 
         ref = row_ref(row_facts, sc.ref_col)
-        text_cells = [f for f in row_facts if f.text and not f.is_formula]
+        # P1-24: a formula cell counts as text ONLY when it carries a
+        # cached value (its `text` is then that value); answer-side rules
+        # keep treating it as a formula.
+        text_cells = [f for f in row_facts
+                      if f.text and (not f.is_formula or f.cached_text is not None)]
         question = next(
             (f.text.strip() for f in text_cells if f.col == sc.question_col), None
         )
         answer_text = next(
-            (f.text.strip() for f in text_cells if f.col == sc.answer_col), None
+            (f.text.strip() for f in text_cells
+             if f.col == sc.answer_col and not f.is_formula), None
         )
         slot_id = f"slot_{sheet.index:02d}_r{row_num:03d}"
 
@@ -258,6 +273,12 @@ def parse_sheet(
                 sc.first_label_row is None or row_num > sc.first_label_row
             ):
                 _accumulate_grid(slots, sheet, sc, row_num, grid_cells, file_name)
+            elif warnings is not None and any(f.text for f in row_facts):
+                texts = [f for f in row_facts if f.text]
+                kind = ("formula-only grid row skipped (totals are facts, "
+                        "never targets)" if all(f.is_formula for f in texts)
+                        else "grid row skipped (fewer than two labeled cells)")
+                warnings.append(f"{sheet.name.strip()}!row {row_num}: {kind}")
             continue
 
         # Rule 5b: record rows — a VALID label row covers >=2 answer cells.
@@ -323,7 +344,17 @@ def parse_sheet(
                 gating={"gated_by": gated.group(1)} if gated else None,
                 cross_refs=[r for r in _REF_MENTION.findall(qtext) if r != ref],
             ))
-        # Everything else: furniture.
+        elif warnings is not None and any(f.text for f in row_facts):
+            # Everything else is furniture — but furniture that carries
+            # content is a row the buyer wrote and the engine dropped,
+            # so it is RECORDED (P1-23). Formula-only rows are the
+            # P1-24 case and name themselves.
+            texts = [f for f in row_facts if f.text]
+            kind = ("formula-only row skipped (a formula question needs a "
+                    "cached value)" if all(f.is_formula and f.cached_text is None
+                                           for f in texts)
+                    else "unclassified row dropped (no rule matched)")
+            warnings.append(f"{sheet.name.strip()}!row {row_num}: {kind}")
 
     return slots
 
