@@ -6,7 +6,10 @@ in the pursuit, and the CLEAN verdict scans EVERY remaining lane —
 
 import json
 
+from engine.flywheel.proposals import ProposalStore
 from engine.kb import Lanes, card_search, purge_pursuit_memory
+from engine.kb.curation import merge_batch
+from engine.kb.purge import post_purge_sweep
 from engine.kb.pursuit_memory import deposit_supplemental, memory_store
 from engine.runlog import RunLogger
 from engine.workspace import PursuitDir
@@ -106,3 +109,71 @@ def test_memory_purge_accounting_guard_fires(tmp_path, monkeypatch):
     monkeypatch.setattr(KBStore, "delete_card", lambda self, kb_id: None)
     with pytest.raises(RuntimeError, match="left card\\(s\\) in place"):
         purge_pursuit_memory(pursuit.root, actor="owner", firm_store=firm)
+
+
+# ------------------------------------ P26c: D1 at the carry-forward layer
+
+AT = "2026-09-04T10:00:00Z"
+
+
+def _flywheel_proposal(firm, pursuit_id, kb_id=None, *, event="evt_0001",
+                       text="four waves became five", kind="update_card",
+                       target="corpus"):
+    return ProposalStore(firm.root).open(
+        source={"door": "flywheel", "pursuit_id": pursuit_id,
+                "event_ids": [event]},
+        target=target, kind=kind, at=AT, kb_id=kb_id,
+        diff={"text": {"before": "four waves", "after": text}},
+        note=f"from {pursuit_id}")
+
+
+def test_a_pursuit_purge_strips_its_proposals_and_lessons(tmp_path):
+    """What the pursuit taught the firm KB goes with it: its proposals
+    (decided or not) are removed, the lessons they landed on firm cards
+    are stripped, both are accounted and re-read from disk; another
+    pursuit's lesson on the same card stays."""
+    firm, _ = ingest_corpus(tmp_path / "kb")
+    pursuit, minted = _seeded_pursuit(tmp_path)
+    kb_id = firm.list_cards()[0]["kb_id"]
+    accepted = _flywheel_proposal(firm, pursuit.pursuit_id, kb_id)
+    theirs = _flywheel_proposal(firm, "pur_other", kb_id, event="evt_0009",
+                                text="kept lesson")
+    merge_batch(firm, [accepted["proposal_id"], theirs["proposal_id"]],
+                operator="Sam", at=AT)
+    pending = _flywheel_proposal(firm, pursuit.pursuit_id, event="evt_0002",
+                                 kind="playbook_note", target="playbook")
+    assert len(firm.read_card(kb_id)[0]["lessons"]) == 2
+
+    report = purge_pursuit_memory(pursuit.root, actor="owner",
+                                  firm_store=firm)
+    assert report.swept_clean, report.sweep_findings
+    assert report.accounting["proposals"] == sorted(
+        [accepted["proposal_id"], pending["proposal_id"]])
+    assert report.accounting["lessons"] == [
+        {"kb_id": kb_id, "proposal_id": accepted["proposal_id"]}]
+    lessons = firm.read_card(kb_id)[0]["lessons"]
+    assert [l["proposal_id"] for l in lessons] == [theirs["proposal_id"]]
+    assert [p["proposal_id"] for p in ProposalStore(firm.root).list()] == [
+        theirs["proposal_id"]]
+    accounting_file = json.loads(
+        open(report.accounting_path, encoding="utf-8").read())
+    assert accounting_file["proposals"] == report.accounting["proposals"]
+    assert accounting_file["lessons"] == report.accounting["lessons"]
+
+
+def test_the_sweep_sees_a_lesson_and_a_proposal(tmp_path):
+    """The CLEAN verdict is only as wide as the scan: a purged identifier
+    surviving in a lesson on a card, or in a proposal a steward will
+    read, is a finding."""
+    firm, _ = ingest_corpus(tmp_path / "kb")
+    kb_id = firm.list_cards()[0]["kb_id"]
+    firm.update_card_front(kb_id, lessons=[{
+        "at": AT, "by": "Sam", "proposal_id": "prop_0123456789ab",
+        "after": "PURGEME-TOKEN was the marker."}])
+    ProposalStore(firm.root).open(
+        source={"door": "flywheel", "pursuit_id": "pur_z"},
+        target="playbook", kind="playbook_note", at=AT,
+        diff={"comment": {"after": "Say PURGEME-TOKEN plainly."}})
+    findings = post_purge_sweep(firm, ["PURGEME-TOKEN"], [])
+    where = " ".join(str(f) for f in findings)
+    assert kb_id in where and "proposal:prop_" in where

@@ -180,9 +180,13 @@ def _t_proposals_queue(ctx, args):
         proposed = ProposalStore(ctx.store.root).list(status="proposed")
     except ContractError as exc:  # M-30: named, not a crash
         raise ToolRefused(str(exc))
+    from engine.kb.curation import home_of
     rows = [{"proposal_id": p["proposal_id"], "kind": p["kind"],
-             "kb_id": p.get("kb_id"), "door": p["source"].get("door"),
-             "created": p["created"], "note": p.get("note", "")}
+             "target": p["target"], "kb_id": p.get("kb_id"),
+             "door": p["source"].get("door"), "created": p["created"],
+             "note": p.get("note", ""), "diff": p.get("diff", {}),
+             # P26c: where it lands if accepted — the steward's question
+             "home": home_of(ctx.store, p)}
             for p in proposed]
     return _render({"proposed": rows})
 

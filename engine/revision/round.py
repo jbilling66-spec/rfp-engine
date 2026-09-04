@@ -28,6 +28,7 @@ from engine.workspace.pursuit import _serialize
 from engine.drafting import route
 from engine.drafting.compose import VOICE_DEFAULT, load_voice_spec
 from engine.kb import UseRestrictedCard, targeted_open
+from engine.kb.notes import steward_notes_frame
 from engine.revision import compose, wire
 from engine.validation import annotate, audit, claims, voice
 from engine.validation.findings import emit_validation
@@ -171,6 +172,7 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
 
     log.emit("stage_start", stage=STAGE)
     voice_text = load_voice_spec(voice_path)
+    notes_frame = steward_notes_frame(store)  # P26c: accepted steward notes
     ckpt = (pursuit.checkpoint_payload(ckpt_key)
             if ckpt_key in pursuit.completed_stages()
             else {"sections": {}, "complete": False,
@@ -288,7 +290,8 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                 voice_text=voice_text, frozen_brief=frozen_brief,
                 model_slots=model_slots, card_frames=card_frames,
                 entry=entry, internal_comments=internal,
-                external_comments=external, directive=directive, path=path)
+                external_comments=external, directive=directive, path=path,
+                notes_frame=notes_frame)
             system = (ROOT / "prompts" / AGENT / "prompt.md").read_text(
                 encoding="utf-8")
             result = caller.call(AGENT, tier="mid", prompt=prompt,
@@ -515,6 +518,11 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                   "section_id": item["section_id"],
                   "section_type": entries[item["section_id"]]
                   .get("section_type")}
+        if item.get("edit_reason"):
+            # P26c (P1-44): the reviewer's reason rides BOTH kinds — a
+            # comment's used to be dropped here, so the learner could
+            # never route it by what the reviewer said it was.
+            fields["edit_reason"] = item["edit_reason"]
         if item["kind"] == "comment":
             fields["comment_text"] = item["text"]
             if with_reply and item["cid"] in all_replies:
@@ -522,8 +530,6 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
         else:
             fields.update({"before": item["before"],
                            "after": item["after"]})
-            if item.get("edit_reason"):
-                fields["edit_reason"] = item["edit_reason"]
         return lane.append(item["kind"], at=at, actor=item["actor"],
                            actor_role=item["actor_role"], **fields)
 

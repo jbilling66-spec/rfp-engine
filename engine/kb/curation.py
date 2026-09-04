@@ -32,6 +32,8 @@ def honesty_notes(card: dict) -> list[str]:
         notes.append("reuse restricted — never offered to drafting")
     if card.get("legal_hold"):
         notes.append("legal hold — cannot be deprecated or purged")
+    if card.get("deprecated"):
+        notes.append("deprecated — withheld from retrieval, kept as the record")
     if card.get("sensitivity") == "restricted":
         notes.append("restricted sensitivity — provenance is access-logged")
     if card.get("canonical_block"):
@@ -87,6 +89,10 @@ def cards_view(store, *, q: str = "", layer: str = "", staleness_filter: str = "
             "review_due": card.get("review_due"),
             "staleness": state,
             "edit_survival": card.get("edit_survival"),
+            # P26c: the two homes an accepted proposal lands in ON a card,
+            # visible from the row — a steward sees a lesson arrive.
+            "lessons": list(card.get("lessons") or []),
+            "deprecated": bool(card.get("deprecated")),
             "notes": honesty_notes(card),
         })
     reverse = sort in ("edit_survival",)
@@ -237,10 +243,12 @@ def propose_gap_answer_card(kb_root, *, gap: dict, pursuit_id: str,
     between "a human answered a question" and "the corpus learns", so
     the same question stops being re-asked pursuit after pursuit.
 
-    OPT-IN, never automatic: the answerer asks for it, the proposal
-    carries door=gap_answer + the operator, and NOTHING enters the
-    corpus until a steward accepts with owner/verified_date (the
-    P13/C15 fill machinery — reused, not rebuilt)."""
+    Opt-in at answer time (the answerer asks for it) AND routed at
+    accept for every answered gap no proposal carries yet (P26c, the
+    owner's call at B116 §5); either way the proposal carries
+    door=gap_answer + gap_id, and NOTHING enters the corpus until a
+    steward accepts with owner/verified_date (the P13/C15 fill
+    machinery — reused, not rebuilt)."""
     if gap.get("status") != "answered" or not gap.get("answer"):
         raise CurationRefused(
             f"gap {gap.get('gap_id')!r} is not answered — only an "
@@ -253,9 +261,16 @@ def propose_gap_answer_card(kb_root, *, gap: dict, pursuit_id: str,
         "grain": {"after": "atom"},
         "content_origin": {"after": "source_text"},
     }
+    # P26c (P1-44): gap_id is the dedupe key between this opt-in door
+    # and the accept-time route (B116 §5) — one answered gap, one
+    # proposal, whoever proposed it; the operator is the human who
+    # answered, when one is known.
+    source = {"door": "gap_answer", "pursuit_id": pursuit_id,
+              "gap_id": gap["gap_id"]}
+    if operator:
+        source["operator"] = operator
     proposal = ProposalStore(Path(kb_root)).open(
-        source={"door": "gap_answer", "pursuit_id": pursuit_id,
-                "operator": operator},
+        source=source,
         target="fact_sheet", kind="new_card", at=at, diff=diff,
         note=(f"Answered intake gap {gap['gap_id']} "
               f"(answered by {gap.get('answered_by', operator)}). A "
@@ -301,7 +316,8 @@ def _check_new_card(store, proposal: dict, fill: dict) -> tuple[dict, str, list]
     card = {
         "kb_id": kb_id_for(body),
         "layer": fields.get("layer", "fact_sheet"),
-        "doc_kind": "fact",
+        # P26c: a corpus case block keeps its own kind (case_study)
+        "doc_kind": fields.get("doc_kind", "fact"),
         "title": fields.get("title", body.splitlines()[0][:80]),
         "summary": fields.get("title", body.splitlines()[0][:80]),
         "grain": fields.get("grain", "atom"),
@@ -327,6 +343,89 @@ def _check_new_card(store, proposal: dict, fill: dict) -> tuple[dict, str, list]
     return card, body, derived_from
 
 
+from engine.kb.notes import NOTE_KINDS  # noqa: E402 — one home for the vocabulary
+
+
+def home_of(store, proposal: dict) -> dict:
+    """P26c (P1-43): where an ACCEPTED proposal lands, named BEFORE the
+    decision — the inbox shows it, pass 1 of merge_batch refuses a
+    proposal with no home, pass 2 dispatches on it. Pure over
+    store.card_exists (one stat per proposal; the listing calls it per
+    row). Until this every kind outside update_card-with-fields and
+    new_card was decided and changed nothing — the owner's call (B115
+    §10): accepting something that is not carried forward is unexpected
+    behaviour, so a proposal either has a home or refuses by name.
+
+    kinds: card_field (front matter), card_lesson (a lessons entry on
+    the cited card), note (the accepted proposal IS the steward note the
+    drafter and the KB screen read — one home, no second copy to drift),
+    deprecate (a deprecated block; retrieval withholds the card),
+    new_card (needs_fill names what the steward must supply), none
+    (refused typed — never decide-only)."""
+    kind = proposal.get("kind")
+    kb_id = proposal.get("kb_id")
+    target = str(proposal.get("target") or "")
+    diff = proposal.get("diff") or {}
+    if kind == "update_card" and kb_id:
+        if not store.card_exists(kb_id):
+            return {"kind": "none", "needs_fill": [],
+                    "label": f"{kb_id} no longer exists — nothing to update"}
+        fields = sorted(set(diff) - {"text"})
+        if fields:
+            label = f"front matter of {kb_id} ({', '.join(fields)})"
+            if "text" in diff:
+                label += " and a lesson on the card"
+            return {"kind": "card_field", "kb_id": kb_id, "label": label,
+                    "needs_fill": []}
+        if "text" in diff:
+            return {"kind": "card_lesson", "kb_id": kb_id, "needs_fill": [],
+                    "label": (f"a lesson on {kb_id} — steward-visible, "
+                              "never drafted from")}
+        return {"kind": "none", "needs_fill": [],
+                "label": f"{kb_id}: an empty diff changes nothing"}
+    if kind == "update_card" or kind in NOTE_KINDS:
+        return {"kind": "note", "needs_fill": [],
+                "label": f"a steward note under {target.replace('_', ' ')}"}
+    if kind == "deprecate_card":
+        if not kb_id or not store.card_exists(kb_id):
+            return {"kind": "none", "needs_fill": [],
+                    "label": f"{kb_id or 'no card'} no longer exists — "
+                             "nothing to deprecate"}
+        return {"kind": "deprecate", "kb_id": kb_id, "needs_fill": [],
+                "label": f"deprecate {kb_id} — withheld from retrieval, "
+                         "never deleted"}
+    if kind == "new_card":
+        layer = (diff.get("layer") or {}).get("after", "fact_sheet")
+        needs = ["owner", "verified_date"] if layer == "fact_sheet" else []
+        return {"kind": "new_card", "needs_fill": needs,
+                "label": f"a new {str(layer).replace('_', ' ')} card"}
+    return {"kind": "none", "needs_fill": [],
+            "label": (f"no home for {kind!r} until the win/loss backlabel "
+                      "lands (P3-4)")}
+
+
+def _lesson_entry(proposal: dict, text, *, by: str, at: str) -> dict:
+    """The lessons[] record an accepted flywheel edit becomes (P26c):
+    the reviewer's prose, the events and pursuit it came from, the
+    steward who accepted it. `after` is the lesson; without it there is
+    nothing to carry."""
+    if not isinstance(text, dict) or not text.get("after"):
+        raise CurationRefused(
+            f"{proposal['proposal_id']}: a lesson needs diff.text.after — "
+            f"nothing to carry onto the card")
+    source = proposal.get("source") or {}
+    entry = {"at": at, "by": by, "proposal_id": proposal["proposal_id"],
+             "after": str(text["after"])}
+    if text.get("before") is not None:
+        entry["before"] = str(text["before"])
+    for key in ("pursuit_id", "event_ids", "external"):
+        if source.get(key) is not None:
+            entry[key] = source[key]
+    if proposal.get("note"):
+        entry["note"] = proposal["note"]
+    return entry
+
+
 def merge_batch(store, proposal_ids: list[str], *, operator: str,
                 at: str, fills: dict | None = None) -> dict:
     """A steward's merge: one batch, one curation-log line, one snapshot
@@ -348,57 +447,79 @@ def merge_batch(store, proposal_ids: list[str], *, operator: str,
 def _merge_batch_locked(store, proposal_ids: list[str], *, operator: str,
                         at: str, fills: dict | None = None) -> dict:
     """Two passes (P1-21). Pass 1 validates the WHOLE batch and writes
-    nothing: every proposal is `proposed`, every update targets a card
-    that exists and would still validate with the change applied (a
-    dry run of the write — a diff the front matter cannot take, such as
-    the flywheel's `text`, is refused here, never written), every new
-    card passes its checks with its fill. A refusal applies nothing,
-    decides nothing, logs nothing. Pass 2 applies; if it dies mid-way
-    the curation-log line is still written naming what applied and
-    why it stopped — the record of "what changed" is exactly what a
-    half-applied batch used to lose."""
+    nothing: every proposal is `proposed` and HAS A HOME (P26c, P1-43 —
+    `home_of`; a kind with no home refuses by name instead of deciding
+    and changing nothing), every card update targets a card that exists
+    and would still validate with the change applied (a dry run of the
+    write — a lesson is dry-run into lessons[] the same way; an unknown
+    diff key is refused here, never written), every deprecation names a
+    card that exists and is not held, every new card passes its checks
+    with its fill. A refusal applies nothing, decides nothing, logs
+    nothing. Pass 2 applies — front matter, the lesson, the deprecated
+    block, the new card; a note kind writes nothing because the accepted
+    record IS the note (engine/kb/notes.py reads it) — and if it dies
+    mid-way the curation-log line is still written naming what applied
+    and why it stopped."""
     import json
 
     from engine.contracts import validate
 
     proposals = ProposalStore(store.root)
     fills = fills or {}
-    staged: list[tuple[str, dict, dict]] = []
+    staged: list[tuple[str, dict, dict, dict, dict | None]] = []
     for pid in proposal_ids:
         proposal = proposals.read(pid)
         if proposal["status"] != "proposed":
             raise CurationRefused(
                 f"{pid} is already {proposal['status']} — a decision is "
                 f"made once")
+        home = home_of(store, proposal)
+        if home["kind"] == "none":
+            raise CurationRefused(
+                f"{pid}: {home['label']} — refused before anything applied")
         fields: dict = {}
-        if proposal["kind"] == "update_card" and proposal.get("kb_id"):
+        lesson: dict | None = None
+        if home["kind"] in ("card_field", "card_lesson"):
             kb_id = proposal["kb_id"]
-            if not store.card_exists(kb_id):
+            changes = dict(proposal.get("diff") or {})
+            text = changes.pop("text", None)
+            fields = {name: change["after"] for name, change in changes.items()}
+            card, _body = store.read_card(kb_id)
+            dry = {**card, **fields}
+            if text is not None:
+                lesson = _lesson_entry(proposal, text, by=operator, at=at)
+                dry["lessons"] = [*(card.get("lessons") or []), lesson]
+            try:
+                validate("kb_card", dry)
+            except ContractError as exc:
                 raise CurationRefused(
-                    f"{pid}: {kb_id} no longer exists — nothing to update")
-            fields = {name: change["after"]
-                      for name, change in (proposal.get("diff") or {}).items()}
-            if fields:
-                card, _body = store.read_card(kb_id)
-                try:
-                    validate("kb_card", {**card, **fields})
-                except ContractError as exc:
-                    raise CurationRefused(
-                        f"{pid}: the change does not fit {kb_id}'s front "
-                        f"matter ({exc}) — refused before anything applied"
-                    ) from exc
-        elif proposal["kind"] == "new_card":
+                    f"{pid}: the change does not fit {kb_id}'s front "
+                    f"matter ({exc}) — refused before anything applied"
+                ) from exc
+        elif home["kind"] == "deprecate":
+            card, _body = store.read_card(proposal["kb_id"])
+            if card.get("legal_hold"):
+                raise CurationRefused(
+                    f"{pid}: {proposal['kb_id']} is under legal hold and "
+                    f"cannot be deprecated")
+        elif home["kind"] == "new_card":
             _check_new_card(store, proposal, fills.get(pid) or {})
-        staged.append((pid, proposal, fields))
+        staged.append((pid, proposal, home, fields, lesson))
 
     snapshot_before = store.snapshot()
     accepted: list[str] = []
     aborted: str | None = None
     try:
-        for pid, proposal, fields in staged:
+        for pid, proposal, home, fields, lesson in staged:
             if fields:
                 store.update_card_front(proposal["kb_id"], **fields)
-            elif proposal["kind"] == "new_card":
+            if lesson is not None:
+                store.append_lesson(proposal["kb_id"], lesson)
+            if home["kind"] == "deprecate":
+                store.update_card_front(
+                    proposal["kb_id"],
+                    deprecated={"at": at, "by": operator, "proposal_id": pid})
+            elif home["kind"] == "new_card":
                 _apply_new_card(store, proposal, fills.get(pid) or {},
                                 operator)
             proposals.decide(pid, decision="accepted", by=operator, at=at)

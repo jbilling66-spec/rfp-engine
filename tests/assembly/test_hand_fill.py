@@ -9,6 +9,8 @@ import json
 import pytest
 
 from engine.assembly.hand_fill import (
+    case_block_slots,
+    case_block_text,
     HAND_FILL_NAME,
     catalogue,
     completeness,
@@ -124,3 +126,18 @@ def test_completeness_and_the_owed_catalogue(container):
     assert [f["key"] for f in rows["s-h11"]["fields"]] \
         == ["milestone", "fee", "duration_weeks"]
     assert rows["s-h11"]["fields"][1]["type"] == "currency"
+
+
+def test_case_block_slots_exclude_grids_and_records(container):
+    """P26c (P1-44): only the case block may teach the corpus — the
+    pricing grid (numeric fields, column locators), the metadata record
+    and the inline line stay with the pursuit."""
+    cases = case_block_slots(container)
+    assert [s["slot_id"] for s in cases] == ["s-h10"]
+    text = case_block_text(cases[0], [
+        {"client": "A synthetic utility", "scope": "Finance",
+         "outcome": "Live on schedule"},
+        {"client": "A synthetic county", "scope": "HR", "outcome": "Live"}])
+    labels = [f["label"] for f in cases[0]["response_fields"]]
+    assert text.startswith(f"{labels[0]}: A synthetic utility")
+    assert "\n\n" in text and "A synthetic county" in text

@@ -38,11 +38,29 @@ in the orphan queue for a steward to deprecate, edit, or leave.
 ## The proposal queue
 
 Every write path is a proposal: the curation screen, the workbook
-import, ingestion's claim promotions. Review them in the KB screen's
-steward inbox. Accepting a fact-sheet card **refuses** until you
-supply its owner and verified date — a fact nobody vouches for is not
-a fact. Deprecating a card that is still cited, or touching one under
-legal hold, refuses and names why.
+import, ingestion's claim promotions — and the flywheel: a reviewer's
+edits, comments (with the agent's reply), waivers and answered gaps
+reach the queue when a pursuit is accepted, a hand-filled case block
+when its write-back is confirmed, all in the reviewer's own words.
+Review them in the KB screen's steward inbox. Every row shows the diff,
+where it came from (the pursuit, the events, a guest chip when the
+signal came from outside the firm) and **where it lands** if you accept
+it. Accepting is never nothing:
+
+| proposal | lands in |
+|---|---|
+| a card's front matter | the card |
+| a reviewer's lesson about a card | the card's lessons list — visible in the row, never drafted from |
+| a voice, playbook or validation-tuning note | the steward notes the drafter reads (the accepted proposal is the note; the KB screen lists them) |
+| a deprecation | a `deprecated` block on the card — retrieval withholds it, nothing is deleted |
+| a new card | a new card |
+
+Accepting a fact-sheet card **refuses** until you supply its owner and
+verified date — the row asks for them — because a fact nobody vouches
+for is not a fact. Deprecating a card that is still cited, or touching
+one under legal hold, refuses and names why. Nothing in the queue is
+ever deleted: a rejected proposal is evidence. Purging a pursuit removes
+what that pursuit taught — its proposals and the lessons they landed.
 
 ## Bulk edits by workbook
 

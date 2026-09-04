@@ -154,9 +154,13 @@ def section_directive(section: dict, model_slots: list[dict], *,
 
 def build_draft_prompt(*, voice_text: str, frozen_brief: dict,
                        model_slots: list[dict], card_frames: list[str],
-                       steering: list[dict], directive: str) -> str:
-    parts = ["Task: draft.", wrap_voice_spec(voice_text),
-             wrap_brief_context(brief_digest(frozen_brief))]
+                       steering: list[dict], directive: str,
+                       notes_frame: str = "") -> str:
+    parts = ["Task: draft.", wrap_voice_spec(voice_text)]
+    if notes_frame:
+        # P26c: steward-accepted lessons ride right after the voice spec
+        parts.append(notes_frame)
+    parts.append(wrap_brief_context(brief_digest(frozen_brief)))
     parts.extend(question_frame(slot) for slot in model_slots)
     parts.extend(card_frames)
     if steering:

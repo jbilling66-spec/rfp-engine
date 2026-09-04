@@ -136,3 +136,52 @@ def test_unanchored_edit_refuses_the_round(tmp_path):
     assert report.status == "refused"  # nothing changed -> no bump
     assert any("not found verbatim" in w for w in report.warnings)
     assert pursuit.read_artifact("drafts/draft.json")["revision_n"] == 0
+
+
+def test_a_comments_reason_rides_its_finalized_event(tmp_path):
+    """P26c (P1-44): the reviewer's edit_reason on a COMMENT used to be
+    dropped at finalize (only edits carried it), so the learner could
+    never route a comment by what the reviewer said it was."""
+    pursuit = validated_pursuit(tmp_path)
+    sid = _drafted_section(pursuit)["section_id"]
+    EventsLane(pursuit).add_pending(
+        kind="comment", section_id=sid, actor="Pat",
+        actor_role="pursuit_lead", at=ROUND_AT,
+        text="Too formal — loosen the register.", edit_reason="tone")
+    report, _ = run_one_round(tmp_path, pursuit)
+    assert report.status == "complete", report.warnings
+    finalized = [e for e in _events(pursuit) if e["kind"] == "comment"]
+    assert finalized[-1]["edit_reason"] == "tone"
+    assert finalized[-1]["agent_reply"]
+
+
+def test_an_accepted_note_reaches_the_reviser(tmp_path):
+    """P26c: the revision agent reads the same accepted steward notes
+    the drafter does, after the voice spec."""
+    from engine.flywheel.proposals import ProposalStore
+    from engine.kb.curation import merge_batch
+    from engine.kb.store import KBStore
+    from tests.drafting.fixtures.drafts import SpyCaller
+    from tests.revision.fixtures.rounds import round_script
+
+    pursuit = validated_pursuit(tmp_path)
+    store = KBStore(tmp_path / "kb")  # open_round_run's own root
+    note = ProposalStore(store.root).open(
+        source={"door": "flywheel", "pursuit_id": "pur_prev",
+                "event_ids": ["evt_0001"]},
+        target="voice_spec", kind="voice_spec_change",
+        at="2026-08-01T00:00:00Z",
+        diff={"comment": {"after": "Never say leverage."}})
+    merge_batch(store, [note["proposal_id"]], operator="Sam",
+                at="2026-08-02T00:00:00Z")
+    add_comment(pursuit, _drafted_section(pursuit)["section_id"],
+                "Tighten the opening.")
+    fake = SpyCaller(round_script())
+    report, _ = run_one_round(tmp_path, pursuit, fake=fake)
+    assert report.status == "complete", report.warnings
+    prompts = [c["prompt"] for c in fake.calls
+               if c["prompt"].startswith("Task: revise.")]
+    assert prompts
+    assert all("- [voice spec] Never say leverage." in p for p in prompts)
+    assert all(p.index("</voice_spec>") < p.index("<steward_notes")
+               for p in prompts)

@@ -10,7 +10,7 @@ import pytest
 from engine.contracts import ContractError
 from engine.flywheel.proposals import ProposalStore, proposal_id
 from engine.flywheel.routing import (ROUTE, infer_edit_reason, is_processed,
-                                     route_edits, route_of)
+                                     route_edits, route_feedback, route_of)
 from engine.kb.store import KBStore
 
 AT = "2026-08-03T00:00:00Z"
@@ -252,3 +252,163 @@ def test_lag_measures_edit_to_routing(tmp_path):
     row = resolve("lesson_to_draft_lag_days", Corpus(workspace))
     assert row["value"] == 2.0    # 08-02T12:00 -> 08-04T12:00
     assert row["n"] == 1
+
+
+# ------------------------------------------- P26c (P1-44): the widened door
+
+def _card(store, kb_id):
+    store.write_card({"kb_id": kb_id, "layer": "corpus",
+                      "doc_kind": "section_exemplar", "title": kb_id,
+                      "summary": "S."}, "Body.", PROV, {})
+
+
+def test_an_edit_proposes_onto_every_cited_card(store):
+    """A factual lesson lands on the cards the section drew on: one
+    proposal per cited firm card, each carrying its kb_id — the home
+    merge_batch writes the lesson to. A card the store no longer holds
+    (a purged one, a lane card) is skipped, not invented."""
+    _card(store, "kb_cited00001")
+    _card(store, "kb_cited00002")
+    revised = route_feedback(
+        [_edit("We have 40 consultants.", "We have 14 consultants.")],
+        store, at=AT,
+        cited={"s1": ["kb_cited00002", "kb_cited00001", "kb_gone000001"]})
+    action = revised[0]["flywheel_routing"]["action_taken"]
+    ids = action.split(":", 1)[1].split(",")
+    assert len(ids) == 2
+    proposals = {p["proposal_id"]: p for p in ProposalStore(store.root).list()}
+    assert [proposals[i]["kb_id"] for i in ids] == ["kb_cited00001",
+                                                    "kb_cited00002"]
+    for pid in ids:
+        assert proposals[pid]["kind"] == "update_card"
+        assert proposals[pid]["diff"]["text"]["after"] == "We have 14 consultants."
+        assert "kb_cited0000" in proposals[pid]["note"]
+    # convergence holds across the widened door
+    assert route_feedback(revised, store, at=AT,
+                          cited={"s1": ["kb_cited00001"]}) == []
+
+
+def test_an_uncited_edit_proposes_a_note(store):
+    revised = route_feedback(
+        [_edit("We have 40 consultants.", "We have 14 consultants.")],
+        store, at=AT, cited={"s9": ["kb_other00001"]})
+    proposals = ProposalStore(store.root).list()
+    assert len(proposals) == 1
+    assert "kb_id" not in proposals[0], "no cite — a note under the target"
+    assert revised[0]["flywheel_routing"]["target"] == "fact_sheet"
+
+
+def _comment(text, reply=None, **over):
+    event = {"event_id": "ev_c1", "pursuit_id": "pur_a", "kind": "comment",
+             "at": "2026-08-02T12:00:00Z", "actor_role": "pursuit_lead",
+             "section_id": "s1", "comment_text": text}
+    if reply is not None:
+        event["agent_reply"] = reply
+    event.update(over)
+    return event
+
+
+def test_a_comment_with_its_reply_routes_to_the_playbook(store):
+    revised = route_feedback(
+        [_comment("Lead with the outcome, not the method.",
+                  "Reordered the opening to state the outcome first.")],
+        store, at=AT)
+    assert revised[0]["flywheel_routing"]["target"] == "playbook"
+    proposal = ProposalStore(store.root).list()[0]
+    assert proposal["kind"] == "playbook_note"
+    assert proposal["diff"] == {
+        "comment": {"after": "Lead with the outcome, not the method."},
+        "agent_reply": {"after": "Reordered the opening to state the "
+                                 "outcome first."}}
+    assert proposal["source"]["event_ids"] == ["ev_c1"]
+    assert proposal["source"]["section_id"] == "s1"
+    assert "operator" not in proposal["source"]
+    assert "s1" in proposal["note"]
+
+
+def test_a_comment_with_a_reason_routes_by_it(store):
+    revised = route_feedback(
+        [_comment("Drop the word leverage.", "Done.", edit_reason="tone"),
+         _comment("Fine as is.", "No change.", edit_reason="other",
+                  event_id="ev_c2")],
+        store, at=AT)
+    targets = [r["flywheel_routing"]["target"] for r in revised]
+    assert targets == ["voice_spec", "playbook"], \
+        "a given reason routes; 'other' still keeps the words as guidance"
+    kinds = sorted(p["kind"] for p in ProposalStore(store.root).list())
+    assert kinds == ["playbook_note", "voice_spec_change"]
+
+
+def test_a_dismissed_guest_comment_routes_nowhere(store):
+    """D16d: an external comment finalized WITHOUT a reply was dismissed
+    by an internal reviewer — on the record, not the firm's lesson. One
+    with a reply was included, and stays marked external."""
+    revised = route_feedback(
+        [_comment("Buy our product instead.", actor_role="external_reviewer"),
+         _comment("Could you name the platform version?", "Added it.",
+                  actor_role="external_reviewer", event_id="ev_c2")],
+        store, at=AT)
+    assert revised[0]["flywheel_routing"] == {
+        "target": "none", "action_taken": "dismissed external comment",
+        "processed_at": AT}
+    proposals = ProposalStore(store.root).list()
+    assert len(proposals) == 1
+    assert proposals[0]["source"]["external"] is True
+    assert proposals[0]["source"]["event_ids"] == ["ev_c2"]
+
+
+def _waive(**over):
+    event = {"event_id": "ev_w1", "pursuit_id": "pur_a", "kind": "waive_block",
+             "at": "2026-08-02T12:00:00Z", "actor": "Cam", "actor_role":
+             "contracts", "section_id": "s1", "claim_tier": 1}
+    event.update(over)
+    return event
+
+
+def test_two_waivers_in_one_second_route_to_two_notes(store):
+    """The event carries no claim; the join is (actor, at) + section
+    against the annotated draft's waived claims. Two claims waived in
+    the same request (one `at`) are two notes; an event with no match
+    is recorded as routed nowhere, never invented."""
+    waivers = {("Cam", "2026-08-02T12:00:00Z"): [
+        {"claim_id": "c1", "text": "SOC 2 Type II since 2021.",
+         "waiver_reason": "Verified against the signed letter.",
+         "tier": 1, "section_id": "s1"},
+        {"claim_id": "c2", "text": "Twelve go-lives in the sector.",
+         "waiver_reason": "Counted from the engagement register.",
+         "tier": 1, "section_id": "s1"},
+        {"claim_id": "c3", "text": "Elsewhere.", "waiver_reason": "x",
+         "tier": 1, "section_id": "s2"}]}
+    revised = route_feedback([_waive(), _waive(event_id="ev_w2",
+                                               at="2026-08-02T12:00:05Z")],
+                             store, at=AT, waivers=waivers)
+    assert revised[0]["flywheel_routing"]["target"] == "validation_tuning"
+    ids = revised[0]["flywheel_routing"]["action_taken"].split(":", 1)[1].split(",")
+    assert len(ids) == 2, "two claims, one event — two notes"
+    assert revised[1]["flywheel_routing"] == {
+        "target": "none", "action_taken": "no waived claim found",
+        "processed_at": AT}
+    proposals = ProposalStore(store.root).list()
+    assert {p["kind"] for p in proposals} == {"validation_tuning_note"}
+    assert sorted(p["diff"]["claim"]["after"] for p in proposals) == [
+        "SOC 2 Type II since 2021.", "Twelve go-lives in the sector."]
+    assert all(p["diff"]["waiver_reason"]["after"] for p in proposals)
+
+
+def test_carried_text_is_placeholdered_at_open(store):
+    """Pursuit prose names the buyer; a proposal that will land on a
+    firm card or in the drafter's prompt carries the placeholder, not
+    the name. The accept door passes the pursuit's identifiers; here a
+    stand-in shows every string goes through it."""
+    clean = lambda text: text.replace("Northwind", "[CLIENT]")  # noqa: E731
+    revised = route_feedback(
+        [_edit("Northwind runs 40 sites.", "Northwind runs 14 sites."),
+         _comment("Say Northwind, not the client.", "Used Northwind.",
+                  event_id="ev_c1")],
+        store, at=AT, anonymize=clean)
+    assert len(revised) == 2
+    for proposal in ProposalStore(store.root).list():
+        for change in proposal["diff"].values():
+            for value in change.values():
+                assert "Northwind" not in (value or "")
+                assert "[CLIENT]" in (value or "")

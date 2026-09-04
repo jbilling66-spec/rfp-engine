@@ -290,7 +290,12 @@ def _walk_to_gate1(ws, client, pursuit_id):
                        ("research-pack.md", DEMO_PACK)):
         client.put(f"/api/pursuits/{pursuit_id}/inbox/{name}",
                    content=path.read_bytes())
-    done = advance_past_gate0(client, pursuit_id)
+    # P26c rider (B115 §9c): the walk's two advance jobs run on real
+    # threads; under load they take longer than a fixed clock's would
+    # (P1-11 — 40s to 11 min for identical content, lessons.md). The
+    # wait is the suite-wide 180s, not advance_past_gate0's 120s
+    # default, so a slow walk is a slow walk, never a red convergence.
+    done = advance_past_gate0(client, pursuit_id, timeout=180.0)
     assert "awaiting_gate at gate_1" in done["message"], done
 
 

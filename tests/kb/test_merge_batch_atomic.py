@@ -70,24 +70,141 @@ def test_a_missing_target_mid_batch_refuses_the_whole_batch(tmp_path):
 
 
 def test_a_diff_the_front_matter_cannot_take_is_refused_unwritten(tmp_path):
-    """The flywheel's `update_card` carries diff.text (a section's
-    before/after prose) and no front-matter field — merge used to write
-    `text` into the card header. Refused at validation by name."""
+    """A diff key that is neither `text` (a lesson, P26c) nor a card
+    field — merge used to write whatever the diff carried into the card
+    header. Refused at validation by name, nothing applied."""
     store = _store(tmp_path / "kb")
     proposal = ProposalStore(store.root).open(
         source={"door": "flywheel", "pursuit_id": "pur_x",
                 "event_ids": ["evt_0001"]},
         target="corpus", kind="update_card", at=AT, kb_id=IDS[0],
-        diff={"text": {"before": "old prose", "after": "new prose"}})
+        diff={"bogus": {"before": None, "after": "new prose"}})
     good = propose_edit(store, IDS[1], {"summary": "Fine."},
                         operator="Sam", at=AT)["proposal_id"]
     with pytest.raises(CurationRefused, match="does not fit"):
         merge_batch(store, [good, proposal["proposal_id"]],
                     operator="Sam", at=AT)
     card, _ = store.read_card(IDS[0])
-    assert "text" not in card
+    assert "bogus" not in card
     assert store.read_card(IDS[1])[0]["summary"] == "Summary B."
     assert _log_lines(store) == []
+
+
+def test_a_flywheel_text_diff_lands_as_a_lesson(tmp_path):
+    """P26c (P1-43): the flywheel's `update_card` carries diff.text and
+    a kb_id — accepting it used to be refused (P26b-2) or, before that,
+    decided and changed nothing. Now the reviewer's prose lands as a
+    lessons[] entry ON the cited card: steward-visible, the body and the
+    rest of the front matter untouched, the events and pursuit carried,
+    the accepting steward named. A lesson with no `after` refuses the
+    batch unwritten."""
+    store = _store(tmp_path / "kb")
+    proposal = ProposalStore(store.root).open(
+        source={"door": "flywheel", "pursuit_id": "pur_x",
+                "event_ids": ["evt_0007"], "section_id": "sec-02"},
+        target="corpus", kind="update_card", at=AT, kb_id=IDS[0],
+        diff={"text": {"before": "seven mock conversions",
+                       "after": "nine mock conversions"}},
+        note="A reviewer edit classified 'factual'.")
+    good = propose_edit(store, IDS[1], {"summary": "Fine."},
+                        operator="Sam", at=AT)["proposal_id"]
+    before_body = store.read_card(IDS[0])[1]
+    line = merge_batch(store, [good, proposal["proposal_id"]],
+                       operator="Sam", at=AT)
+    card, body = store.read_card(IDS[0])
+    assert body == before_body
+    assert "text" not in card
+    assert card["summary"] == "Summary A."
+    assert card["lessons"] == [{
+        "at": AT, "by": "Sam", "proposal_id": proposal["proposal_id"],
+        "pursuit_id": "pur_x", "event_ids": ["evt_0007"],
+        "before": "seven mock conversions", "after": "nine mock conversions",
+        "note": "A reviewer edit classified 'factual'."}]
+    assert store.read_card(IDS[1])[0]["summary"] == "Fine."
+    assert line["proposal_ids"] == [good, proposal["proposal_id"]]
+    assert _log_lines(store) == [line]
+    assert ProposalStore(store.root).read(
+        proposal["proposal_id"])["status"] == "accepted"
+
+    empty = ProposalStore(store.root).open(
+        source={"door": "flywheel", "pursuit_id": "pur_x",
+                "event_ids": ["evt_0008"]},
+        target="corpus", kind="update_card", at=AT, kb_id=IDS[2],
+        diff={"text": {"before": "gone", "after": None}})
+    with pytest.raises(CurationRefused, match="needs diff.text.after"):
+        merge_batch(store, [empty["proposal_id"]], operator="Sam", at=AT)
+    assert "lessons" not in store.read_card(IDS[2])[0]
+    assert len(_log_lines(store)) == 1
+
+
+def test_a_deprecation_stamps_the_card(tmp_path):
+    """P26c (P1-43): accepting a deprecate_card proposal used to decide
+    and change nothing (diff.status is not a card field). Now the card
+    gains a deprecated block naming the steward and the proposal — and
+    stays: nothing outside a purge deletes a card."""
+    from engine.kb.curation import home_of, propose_deprecation
+    store = _store(tmp_path / "kb")
+    proposal = propose_deprecation(store, IDS[2], operator="Sam", at=AT)
+    assert home_of(store, proposal)["kind"] == "deprecate"
+    merge_batch(store, [proposal["proposal_id"]], operator="Kim", at=AT)
+    card, body = store.read_card(IDS[2])
+    assert card["deprecated"] == {"at": AT, "by": "Kim",
+                                  "proposal_id": proposal["proposal_id"]}
+    assert body == "Body C."
+    assert store.card_exists(IDS[2])
+
+
+def test_a_deprecation_of_a_missing_card_refuses_the_batch(tmp_path):
+    """Pass 1 never checked that a deprecation's card still exists —
+    a purge between proposing and merging would have 'succeeded'."""
+    from engine.kb.curation import propose_deprecation
+    store = _store(tmp_path / "kb")
+    proposal = propose_deprecation(store, IDS[2], operator="Sam", at=AT)
+    good = propose_edit(store, IDS[1], {"summary": "Fine."},
+                        operator="Sam", at=AT)["proposal_id"]
+    store.delete_card(IDS[2])
+    with pytest.raises(CurationRefused, match="no longer exists"):
+        merge_batch(store, [good, proposal["proposal_id"]],
+                    operator="Sam", at=AT)
+    assert store.read_card(IDS[1])[0]["summary"] == "Summary B."
+    assert _log_lines(store) == []
+
+
+def test_a_backlabel_has_no_home_yet(tmp_path):
+    """outcome_backlabel has no producer and no home (P3-4): accepting
+    one refuses TYPED, naming the phase, instead of deciding and
+    changing nothing — refusal reads as unfinished, never as shipped."""
+    store = _store(tmp_path / "kb")
+    proposal = ProposalStore(store.root).open(
+        source={"door": "backlabel", "pursuit_id": "pur_x"},
+        target="corpus", kind="outcome_backlabel", at=AT, kb_id=IDS[0],
+        diff={"outcome": {"before": "unknown", "after": "won"}})
+    with pytest.raises(CurationRefused, match="P3-4"):
+        merge_batch(store, [proposal["proposal_id"]], operator="Sam", at=AT)
+    assert ProposalStore(store.root).read(
+        proposal["proposal_id"])["status"] == "proposed"
+    assert store.read_card(IDS[0])[0].get("outcome") is None
+    assert _log_lines(store) == []
+
+
+def test_a_corpus_new_card_keeps_its_doc_kind(tmp_path):
+    """P26c: a hand-filled case block proposes a corpus card of kind
+    case_study; _check_new_card used to hard-code `fact`."""
+    store = _store(tmp_path / "kb")
+    proposal = ProposalStore(store.root).open(
+        source={"door": "flywheel", "pursuit_id": "pur_x"},
+        target="corpus", kind="new_card", at=AT,
+        diff={"title": {"after": "A finance cutover"},
+              "body": {"after": "client: [CLIENT]\nscope: Finance"},
+              "layer": {"after": "corpus"},
+              "doc_kind": {"after": "case_study"},
+              "grain": {"after": "chunk"}})
+    merge_batch(store, [proposal["proposal_id"]], operator="Sam", at=AT)
+    minted = [c for c in store.list_cards() if c["kb_id"] not in IDS]
+    assert len(minted) == 1
+    assert minted[0]["doc_kind"] == "case_study"
+    assert minted[0]["layer"] == "corpus"
+    assert "owner" not in minted[0], "a corpus card needs no vouching fill"
 
 
 def test_a_failure_inside_the_apply_pass_logs_what_applied(tmp_path,

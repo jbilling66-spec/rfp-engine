@@ -46,7 +46,11 @@ READ_ONLY = frozenset({
 # Structured sub-objects a flat sheet cannot carry honestly; doc_path is
 # navigation-only (WP13 KB10) and never a steward-editable fact.
 SKIP = frozenset({"anonymization", "provenance", "content_path",
-                  "identity", "chunk_span", "doc_path"})
+                  "identity", "chunk_span", "doc_path",
+                  # P26c (P1-43): a lessons list and a deprecated block
+                  # are structured records, not cells — the KB screen
+                  # shows them; the sheet neither exports nor edits them.
+                  "lessons", "deprecated"})
 
 
 def _schema() -> dict:

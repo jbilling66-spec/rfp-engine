@@ -605,11 +605,16 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.get("/api/kb/proposals")
     def kb_proposals(status: str | None = None):
         from engine.flywheel.proposals import ProposalStore
+        from engine.kb.curation import home_of
         try:
-            return {"proposals": ProposalStore(kb_root).list(status=status)}
+            rows = ProposalStore(kb_root).list(status=status)
         except ContractError as exc:
             # M-30: one bad file names itself instead of 500ing the inbox.
             raise HTTPException(status_code=409, detail=str(exc))
+        store = _kb_store()
+        # P26c (P1-43): every row names where it lands BEFORE the
+        # decision — computed here, never stored on the record.
+        return {"proposals": [{**p, "home": home_of(store, p)} for p in rows]}
 
     def _kb_id_shape(value) -> str:
         """P2-23 (P26b-1, B112): the store refuses a malformed id before it
@@ -660,9 +665,14 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                                 detail="decision must be accepted or rejected")
         if decision == "accepted":
             # Accepting is a merge: it goes through the batch door so the
-            # curation log records it exactly like any other merge.
+            # curation log records it exactly like any other merge. P26c:
+            # `fills` (owner, verified_date for a fact card) ride along —
+            # the UI door used to have no way to supply them, so a fact
+            # card could only ever 409 from the inbox.
             return kb_merge({"proposal_ids": [proposal_id],
-                             "at": payload.get("at")}, who)
+                             "at": payload.get("at"),
+                             "fills": field(payload, "fills", "dict",
+                                            default={})}, who)
         try:
             return ProposalStore(kb_root).decide(
                 proposal_id, decision="rejected", by=who, at=_at(payload),
@@ -680,9 +690,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             raise HTTPException(status_code=400,
                                 detail="no proposal_ids given")
         ids = [_proposal_id_shape(pid) for pid in ids]  # P2-23: each element
+        fills = field(payload, "fills", "dict", default={})
         try:
             return merge_batch(_kb_store(), ids, operator=who,
-                               at=_at(payload))
+                               at=_at(payload), fills=fills)
         except CurationRefused as refusal:
             raise HTTPException(status_code=409, detail=str(refusal))
         except ContractError as exc:  # M-30: a bad proposal file, by name
@@ -998,7 +1009,21 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
-        return {"files": files, "bundle": bundle}
+            flywheel = None
+            if any(b["lane"] == "template_fill" for b in bindings):
+                # P26c (P1-44): the hand-typed case block is final here
+                # — proposed to the steward inbox, reported, never a
+                # refusal of the confirm (the bundle above is durable).
+                from engine.web.learn import learn_from_writeback
+                try:
+                    flywheel = learn_from_writeback(workspace, kb_root,
+                                                    pursuit_id, at=at)
+                except Exception as exc:  # noqa: BLE001 — surfaced
+                    flywheel = {"error": f"{type(exc).__name__}: {exc}"}
+        out = {"files": files, "bundle": bundle}
+        if flywheel is not None:
+            out["flywheel"] = flywheel
+        return out
 
     # -- the hand-completion door (P26a item 1, P1-27; the owner's call) ---
 
@@ -1786,7 +1811,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             if result.status == "waived":
                 EventsLane(pursuit).append(
                     "waive_block", at=at, actor=who, actor_role=role,
-                    claim_tier=payload.get("claim_tier"))
+                    claim_tier=payload.get("claim_tier"),
+                    # P26c (P1-44): the section rides the event, so the
+                    # learner joins the waiver to its claim by section
+                    # + actor + the one `at` both writes share
+                    section_id=result.section_id)
         if result.status == "refused":
             raise HTTPException(409, "; ".join(result.warnings))
         return {"status": result.status, "warnings": result.warnings}
@@ -1948,7 +1977,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             from engine.web.learn import learn_from_accept
             try:
                 flywheel = learn_from_accept(workspace, kb_root, pursuit_id,
-                                             at=at)
+                                             at=at, by=who)
             except Exception as exc:  # noqa: BLE001 — surfaced in the body
                 flywheel = {"error": f"{type(exc).__name__}: {exc}"}
         return {**event, "flywheel": flywheel}

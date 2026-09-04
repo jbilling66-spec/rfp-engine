@@ -87,12 +87,17 @@ def test_accept_routes_edits_and_writes_card_signals(accepting):
     assert len(flywheel["proposals"]) == 1
 
     # 1. A proposal the steward decides — machine-drafted, never merged.
-    proposals = ProposalStore(store.root).list(status="proposed")
+    # (The fixture pursuit also carries an answered plan gap, which the
+    # accept now proposes as a fact card — P26c — under its own door.)
+    proposals = [p for p in ProposalStore(store.root).list(status="proposed")
+                 if p["source"]["door"] == "flywheel"]
     assert [p["proposal_id"] for p in proposals] == flywheel["proposals"]
+    assert len(flywheel["gap_proposals"]) == 1
     proposal = proposals[0]
     assert proposal["source"]["door"] == "flywheel"
     assert proposal["source"]["event_ids"] == [edit["event_id"]]
     assert proposal["kind"] == "update_card"
+    assert proposal["kb_id"] == CARD, "P26c: the lesson names its card"
     assert proposal["diff"]["text"] == {"before": BEFORE, "after": AFTER}
     assert "operator" not in proposal["source"], "a machine proposal"
 
@@ -129,7 +134,9 @@ def test_a_second_accept_learns_nothing_new(accepting):
     assert second["routed"] == [] and second["proposals"] == []
     assert second["signals_written"] == [CARD], "recomputed, converged"
     assert (store.root / "cards" / f"{CARD}.md").read_bytes() == card_after_first
-    assert len(ProposalStore(store.root).list()) == len(first["proposals"])
+    assert len(ProposalStore(store.root).list()) == (
+        len(first["proposals"]) + len(first["gap_proposals"]))
+    assert second["gap_proposals"] == []
     raw = [json.loads(l) for l in (pursuit.root / "events" / "events.jsonl")
            .read_text(encoding="utf-8").splitlines()]
     assert sum(1 for e in raw if e["event_id"] == edit["event_id"]) == 2
@@ -143,7 +150,7 @@ def test_a_flywheel_failure_does_not_un_accept(accepting, monkeypatch):
     def boom(*_a, **_k):
         raise RuntimeError("routing table on fire")
 
-    monkeypatch.setattr(routing_mod, "route_edits", boom)
+    monkeypatch.setattr(routing_mod, "route_feedback", boom)
     r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept", json={})
     assert r.status_code == 200
     assert r.json()["flywheel"] == {
@@ -168,3 +175,144 @@ def test_a_kb_outside_the_workspace_learns_nothing(tmp_path):
     result = learn_from_accept(workspace, elsewhere, "pur_any", at=FIXED_AT)
     assert "outside the workspace" in result["skipped"]
     assert not elsewhere.exists(), "nothing was created there either"
+
+
+# --------------------------------------------- P26c: carried forward
+
+def test_accepting_the_lesson_lands_it_on_the_card(accepting):
+    """P1-43: the steward accepts the routed proposal through the web
+    door and the lesson is ON the card — event id, pursuit, the
+    reviewer's prose, the steward's name — visible from the KB row;
+    the rest of the front matter and the body untouched."""
+    client, pursuit, store, edit = accepting
+    flywheel = client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept",
+                           json={}).json()["flywheel"]
+    pid = flywheel["proposals"][0]
+    before, body_before = store.read_card(CARD)
+    r = client.post(f"/api/kb/proposals/{pid}/decide",
+                    json={"decision": "accepted"})
+    assert r.status_code == 200, r.text
+    card, body = store.read_card(CARD)
+    assert body == body_before
+    assert card["lessons"] == [{
+        "at": FIXED_AT, "by": "Jordan Reviewer", "proposal_id": pid,
+        "pursuit_id": pursuit.pursuit_id, "event_ids": [edit["event_id"]],
+        "before": BEFORE, "after": AFTER,
+        "note": ProposalStore(store.root).read(pid)["note"]}]
+    assert {k: v for k, v in card.items() if k != "lessons"} == before
+    row = [c for c in client.get("/api/kb/cards").json()["cards"]
+           if c["kb_id"] == CARD][0]
+    assert len(row["lessons"]) == 1
+    assert ProposalStore(store.root).read(pid)["status"] == "accepted"
+
+
+def test_a_comment_and_a_waiver_reach_the_inbox_with_their_events(accepting):
+    """P1-44: a finalized comment (with the agent's reply) and a waiver
+    (its reason and claim on the annotated draft) become proposals at
+    accept, each naming its source event; the second accept adds none."""
+    client, pursuit, store, edit = accepting
+    plan = json.loads((pursuit.root / "plan.json").read_text(encoding="utf-8"))
+    section_id = plan["sections"][0]["section_id"]
+    lane = EventsLane(pursuit)
+    comment = lane.append(
+        "comment", at="2026-08-07T09:05:00Z", actor="Pat",
+        actor_role="pursuit_lead", section_id=section_id,
+        comment_text="Lead with the outcome, not the method.",
+        agent_reply="Reordered the opening to state the outcome first.")
+    annotated = pursuit.read_artifact("drafts/annotated-draft.json")
+    section = next(s for s in annotated["sections"] if s.get("claims"))
+    claim = section["claims"][0]
+    waived_at = "2026-08-07T09:06:00Z"
+    claim.update({"status": "waived", "disposition": "waived",
+                  "waived_by": "Cam", "waiver_reason":
+                  "Verified offline against the signed engagement letter.",
+                  "reasons": [f"waived over unsupported by Cam at {waived_at}"]})
+    pursuit.write_artifact("annotated_draft", annotated,
+                           name="drafts/annotated-draft.json")
+    waive = lane.append("waive_block", at=waived_at, actor="Cam",
+                        actor_role="contracts", claim_tier=claim["tier"],
+                        section_id=section["section_id"])
+    flywheel = client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept",
+                           json={}).json()["flywheel"]
+    assert sorted(flywheel["routed"]) == sorted(
+        [edit["event_id"], comment["event_id"], waive["event_id"]])
+    proposals = {p["source"]["event_ids"][0]: p
+                 for p in ProposalStore(store.root).list(status="proposed")
+                 if p["source"].get("event_ids")}
+    note = proposals[comment["event_id"]]
+    assert note["kind"] == "playbook_note" and note["target"] == "playbook"
+    assert note["diff"]["agent_reply"]["after"].startswith("Reordered")
+    tuning = proposals[waive["event_id"]]
+    assert tuning["kind"] == "validation_tuning_note"
+    assert tuning["diff"]["claim"]["after"] == claim["text"]
+    assert tuning["diff"]["waiver_reason"]["after"].startswith("Verified offline")
+    assert tuning["source"]["section_id"] == section["section_id"]
+    again = client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept",
+                        json={}).json()["flywheel"]
+    assert again["routed"] == [] and again["proposals"] == []
+
+
+def test_an_answered_gap_reaches_the_inbox_once(accepting):
+    """B116 §5 (the owner's call): every answered gap with no proposal
+    yet becomes a fact-card proposal at accept; one the answerer already
+    proposed through the opt-in door is not proposed twice; a second
+    accept adds none. Nothing enters the corpus — the store is unchanged
+    until a steward accepts with owner and verified date."""
+    from engine.kb.curation import propose_gap_answer_card
+
+    client, pursuit, store, _ = accepting
+    plan_path = pursuit.root / "plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    pid = pursuit.pursuit_id
+    plan["sections"][0]["gaps"] = [
+        {"gap_id": f"gap_{pid}_plan_01", "kind": "needs_sme",
+         "question_to_human": "How many validated waves does the cutover use?",
+         "status": "answered", "answer": "Four validated waves."},
+        {"gap_id": f"gap_{pid}_plan_02", "kind": "needs_sme",
+         "question_to_human": "Which platform version is certified?",
+         "status": "answered", "answer": "Release 24.2."},
+        {"gap_id": f"gap_{pid}_plan_03", "kind": "needs_sme",
+         "question_to_human": "Unanswered.", "status": "open"}]
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    opted = propose_gap_answer_card(
+        store.root, gap=plan["sections"][0]["gaps"][0], pursuit_id=pid,
+        operator="Astrid", at="2026-08-07T09:00:00Z")
+    cards_before = [c["kb_id"] for c in store.list_cards()]
+    flywheel = client.post(f"/api/pursuits/{pid}/accept",
+                           json={}).json()["flywheel"]
+    assert len(flywheel["gap_proposals"]) == 1
+    new = ProposalStore(store.root).read(flywheel["gap_proposals"][0])
+    assert new["source"] == {"door": "gap_answer", "pursuit_id": pid,
+                             "gap_id": f"gap_{pid}_plan_02",
+                             "operator": "Jordan Reviewer"}
+    assert new["kind"] == "new_card" and new["target"] == "fact_sheet"
+    assert "Release 24.2." in new["diff"]["body"]["after"]
+    gap_ids = sorted(p["source"]["gap_id"] for p in ProposalStore(store.root).list()
+                     if p["source"].get("gap_id"))
+    assert gap_ids == [f"gap_{pid}_plan_01", f"gap_{pid}_plan_02"]
+    assert ProposalStore(store.root).read(opted)["source"]["operator"] == "Astrid"
+    assert [c["kb_id"] for c in store.list_cards()] == cards_before, \
+        "the inbox, never the corpus"
+    again = client.post(f"/api/pursuits/{pid}/accept", json={}).json()["flywheel"]
+    assert again["gap_proposals"] == []
+
+
+def test_the_buyer_name_is_placeholdered_in_the_proposal(accepting):
+    """Pursuit prose names the buyer; what reaches the inbox — and from
+    there a firm card or the drafter's prompt — carries [CLIENT]."""
+    client, pursuit, store, _ = accepting
+    buyer = pursuit.read_frozen("bid_brief")["buyer"]["name"]
+    assert buyer, "the fixture brief names its buyer"
+    plan = json.loads((pursuit.root / "plan.json").read_text(encoding="utf-8"))
+    section_id = plan["sections"][0]["section_id"]
+    EventsLane(pursuit).append(
+        "edit", at="2026-08-07T09:07:00Z", actor="Pat",
+        actor_role="pursuit_lead", section_id=section_id,
+        before=f"{buyer} runs 40 sites.", after=f"{buyer} runs 14 sites.",
+        edit_reason="factual")
+    client.post(f"/api/pursuits/{pursuit.pursuit_id}/accept", json={})
+    texts = [v for p in ProposalStore(store.root).list()
+             for change in p["diff"].values()
+             for v in change.values() if isinstance(v, str)]
+    assert any("[CLIENT] runs 14 sites." == v for v in texts)
+    assert not any(buyer in v for v in texts)

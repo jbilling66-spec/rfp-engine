@@ -94,6 +94,8 @@ def post_purge_sweep(store: KBStore, purged_identifiers: list[str],
     keeps the pre-P17 firm-only behavior byte-stable. The CLEAN verdict
     is only as wide as this scan, so a lane left out silently narrows
     the claim — pass them all."""
+    from engine.flywheel.proposals import ProposalStore
+
     findings = []
     for lane_store in [store, *(extra_stores or [])]:
         texts = {}
@@ -102,7 +104,21 @@ def post_purge_sweep(store: KBStore, purged_identifiers: list[str],
             texts[card["kb_id"]] = " ".join([
                 card.get("title", ""), card.get("summary", ""), body,
                 " ".join(card.get("question_forms", [])),
+                # P26c: a lesson is retrievable text on the card too
+                " ".join(f"{l.get('before', '')} {l.get('after', '')} "
+                         f"{l.get('note', '')}"
+                         for l in card.get("lessons") or []),
             ])
+        # P26c: proposals are steward-visible and the drafter reads the
+        # accepted notes — a purged identifier surviving there is a
+        # finding, the same as on a card
+        for proposal in ProposalStore(lane_store.root).list():
+            strings = [proposal.get("note", "")]
+            for change in (proposal.get("diff") or {}).values():
+                if isinstance(change, dict):
+                    strings.extend(str(v) for v in change.values()
+                                   if v is not None)
+            texts[f"proposal:{proposal['proposal_id']}"] = " ".join(strings)
         findings += list(scan(texts, purged_identifiers))
         findings += [
             f"{kb_id}: purged card still exists"
@@ -262,6 +278,47 @@ def _purge_client_locked(store: KBStore, client: str, *, actor: str,
     return report
 
 
+def strip_carried_forward(store: KBStore, pursuit_id: str) -> tuple[list, list]:
+    """P26c — D1 at the carry-forward layer: what a pursuit taught the
+    firm KB goes with the pursuit. Its proposals (routed at accept,
+    opted in at a gap answer, or hand-filled at writeback — the human's
+    own words about that pursuit) are removed, and every lesson those
+    proposals landed on a card is stripped from lessons[]. Under the
+    firm root's lock; returns (proposal_ids, [{kb_id, proposal_id}]) for
+    the accounting, and the caller re-reads the filesystem (P1-13)."""
+    from engine.contracts import path_lock
+    from engine.flywheel.proposals import ProposalStore
+
+    proposals = ProposalStore(store.root)
+    removed: list[str] = []
+    lessons: list[dict] = []
+    with path_lock(store.root):
+        for proposal in proposals.list():
+            if (proposal.get("source") or {}).get("pursuit_id") == pursuit_id:
+                proposals.remove(proposal["proposal_id"])
+                removed.append(proposal["proposal_id"])
+        for card in store.list_cards():
+            mine = [l for l in card.get("lessons") or []
+                    if l.get("pursuit_id") == pursuit_id]
+            if not mine:
+                continue
+            kept = [l for l in card["lessons"] if l not in mine]
+            store.update_card_front(card["kb_id"], lessons=kept)
+            lessons.extend({"kb_id": card["kb_id"],
+                            "proposal_id": l["proposal_id"]} for l in mine)
+    return sorted(removed), lessons
+
+
+def _carried_forward_survivors(store: KBStore, pursuit_id: str) -> list[str]:
+    from engine.flywheel.proposals import ProposalStore
+    left = [p["proposal_id"] for p in ProposalStore(store.root).list()
+            if (p.get("source") or {}).get("pursuit_id") == pursuit_id]
+    left += [f"{c['kb_id']}:lesson" for c in store.list_cards()
+             if any(l.get("pursuit_id") == pursuit_id
+                    for l in c.get("lessons") or [])]
+    return left
+
+
 def _write_lane_accounting(dir_path: Path, name_prefix: str,
                            accounting: dict) -> Path:
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -300,15 +357,24 @@ def purge_pursuit_memory(pursuit_root: Path, *, actor: str,
         "pursuit": pursuit_root.name,
         "pursuit_memory_cards": report.purged,
         "drafts": [],
+        "proposals": [],
+        "lessons": [],
         "sweep_clean": False,
     }
     stub = PurgeAccounting(client=f"pursuit:{pursuit_root.name}")
     _sweep_drafts(pursuit_root.parent, set(report.purged), stub)
     accounting["drafts"] = stub.drafts
+    if firm_store is not None:
+        # P26c: the pursuit's proposals and the lessons they landed on
+        # firm cards go with it (D1 at the carry-forward layer)
+        accounting["proposals"], accounting["lessons"] = strip_carried_forward(
+            firm_store, pursuit_root.name)
 
     # The accounting measures the FILESYSTEM after the delete (P1-13:
     # comparing the report to the list it was built from proved nothing).
     survivors = [kb_id for kb_id in all_ids if store.card_exists(kb_id)]
+    if firm_store is not None:
+        survivors += _carried_forward_survivors(firm_store, pursuit_root.name)
     if survivors:
         raise RuntimeError(
             f"pursuit-memory purge of {pursuit_root.name!r} left card(s) "

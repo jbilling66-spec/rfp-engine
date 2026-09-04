@@ -112,3 +112,32 @@ def test_delete_card(tmp_path):
     store.write_card(_card(), BODY, PROV, IDENTIFIERS)
     store.delete_card("kb_ab12cd34ef")
     assert not store.card_exists("kb_ab12cd34ef")
+
+
+def test_a_card_takes_lessons_and_deprecated(tmp_path):
+    """P26c (P1-43): the two homes an accepted proposal can land in ON a
+    card — a lessons entry (the reviewer's prose about the card) and a
+    deprecated block — round-trip through the narrow signal door, the
+    body untouched; a card without either still validates, so the seed
+    store's bytes never move; a lesson missing its `after` is refused."""
+    store = KBStore(tmp_path / "kb")
+    card = _card()
+    store.write_card(card, "Body text.", {"source_pursuit": "pur_x"}, {})
+    lesson = {"at": "2026-08-09T09:00:00Z", "by": "steward",
+              "proposal_id": "prop_abc123def456", "pursuit_id": "pur_x",
+              "event_ids": ["evt_0003"], "before": "seven", "after": "nine",
+              "note": "A reviewer edit classified factual."}
+    store.update_card_front(card["kb_id"], lessons=[lesson])
+    store.update_card_front(card["kb_id"], deprecated={
+        "at": "2026-08-10T09:00:00Z", "by": "steward",
+        "proposal_id": "prop_abc123def457"})
+    front, body = store.read_card(card["kb_id"])
+    assert front["lessons"] == [lesson]
+    assert front["deprecated"]["proposal_id"] == "prop_abc123def457"
+    assert body == "Body text."
+    with pytest.raises(ContractError):
+        store.update_card_front(card["kb_id"], lessons=[
+            {"at": "2026-08-09T09:00:00Z", "by": "s",
+             "proposal_id": "prop_abc123def458"}])
+    with pytest.raises(ContractError):
+        store.update_card_front(card["kb_id"], deprecated={"at": "x"})

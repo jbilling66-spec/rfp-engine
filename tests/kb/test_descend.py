@@ -175,3 +175,36 @@ def test_unknown_relation_refused(seeded):
         descend(store, ids["Method"], "cousins",
                 log=_log(store, "run_0010"), stage="drafting",
                 agent="section_drafter")
+
+
+def test_deprecated_anchor_and_neighbor_are_withheld(seeded):
+    """P26c (P1-43): a deprecated card is neither a navigation handle nor
+    a neighbour — the M-28 shape with reason `deprecated`. The flag is
+    lifted again at the end so the module's shared store is unchanged."""
+    from engine.runlog import read_run
+
+    store, ids = seeded
+    stamp = {"at": "2026-09-04T10:00:00Z", "by": "steward",
+             "proposal_id": "prop_0123456789ab"}
+    store.update_card_front(ids["Tools"], deprecated=stamp)
+    try:
+        result = descend(store, ids["Tools"], "siblings",
+                         log=_log(store, "run_0031"), stage="drafting",
+                         agent="section_drafter")
+        assert result.results == []
+        assert result.excluded == [{"kb_id": ids["Tools"],
+                                    "reason": "deprecated"}]
+        line = [r for r in read_run(store.root / "runs" / "run_0031"
+                                    / "run.jsonl")
+                if r["record_type"] == "kb_retrieval"][-1]
+        assert line["kb"]["empty_result"] is True
+        assert line["kb"]["excluded"] == [ids["Tools"]]
+        result = descend(store, ids["Approach"], "children",
+                         log=_log(store, "run_0032"), stage="drafting",
+                         agent="section_drafter")
+        assert {"kb_id": ids["Tools"], "reason": "deprecated"} in result.excluded
+        assert ids["Tools"] not in [r.kb_id for r in result.results]
+    finally:
+        card, body = store.read_card(ids["Tools"])
+        card.pop("deprecated")
+        store.rewrite_card(card, body)

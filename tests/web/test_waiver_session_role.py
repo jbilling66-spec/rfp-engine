@@ -43,3 +43,9 @@ def test_waiver_records_the_session_role(tmp_path):
                      for c in s.get("claims", [])
                      if c["claim_id"] == marks[0]["claim_id"])
         assert claim["waived_by"] == "Cam Contracts"
+        # P26c (P1-44): the event names the claim's section, so the
+        # learner joins the waiver to its claim by section + actor + at
+        section_of = next(s["section_id"] for s in after["sections"]
+                          if any(c["claim_id"] == marks[0]["claim_id"]
+                                 for c in s.get("claims", [])))
+        assert waive[0]["section_id"] == section_of

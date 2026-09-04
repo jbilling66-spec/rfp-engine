@@ -73,3 +73,29 @@ def test_the_id_door_agrees_with_the_schema():
                 "../escape"):
         with pytest.raises(IdShapeError):
             require_proposal_id(bad)
+
+
+def test_source_carries_gap_slot_artifact(tmp_path):
+    """P26c (P1-44): three optional provenance keys on `source` — the gap
+    a routed answer came from (the dedupe key between the opt-in door and
+    the accept-time route), the hand-fill slot a case block came from,
+    and the artifact it was read from. Each validates; an unknown source
+    key is still refused (the record stays closed)."""
+    from engine.contracts import ContractError, validate
+    store = ProposalStore(tmp_path / "kb")
+    at = "2026-08-09T09:00:00Z"
+    gap = store.open(source={"door": "gap_answer", "pursuit_id": "pur_x",
+                             "gap_id": "gap_pur_x_01", "operator": "sme"},
+                     target="fact_sheet", kind="new_card", at=at,
+                     diff={"body": {"after": "Q: a\nA: b"}})
+    assert gap["source"]["gap_id"] == "gap_pur_x_01"
+    case = store.open(source={"door": "flywheel", "pursuit_id": "pur_x",
+                              "slot_id": "s-h10",
+                              "artifact": "exports/hand-fill.json"},
+                      target="corpus", kind="new_card", at=at,
+                      diff={"body": {"after": "client: [CLIENT]"}})
+    assert case["source"]["slot_id"] == "s-h10"
+    assert case["source"]["artifact"] == "exports/hand-fill.json"
+    with pytest.raises(ContractError):
+        validate("kb_proposal", {**case, "source": {**case["source"],
+                                                    "bogus": "x"}})

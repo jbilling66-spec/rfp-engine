@@ -140,3 +140,33 @@ def test_release_mode_runs_the_deletion_guard(cut, monkeypatch, tmp_path):
     mod.main()
     assert verified and not (verified[-1] / "stale.txt").exists()
     assert _git(mod, verified[-1], "rev-list", "--count", "HEAD") == "2"
+
+
+def test_a_red_suite_in_the_cut_tree_names_what_failed(tmp_path, monkeypatch,
+                                                       capsys):
+    """P26c rider (B115 §9c): the live seam prints pytest's short test
+    summary on a red run — only the last three lines survived before,
+    so a red cut left no test name to chase."""
+    import subprocess as _sp
+
+    mod = _load_tool()
+    verify_dir = tmp_path / "cut"
+    (verify_dir / "engine").mkdir(parents=True)
+    (verify_dir / "engine" / "__init__.py").write_text("")
+
+    class _Probe:
+        stdout = str(verify_dir / "engine" / "__init__.py")
+
+    monkeypatch.setattr(mod, "run", lambda *a, **k: _Probe())
+    red = _sp.CompletedProcess(
+        args=[], returncode=1,
+        stdout="F....\nFAILED tests/web/test_x.py::test_y - assert 1 == 2\n"
+               "1 failed, 4 passed in 2.00s\n",
+        stderr="a warning on stderr\n")
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: red)
+    with pytest.raises(SystemExit, match="does not ship red"):
+        mod._verify_suite(verify_dir)
+    out, err = capsys.readouterr()
+    assert "FAILED tests/web/test_x.py::test_y - assert 1 == 2" in out
+    assert "1 failed, 4 passed" in out
+    assert "a warning on stderr" in err

@@ -126,6 +126,12 @@ class ProposalStore:
         out = [_proposal_record(p) for p in sorted(self.root.glob("prop_*.json"))]
         return [p for p in out if status is None or p["status"] == status]
 
+    def remove(self, pid: str) -> None:
+        """Purge (D1) is the only caller (P26c): a pursuit's proposals —
+        the human's words about that pursuit — go with the pursuit.
+        Proposals are otherwise never deleted; a decision is the record."""
+        self._path(pid).unlink()
+
     def decide(self, pid: str, *, decision: str, by: str, at: str,
                note: str = "") -> dict:
         """Record a steward's disposition ON the proposal, so what was

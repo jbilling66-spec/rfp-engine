@@ -94,6 +94,37 @@
       "default": "clean",
       "description": "degraded = extraction was imperfect. The card is STILL ingested and STILL retrievable — ingestion is never gated on extraction quality (X6). manual = human-entered or hand-corrected."
     },
+    "lessons": {
+      "type": "array",
+      "description": "P26c (P1-43): what reviewers taught the corpus ABOUT this card — an accepted flywheel proposal's before/after prose lands here, never on the body. Steward-visible in the KB screen; NEVER a retrieval key (not joined into the catalog text) and never returned by targeted_open, so a lesson can neither move a score nor be quoted into a draft — the X10 posture question_forms carries. Purged with the pursuit it came from (D1).",
+      "items": {
+        "type": "object",
+        "required": ["at", "by", "proposal_id", "after"],
+        "additionalProperties": false,
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "by": { "type": "string", "description": "The accepting steward." },
+          "proposal_id": { "type": "string", "pattern": "^prop_[a-z0-9]{4,32}$" },
+          "pursuit_id": { "type": "string" },
+          "event_ids": { "type": "array", "items": { "type": "string" } },
+          "before": { "type": "string" },
+          "after": { "type": "string" },
+          "note": { "type": "string" },
+          "external": { "type": "boolean", "description": "The originating signal came from outside the firm (a guest comment) — kept separable, as on the proposal." }
+        }
+      }
+    },
+    "deprecated": {
+      "type": "object",
+      "description": "P26c (P1-43): an accepted deprecate_card proposal lands HERE — the card stays (nothing is deleted outside a purge; the curation log and the proposal are the record) and retrieval withholds it with an excluded row, reason 'deprecated', exactly as use_restriction is honored.",
+      "required": ["at", "by", "proposal_id"],
+      "additionalProperties": false,
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "by": { "type": "string" },
+        "proposal_id": { "type": "string", "pattern": "^prop_[a-z0-9]{4,32}$" }
+      }
+    },
     "identity": {
       "type": "object",
       "description": "Content-anchored identity so card ids survive re-ingestion. Without this, a better OCR pass orphans every edit_survival score attached to the card — the flywheel's accumulated memory.",

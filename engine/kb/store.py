@@ -109,6 +109,20 @@ class KBStore:
         _atomic_write_text(path, render_card(updated, body))
         return path
 
+    def append_lesson(self, kb_id: str, entry: dict) -> Path:
+        """P26c (P1-43): the flywheel's other write onto a card — an
+        ACCEPTED lesson (a reviewer's prose about this card, carried by
+        the steward's merge) appended to lessons[], body untouched,
+        validated whole through the same narrow door as edit_survival.
+        Idempotent on proposal_id: the same accepted proposal cannot land
+        twice."""
+        card, _body = self.read_card(kb_id)
+        lessons = list(card.get("lessons") or [])
+        if any(l.get("proposal_id") == entry.get("proposal_id")
+               for l in lessons):
+            return self._card_path(kb_id)
+        return self.update_card_front(kb_id, lessons=[*lessons, entry])
+
     def rewrite_card(self, card: dict, body: str) -> Path:
         """Replace a card's content under its EXISTING id — the drifted-
         match write of re-ingest reconciliation (P13/C9, R6: the id never

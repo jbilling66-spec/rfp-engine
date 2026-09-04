@@ -29,7 +29,10 @@
         "event_ids": { "type": "array", "items": { "type": "string" } },
         "section_id": { "type": "string" },
         "operator": { "type": "string", "description": "The authenticated human who opened this door, when a human did. Absent for machine-routed flywheel proposals — the absence is itself the signal that no human has looked yet." },
-        "external": { "type": "boolean", "description": "true = the originating signal came from outside the firm (a guest comment). Kept separable for the same reason actor_role keeps external_reviewer separate: untrusted-provenance signal must never pool with internal." }
+        "external": { "type": "boolean", "description": "true = the originating signal came from outside the firm (a guest comment). Kept separable for the same reason actor_role keeps external_reviewer separate: untrusted-provenance signal must never pool with internal." },
+        "gap_id": { "type": "string", "description": "P26c (P1-44): the intake or plan gap whose ANSWER this proposal carries — the dedupe key between the opt-in door (B69 \u00a77) and the accept-time route, so one answered gap is one proposal whoever proposed it." },
+        "slot_id": { "type": "string", "description": "P26c (P1-44): the hand-fill slot whose typed values this proposal carries (a case block routed at writeback confirm)." },
+        "artifact": { "type": "string", "description": "P26c (P1-44): the pursuit artifact the content was read from when it was not an event (e.g. exports/hand-fill.json) — provenance a steward can open." }
       }
     },
     "target": {

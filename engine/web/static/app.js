@@ -259,9 +259,11 @@ async function loadFinish(pid, d) {
 async function loadDownloads(pid, f) {
   const dl = await api(`/api/pursuits/${encodeURIComponent(pid)}/downloads`);
   // one whole path literal per line: the door-coverage pin reads them whole
-  const dl = (name) =>
+  // P0-22: this helper was ALSO named `dl` — a parse-time SyntaxError
+  // that kept the whole workbench script from loading (pilot-2.3 … 2.5)
+  const href = (name) =>
     `/api/pursuits/${encodeURIComponent(pid)}/download/${encodeURIComponent(name)}`;
-  const link = (name) => `<a class="dl" href="${dl(name)}">${esc(name)}</a>`;
+  const link = (name) => `<a class="dl" href="${href(name)}">${esc(name)}</a>`;
   $("finishDownloads").innerHTML =
     `<div class="dlhead">To the buyer</div>`
     + (dl.to_the_buyer.length ? dl.to_the_buyer.map(link).join("")
@@ -1025,22 +1027,61 @@ async function loadKb() {
     q: $("kbSearch").value, layer: $("kbLayer").value,
     staleness: $("kbStale").value,
   });
-  const [cards, proposals] = await Promise.all([
+  const [cards, proposals, accepted] = await Promise.all([
     fetch(`/api/kb/cards?${params}`).then((r) => r.json()),
     fetch("/api/kb/proposals?status=proposed").then((r) => r.json()),
+    fetch("/api/kb/proposals?status=accepted").then((r) => r.json()),
   ]);
+
+  // P26c: a steward approves a VISIBLE change (S4) — every row shows the
+  // diff, where it came from, and where it lands if accepted. A fact
+  // card asks for the fields a human must vouch for.
+  const diffRows = (diff) => Object.entries(diff || {}).map(([key, change]) => `
+        <div class="diff-row"><b>${esc(key)}</b>:
+          ${change.before != null ? `<span class="muted">${esc(String(change.before))}</span> &rarr; ` : ""}
+          <span>${esc(String(change.after ?? ""))}</span></div>`).join("");
+  const sourceLine = (s) => [
+    s.pursuit_id ? `pursuit ${esc(s.pursuit_id)}` : "",
+    (s.event_ids || []).length ? `events ${esc(s.event_ids.join(", "))}` : "",
+    s.section_id ? `section ${esc(s.section_id)}` : "",
+    s.gap_id ? `gap ${esc(s.gap_id)}` : "",
+    s.slot_id ? `slot ${esc(s.slot_id)}` : "",
+    s.artifact ? esc(s.artifact) : "",
+    s.operator ? `by ${esc(s.operator)}` : "",
+  ].filter(Boolean).join(" &middot; ");
 
   // The steward's inbox sits ABOVE the library: v1 buried approval in a
   // terminal, so imported content stayed invisible to every draft.
   $("kbProposals").innerHTML = proposals.proposals.length
     ? `<div class="row"><b>${proposals.proposals.length} awaiting your review</b>` +
       proposals.proposals.map((p) => `
-        <div class="mark">
-          <span>${esc(p.kind)} &middot; ${esc(p.kb_id || "—")} &middot;
-                from ${esc(p.source.door)}</span>
+        <div class="mark" data-proposal="${esc(p.proposal_id)}">
+          <span>${esc(p.kind)} &middot; ${esc(p.target)} &middot; from ${esc(p.source.door)}
+            ${p.source.external ? '<span class="chip stop">guest-originated</span>' : ""}</span>
+          <div><b>lands in:</b> ${esc(p.home.label)}</div>
+          <div class="muted">${sourceLine(p.source)}</div>
           <div class="muted">${esc(p.note || "")}</div>
+          ${diffRows(p.diff)}
+          ${p.home.needs_fill.length ? `<div class="row">
+            ${p.home.needs_fill.map((f) => `<label>${esc(f)}
+              <input data-fill="${esc(f)}"${f.endsWith("date") ? ' type="date"' : ""}></label>`).join(" ")}
+            <span class="muted">a fact card needs a human to vouch for it</span></div>` : ""}
           <button data-accept="${esc(p.proposal_id)}">accept</button>
           <button data-reject="${esc(p.proposal_id)}" class="ghost">reject</button>
+        </div>`).join("") + "</div>"
+    : "";
+
+  // Steward notes (P26c): an accepted proposal with no card to land on
+  // IS the note the drafter reads — shown here so accepting one is
+  // never nothing.
+  const notes = accepted.proposals.filter((p) => p.home.kind === "note");
+  $("kbNotes").innerHTML = notes.length
+    ? `<div class="row"><b>${notes.length} steward note${notes.length === 1 ? "" : "s"} the drafter reads</b>` +
+      notes.map((p) => `
+        <div class="mark">
+          <span>[${esc(p.target.replace(/_/g, " "))}]</span>
+          ${diffRows(p.diff)}
+          <div class="muted">accepted by ${esc((p.decided || {}).by || "")} &middot; ${esc((p.decided || {}).at || "")}</div>
         </div>`).join("") + "</div>"
     : "";
 
@@ -1049,6 +1090,8 @@ async function loadKb() {
       <div><b>${esc(c.title)}</b> <span class="muted">${esc(c.kb_id)}</span>
         ${c.staleness ? `<span class="chip stop">${esc(c.staleness.replace("_", " "))}</span>` : ""}
         ${c.edit_survival != null ? `<span class="chip">survival ${esc(c.edit_survival)}</span>` : ""}
+        ${c.deprecated ? `<span class="chip stop">deprecated</span>` : ""}
+        ${(c.lessons || []).length ? `<span class="chip">${c.lessons.length} lesson${c.lessons.length === 1 ? "" : "s"}</span>` : ""}
       </div>
       <div class="muted">${esc(c.summary)}</div>
       ${c.notes.map((n) => `<div class="mark">${esc(n)}</div>`).join("")}
@@ -1061,9 +1104,17 @@ async function loadKb() {
 }
 
 async function decideProposal(id, decision) {
+  const body = { decision };
+  // P26c: the fills a fact card needs ride with the accept
+  const mark = document.querySelector(`[data-proposal="${CSS.escape(id)}"]`);
+  const fills = {};
+  if (mark) mark.querySelectorAll("[data-fill]").forEach((input) => {
+    if (input.value) fills[input.dataset.fill] = input.value;
+  });
+  if (Object.keys(fills).length) body.fills = { [id]: fills };
   const res = await fetch(`/api/kb/proposals/${id}/decide`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) { alert((await res.json()).detail); return; }
   await loadKb();

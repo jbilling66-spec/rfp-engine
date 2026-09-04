@@ -20,6 +20,7 @@ class WaiverResult:
     claim_id: str
     status: str  # waived | already_waived | refused
     warnings: list[str] = field(default_factory=list)
+    section_id: str | None = None  # P26c: the waive_block event names it
 
 
 def approve_waiver(pursuit, log, *, claim_id: str, actor: str, reason: str,
@@ -40,6 +41,7 @@ def approve_waiver(pursuit, log, *, claim_id: str, actor: str, reason: str,
     if target_claim is None:
         result.warnings.append(f"claim {claim_id!r} not in the annotated draft")
         return result
+    result.section_id = target_section["section_id"]
     if target_claim["disposition"] == "waived":
         result.status = "already_waived"  # idempotent-convergent (B22(10))
         return result

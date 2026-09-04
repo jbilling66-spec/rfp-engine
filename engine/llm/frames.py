@@ -83,3 +83,10 @@ def wrap_reference(text: str) -> str:
 
 def wrap_voice_spec(text: str) -> str:
     return f'<voice_spec label="firm">\n{text}\n</voice_spec>'
+
+
+def wrap_steward_notes(text: str) -> str:
+    """P26c: steward-ACCEPTED lessons in the reviewers' own words —
+    firm trust, like the voice spec they sit beside; accepted is what
+    makes them firm (nothing lands here without a steward)."""
+    return f'<steward_notes label="firm">\n{text}\n</steward_notes>'

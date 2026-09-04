@@ -72,6 +72,7 @@ def test_opt_in_answer_spawns_a_steward_proposal(ping_client):
             if p["proposal_id"] == out["proposal"]]
     assert mine and mine[0]["source"]["door"] == "gap_answer"
     assert mine[0]["source"]["pursuit_id"] == "pur_pingcard"
+    assert mine[0]["source"]["gap_id"] == gap_id, "P26c: the dedupe key"
     assert mine[0]["kind"] == "new_card"
     # steward inbox, NOT corpus: nothing entered the store.
     assert KBStore(ws / "kb").list_cards() == []

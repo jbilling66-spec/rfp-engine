@@ -381,9 +381,19 @@ def _verify_suite(verify_dir: Path) -> None:
           "minutes)…")
     suite = subprocess.run([sys.executable, "-m", "pytest", "-q"],
                            cwd=verify_dir, capture_output=True, text=True)
-    tail = "\n".join(suite.stdout.splitlines()[-3:])
-    print(tail)
+    lines = suite.stdout.splitlines()
+    print("\n".join(lines[-3:]))
     if suite.returncode != 0:
+        # P26c rider (B115 §9c, the owner's word): a red cut names what
+        # failed — the short test summary and pytest's stderr tail used
+        # to be discarded, so a red run left no name to chase.
+        summary = [line for line in lines
+                   if line.startswith(("FAILED", "ERROR"))]
+        if summary:
+            print("\n".join(summary[-40:]))
+        stderr_tail = "\n".join(suite.stderr.splitlines()[-10:])
+        if stderr_tail:
+            print(stderr_tail, file=sys.stderr)
         sys.exit("FAILED: the cut tree's suite is not green — the mirror "
                  "does not ship red")
 

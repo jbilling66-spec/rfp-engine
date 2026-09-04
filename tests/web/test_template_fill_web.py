@@ -201,3 +201,67 @@ def test_downloads_and_detail_name_what_is_withheld(fill_client):
     assert client.get("/api/pursuits/pur_bare/downloads").json() == {
         "to_the_buyer": [], "internal_do_not_send": [], "refused": []}
 
+
+# --------------------------------------------- P26c: the case block learns
+
+def test_confirm_proposes_the_case_block_not_the_grid(tmp_path, monkeypatch):
+    """P1-44: at writeback confirm the hand-typed case block becomes a
+    corpus case-study proposal in the steward inbox — in the human's
+    words, naming its slot and artifact; the metadata record, the
+    pricing grid and the inline line are skipped and named; nothing
+    enters the store until a steward accepts; a learner failure never
+    refuses the confirm."""
+    from engine.flywheel.proposals import ProposalStore
+    from engine.kb.curation import merge_batch
+    from engine.kb.store import KBStore
+
+    ws = tmp_path / "ws"
+    store = KBStore(ws / "kb")  # BEFORE create_app: the app's own KB
+    app = create_app(ws, now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Fiona Filler")
+        client.post("/api/pursuits", json={"pursuit_id": "pur_case"})
+        _plant(ws, "pur_case", all_prose=True)
+        put = client.put("/api/pursuits/pur_case/writeback/hand-fill",
+                         json={"values": HAND})
+        assert put.status_code == 200, put.text
+        confirmed = client.post("/api/pursuits/pur_case/writeback/confirm",
+                                json={})
+        assert confirmed.status_code == 200, confirmed.text
+        flywheel = confirmed.json()["flywheel"]
+        assert len(flywheel["proposals"]) == 1
+        assert set(flywheel["skipped"]) == {"s-front-meta", "s-h11", "s-h12-1"}
+        assert "P3-1" in flywheel["skipped"]["s-h11"]
+        proposal = ProposalStore(store.root).read(flywheel["proposals"][0])
+        assert proposal["source"] == {
+            "door": "flywheel", "pursuit_id": "pur_case", "slot_id": "s-h10",
+            "artifact": "exports/hand-fill.json", "operator": "Fiona Filler"}
+        assert proposal["kind"] == "new_card" and proposal["target"] == "corpus"
+        assert proposal["diff"]["doc_kind"]["after"] == "case_study"
+        assert "A synthetic utility" in proposal["diff"]["body"]["after"]
+        assert "$1,000" not in proposal["diff"]["body"]["after"]
+        assert store.list_cards() == [], "the inbox, never the corpus"
+        # the steward accepts: a corpus case study, human-authored
+        merge_batch(store, [proposal["proposal_id"]], operator="Sam",
+                    at=FIXED_AT)
+        minted = store.list_cards()
+        assert len(minted) == 1
+        assert minted[0]["doc_kind"] == "case_study"
+        assert minted[0]["content_origin"] == "human_authored"
+        # a second confirm re-proposes nothing (content-derived ids)
+        again = client.post("/api/pursuits/pur_case/writeback/confirm",
+                            json={}).json()["flywheel"]
+        assert again["proposals"] == flywheel["proposals"]
+        assert len(ProposalStore(store.root).list()) == 1
+        # a learner failure is reported, never a refusal of the bundle
+        import engine.web.learn as learn_mod
+
+        def boom(*_a, **_k):
+            raise RuntimeError("hand-fill learner on fire")
+
+        monkeypatch.setattr(learn_mod, "learn_from_writeback", boom)
+        r = client.post("/api/pursuits/pur_case/writeback/confirm", json={})
+        assert r.status_code == 200, r.text
+        assert r.json()["flywheel"] == {
+            "error": "RuntimeError: hand-fill learner on fire"}
+        assert r.json()["bundle"]

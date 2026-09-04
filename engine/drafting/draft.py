@@ -34,6 +34,7 @@ from engine.contracts import ContractError
 from engine.drafting import compose, route, verify, wire
 from engine.drafting.compose import VOICE_DEFAULT, load_voice_spec
 from engine.kb import UseRestrictedCard, as_lanes, targeted_open
+from engine.kb.notes import steward_notes_frame
 from engine.kb.retrieve import emit_kb_retrieval
 from engine.llm.frames import wrap_kb_card
 
@@ -114,6 +115,7 @@ def run_drafting(pursuit, caller, log, store, *,
         slots_by_id = {s["slot_id"]: s for s in container["slots"]}
 
     voice_text = load_voice_spec(voice_path)  # malformed firm config raises
+    notes_frame = steward_notes_frame(store)  # P26c: accepted steward notes
     plan_sha256 = pursuit.file_sha256(FROZEN_PLAN)
 
     # --- routing prepass (pure) -----------------------------------------
@@ -153,7 +155,8 @@ def run_drafting(pursuit, caller, log, store, *,
         entry = _draft_section(
             pursuit, caller, log, store, section, rp, slots_by_id, path,
             voice_text, frozen_brief,
-            frozen_plan.get("effort_allocation", "uniform"))
+            frozen_plan.get("effort_allocation", "uniform"),
+            notes_frame=notes_frame)
         ckpt["sections"][section_id] = entry
         pursuit.checkpoint(STAGE, ckpt)  # N2: after each completed section
 
@@ -184,7 +187,7 @@ def run_drafting(pursuit, caller, log, store, *,
 
 def _draft_section(pursuit, caller, log, store, section, rp, slots_by_id,
                    path, voice_text, frozen_brief,
-                   effort_allocation="uniform") -> dict:
+                   effort_allocation="uniform", notes_frame: str = "") -> dict:
     section_id = section["section_id"]
     section_type = rp["section_type"]
     target = {"section_id": section_id, "section_type": section_type}
@@ -230,7 +233,8 @@ def _draft_section(pursuit, caller, log, store, section, rp, slots_by_id,
     prompt = compose.build_draft_prompt(
         voice_text=voice_text, frozen_brief=frozen_brief,
         model_slots=model_slots, card_frames=card_frames,
-        steering=rp["steering"], directive=directive)
+        steering=rp["steering"], directive=directive,
+        notes_frame=notes_frame)
     system = _PROMPT.read_text(encoding="utf-8")
 
     result = caller.call(AGENT, tier="mid", prompt=prompt, system=system,

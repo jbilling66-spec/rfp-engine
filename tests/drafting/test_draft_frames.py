@@ -81,3 +81,40 @@ def test_every_drafting_call_is_mid_tier(spied):
     assert fake.calls
     assert {c["tier"] for c in fake.calls} == {"mid"}
     assert {c["agent"] for c in fake.calls} == {"section_drafter"}
+
+
+def test_an_accepted_playbook_note_reaches_the_drafter(tmp_path):
+    """P26c (P1-43): a note a steward ACCEPTED is read by the drafter —
+    firm-framed after the voice spec, in the reviewer's own words; a
+    proposal nobody accepted is not."""
+    from engine.flywheel.proposals import ProposalStore
+    from engine.kb.curation import merge_batch
+    from engine.kb.store import KBStore
+
+    store = KBStore(tmp_path / "kb")  # the chain's own KB root
+    proposals = ProposalStore(store.root)
+    accepted = proposals.open(
+        source={"door": "flywheel", "pursuit_id": "pur_prev",
+                "event_ids": ["evt_0001"]},
+        target="playbook", kind="playbook_note", at="2026-08-01T00:00:00Z",
+        diff={"comment": {"after": "Lead with the outcome, not the method."}})
+    proposals.open(
+        source={"door": "flywheel", "pursuit_id": "pur_prev",
+                "event_ids": ["evt_0002"]},
+        target="playbook", kind="playbook_note", at="2026-08-01T00:00:00Z",
+        diff={"comment": {"after": "Not yet accepted guidance."}})
+    merge_batch(store, [accepted["proposal_id"]], operator="Sam",
+                at="2026-08-02T00:00:00Z")
+    fake = SpyCaller(make_drafter_script())
+    _pursuit, report = run_drafting_package(tmp_path, fake=fake)
+    assert report.status == "complete"
+    prompts = [c["prompt"] for c in fake.calls
+               if c["prompt"].startswith("Task: draft.")]
+    assert prompts
+    for prompt in prompts:
+        assert '<steward_notes label="firm">' in prompt
+        assert "- [playbook] Lead with the outcome, not the method." in prompt
+        assert "Not yet accepted guidance." not in prompt
+        assert prompt.index("</voice_spec>") < prompt.index("<steward_notes")
+    assert len({c["system"] for c in fake.calls
+                if c["prompt"].startswith("Task: draft.")}) == 1

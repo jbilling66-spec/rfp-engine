@@ -101,6 +101,22 @@ class TestPromptAssembly:
         assert '<kb_card kb_id="kb_a"' in prompt
         assert "<pursuit_lead_context" in prompt
 
+    def test_notes_frame_sits_after_the_voice_spec(self):
+        """P26c: steward-accepted notes ride the firm frame right after
+        the voice spec; with none, the prompt is byte-identical."""
+        kwargs = dict(
+            voice_text="# Acme voice spec\n\n## Principles\n1. Clear.",
+            frozen_brief=BRIEF, model_slots=[SLOT], card_frames=[],
+            steering=[], directive="SECTION: 1. Delivery Approach")
+        bare = build_draft_prompt(**kwargs)
+        assert build_draft_prompt(**kwargs, notes_frame="") == bare
+        prompt = build_draft_prompt(
+            **kwargs, notes_frame='<steward_notes label="firm">\n- [playbook] '
+                                  'Lead with the outcome.\n</steward_notes>')
+        assert prompt.index("</voice_spec>") < prompt.index("<steward_notes") \
+            < prompt.index("<bid_brief_context")
+        assert "- [playbook] Lead with the outcome." in prompt
+
     def test_check_prompt_shape(self):
         prompt = build_check_prompt(
             SECTION, {"s1": {"prose": "the drafted answer"}},

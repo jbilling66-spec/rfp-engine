@@ -157,7 +157,8 @@ def test_card_search_lines_carry_catalog_size(seeded):
     line = [r for r in records if r["record_type"] == "kb_retrieval"][-1]
     searchable = sum(1 for c in seeded.list_cards()
                      if c.get("layer") != "fact_sheet"
-                     and not c.get("use_restriction"))
+                     and not c.get("use_restriction")
+                     and not c.get("deprecated"))
     assert line["kb"]["catalog_size"] == searchable
     assert "facets" not in line["kb"], "an unfiltered line stays bare"
 
@@ -269,3 +270,24 @@ def test_canonical_block_rides_on_results(tmp_path):
                          stage="drafting", agent="section_drafter")
     canonical = [r for r in result.results if r.card.get("canonical_block")]
     assert [r.kb_id for r in canonical] == ["kb_open000001"]
+
+
+def test_deprecated_withheld_and_recorded(tmp_path):
+    """P26c (P1-43): an accepted deprecation lands as a `deprecated`
+    block on the card, and retrieval honours it exactly as D2 — the card
+    is withheld before idf (it is not in the catalog the scores come
+    from), the exclusion is recorded on the trace with its reason, and
+    the card is never deleted."""
+    store = _tiny_store(tmp_path)
+    store.update_card_front("kb_open000001", deprecated={
+        "at": "2026-09-04T10:00:00Z", "by": "steward",
+        "proposal_id": "prop_0123456789ab"})
+    log = _log(store, "run_0001")
+    result = card_search(store, "payroll parallel testing", log=log,
+                         stage="drafting", agent="section_drafter")
+    assert result.results == []
+    assert {"kb_id": "kb_open000001", "reason": "deprecated"} in result.excluded
+    line = read_run(store.root / "runs" / "run_0001" / "run.jsonl")[-1]
+    assert sorted(line["kb"]["excluded"]) == ["kb_open000001", "kb_restr00001"]
+    assert line["kb"]["catalog_size"] == 0, "withheld before idf"
+    assert store.card_exists("kb_open000001"), "withheld, never deleted"

@@ -92,7 +92,9 @@ def test_columns_are_derived_from_the_schema_not_hand_listed():
                                             # navigation-only fields a flat
                                             # sheet cannot carry honestly.
                                             "identity", "chunk_span",
-                                            "doc_path"}
+                                            "doc_path",
+                                            # P26c: structured records
+                                            "lessons", "deprecated"}
     assert {name for name, _ in columns()} == declared
 
 

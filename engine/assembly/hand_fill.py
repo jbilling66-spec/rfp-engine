@@ -50,6 +50,37 @@ def _fields(slot: dict) -> list[dict]:
     return list(slot.get("response_fields") or [])
 
 
+def case_block_slots(container) -> list[dict]:
+    """P26c (P1-44): the hand slots whose typed content the corpus may
+    learn from — a CASE BLOCK: table-shaped, no numeric-typed field, no
+    field addressed by a column (the pricing grid's locator, so a fee
+    never rides into a proposal — P3-1). The metadata record and the
+    inline line describe THIS pursuit and stay with it."""
+    out = []
+    for slot in hand_slots(container):
+        if slot.get("response_shape") != "table":
+            continue
+        fields = _fields(slot)
+        if any(f.get("type", "text") in _NUMERIC_TYPES for f in fields):
+            continue
+        if any("column" in (f.get("source_locator") or {}) for f in fields):
+            continue
+        out.append(slot)
+    return out
+
+
+def case_block_text(slot: dict, entries: list[dict]) -> str:
+    """One `Label: value` line per field, one blank line per entry —
+    the render the template fill uses, and the body a case-study
+    proposal carries."""
+    fields = _fields(slot)
+    blocks = []
+    for entry in entries or []:
+        blocks.append("\n".join(
+            f"{f['label']}: {entry.get(f['key'], '')}" for f in fields))
+    return "\n\n".join(blocks)
+
+
 def _check_scalar(slot_id: str, key: str, ftype: str, value) -> str:
     if not isinstance(value, str):
         raise ContractError(

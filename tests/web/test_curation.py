@@ -168,6 +168,26 @@ def test_an_uncited_card_deprecates_as_a_proposal_not_a_delete(client):
     assert client.get("/api/kb/cards/kb_stale0001").status_code == 200
 
 
+def test_accepting_a_deprecation_stamps_not_deletes(client):
+    """P26c (P1-43): accepting the deprecation used to decide and change
+    nothing. Now the card carries a `deprecated` block, the row says so,
+    and the card still answers — nothing outside a purge deletes."""
+    proposal = client.post("/api/kb/proposals", json={
+        "kb_id": "kb_stale0001", "action": "deprecate"}).json()
+    decided = client.post(
+        f"/api/kb/proposals/{proposal['proposal_id']}/decide",
+        json={"decision": "accepted"})
+    assert decided.status_code == 200, decided.text
+    detail = client.get("/api/kb/cards/kb_stale0001")
+    assert detail.status_code == 200
+    assert detail.json()["card"]["deprecated"]["proposal_id"] == (
+        proposal["proposal_id"])
+    assert any("deprecated" in n for n in detail.json()["notes"])
+    row = [r for r in client.get("/api/kb/cards").json()["cards"]
+           if r["kb_id"] == "kb_stale0001"][0]
+    assert row["deprecated"] is True
+
+
 def test_legal_hold_blocks_deprecation(tmp_path):
     from engine.kb.curation import CurationRefused, propose_deprecation
 
@@ -317,3 +337,100 @@ def test_every_mutating_curation_route_needs_an_operator(tmp_path):
         }).status_code == 401
         assert anonymous.post("/api/kb/proposals/merge", json={
             "proposal_ids": ["prop_x"]}).status_code == 401
+
+
+# ------------------------------------------- P26c: the inbox names the home
+
+@pytest.fixture
+def inbox(tmp_path):
+    workspace = tmp_path / "ws"
+    store = KBStore(workspace / "kb")
+    store.write_card(
+        {"kb_id": "kb_alpha0001", "layer": "corpus",
+         "doc_kind": "section_exemplar", "title": "Data Migration Approach",
+         "summary": "Seven mock conversions.", "owner": "Delivery Lead"},
+        "Body one.", PROV, {})
+    app = create_app(workspace, make_caller=raising_caller,
+                     now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Sam Steward")
+        yield client, store
+
+
+GAP = {"gap_id": "gap_pur_x_01", "status": "answered",
+       "question_to_human": "How many validated waves?", "answer": "Four."}
+
+
+def test_the_inbox_names_every_proposals_home(inbox):
+    """P1-43 (item 3): every row carries `home` — the kind, the label,
+    the card when there is one, and the fields a fact card needs — so a
+    steward approves a visible change and knows where it lands. An
+    accepted note shows among the accepted rows as the note it is."""
+    from engine.flywheel.proposals import ProposalStore
+    from engine.kb.curation import propose_gap_answer_card
+
+    client, store = inbox
+    proposals = ProposalStore(store.root)
+    field_ = client.post("/api/kb/proposals", json={
+        "kb_id": "kb_alpha0001",
+        "changes": {"summary": "Eight."}}).json()["proposal_id"]
+    dep = client.post("/api/kb/proposals", json={
+        "kb_id": "kb_alpha0001", "action": "deprecate"}).json()["proposal_id"]
+    lesson = proposals.open(
+        source={"door": "flywheel", "pursuit_id": "pur_x",
+                "event_ids": ["evt_0001"], "external": True},
+        target="corpus", kind="update_card", at=FIXED_AT,
+        kb_id="kb_alpha0001",
+        diff={"text": {"before": "seven", "after": "nine"}})["proposal_id"]
+    note = proposals.open(
+        source={"door": "flywheel", "pursuit_id": "pur_x",
+                "event_ids": ["evt_0002"]},
+        target="playbook", kind="playbook_note", at=FIXED_AT,
+        diff={"comment": {"after": "Lead with the outcome."}})["proposal_id"]
+    fact = propose_gap_answer_card(store.root, gap=GAP, pursuit_id="pur_x",
+                                   operator="Astrid", at=FIXED_AT)
+    rows = {p["proposal_id"]: p for p in _proposals(client, status="proposed")}
+    assert rows[field_]["home"]["kind"] == "card_field"
+    assert rows[lesson]["home"]["kind"] == "card_lesson"
+    assert rows[lesson]["home"]["kb_id"] == "kb_alpha0001"
+    assert "lesson" in rows[lesson]["home"]["label"]
+    assert rows[lesson]["source"]["external"] is True
+    assert rows[dep]["home"]["kind"] == "deprecate"
+    assert rows[note]["home"]["kind"] == "note"
+    assert "playbook" in rows[note]["home"]["label"]
+    assert rows[fact]["home"]["kind"] == "new_card"
+    assert rows[fact]["home"]["needs_fill"] == ["owner", "verified_date"]
+    assert all(set(r["home"]) >= {"kind", "label", "needs_fill"}
+               for r in rows.values())
+    r = client.post(f"/api/kb/proposals/{note}/decide",
+                    json={"decision": "accepted"})
+    assert r.status_code == 200, r.text
+    accepted = _proposals(client, status="accepted")
+    assert [p["proposal_id"] for p in accepted
+            if p["home"]["kind"] == "note"] == [note]
+
+
+def test_a_fact_card_accepts_from_the_ui_with_fills(inbox):
+    """P1-43: the decide door takes `fills` — without them a fact card
+    refuses by name (as before, but now the row asks); with them the
+    card mints, human-vouched. A malformed fills is 422, typed."""
+    from engine.kb.curation import propose_gap_answer_card
+
+    client, store = inbox
+    fact = propose_gap_answer_card(store.root, gap=GAP, pursuit_id="pur_x",
+                                   operator="Astrid", at=FIXED_AT)
+    url = f"/api/kb/proposals/{fact}/decide"
+    r = client.post(url, json={"decision": "accepted"})
+    assert r.status_code == 409 and "owner and" in r.json()["detail"]
+    assert len(store.list_cards()) == 1, "nothing minted"
+    r = client.post(url, json={"decision": "accepted", "fills": "x"})
+    assert r.status_code == 422
+    r = client.post(url, json={"decision": "accepted", "fills": {
+        fact: {"owner": "Sam Steward", "verified_date": "2026-09-04"}}})
+    assert r.status_code == 200, r.text
+    minted = [c for c in store.list_cards() if c["kb_id"] != "kb_alpha0001"]
+    assert len(minted) == 1
+    assert minted[0]["layer"] == "fact_sheet"
+    assert minted[0]["owner"] == "Sam Steward"
+    assert minted[0]["verified_date"] == "2026-09-04"
+    assert _proposals(client, status="proposed") == []

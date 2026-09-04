@@ -142,3 +142,21 @@ def test_propose_deprecation_opens_assistant_door_proposal(ctx):
     assert proposal["source"]["door"] == "assistant"
     assert proposal["kind"] == "deprecate_card"
     assert ctx.store.card_exists("kb_hyper0001")  # deprecate ≠ delete
+
+
+def test_the_queue_names_each_proposals_home(ctx):
+    """P26c: the assistant's view of the inbox carries the target, the
+    diff and where the proposal lands — the same answer the workbench
+    gives, so the steward assistant never describes a change it cannot
+    show."""
+    execute_tool(ctx, "propose_edit", {
+        "kb_id": "kb_alpha0001",
+        "changes": {"summary": "Nine mock conversions."}})
+    _kind, result = execute_tool(ctx, "proposals_queue", {})
+    rows = json.loads(result)["proposed"]
+    assert rows
+    row = rows[0]
+    assert row["home"]["kind"] == "card_field"
+    assert row["home"]["kb_id"] == "kb_alpha0001"
+    assert row["target"] in ("corpus", "fact_sheet")
+    assert row["diff"]["summary"]["after"] == "Nine mock conversions."

@@ -161,6 +161,12 @@ def card_search(store: KBStore | Lanes, query: str, *, log, stage, agent,
             if card.get("use_restriction"):
                 result.excluded.append({"kb_id": card["kb_id"], "reason": "use_restriction"})
                 continue
+            if card.get("deprecated"):
+                # P26c (P1-43): an ACCEPTED deprecation withholds the card
+                # exactly as D2 does — before idf, recorded on the trace,
+                # never deleted (the card stays as the record).
+                result.excluded.append({"kb_id": card["kb_id"], "reason": "deprecated"})
+                continue
             active.append((card, tokenize(_catalog_text(card))))
 
     idf = idf_weights([tokens for _, tokens in active])
@@ -202,6 +208,17 @@ def card_search(store: KBStore | Lanes, query: str, *, log, stage, agent,
     return result
 
 
+def _withheld_reason(card: dict) -> str | None:
+    """Why a card is withheld from navigation and search results: D2's
+    use_restriction, or an accepted deprecation (P26c). The reason rides
+    the excluded row so a gap can explain itself."""
+    if card.get("use_restriction"):
+        return "use_restriction"
+    if card.get("deprecated"):
+        return "deprecated"
+    return None
+
+
 def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
             agent, target: dict | None = None) -> SearchResult:
     """The within-document move (P13/C11, R9): the anchor card's parent,
@@ -221,12 +238,14 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
     cd = card.get("canonical_doc_id")
     path = list(card.get("doc_path") or ())
     result = SearchResult()
-    if card.get("use_restriction"):
+    withheld = _withheld_reason(card)
+    if withheld:
         # M-28 (P26b-2): the ANCHOR answers to D2 too — a restricted card
         # used to be a usable navigation handle whose position and
         # neighbours were enumerable through descend. Recorded-empty,
         # the withheld anchor on the trace (the same shape as search).
-        result.excluded.append({"kb_id": kb_id, "reason": "use_restriction"})
+        # P26c: a deprecated anchor is withheld the same way.
+        result.excluded.append({"kb_id": kb_id, "reason": withheld})
         emit_kb_retrieval(
             log, stage=stage, agent=agent, query=query, step="path_descend",
             cards_returned=[], excluded=[kb_id], empty_result=True,
@@ -261,9 +280,10 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
         if not store.card_exists(neighbor_id):
             continue  # absorbed or purged since the model was written
         neighbor, _ = store.read_card(neighbor_id)
-        if neighbor.get("use_restriction"):
+        withheld = _withheld_reason(neighbor)
+        if withheld:
             result.excluded.append({"kb_id": neighbor_id,
-                                    "reason": "use_restriction"})
+                                    "reason": withheld})
             continue
         result.results.append(
             ScoredCard(kb_id=neighbor_id, score=0.0, card=neighbor))

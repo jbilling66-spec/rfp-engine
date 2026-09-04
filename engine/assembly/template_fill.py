@@ -50,6 +50,7 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from engine.assembly.hand_fill import (
+    case_block_text,
     completeness,
     hand_slots,
     read_hand_fill,
@@ -313,13 +314,7 @@ def _grid_rows(table_rows: list[list[str]], slot: dict,
     return out
 
 
-def _case_block_text(slot: dict, entries: list[dict]) -> str:
-    fields = slot.get("response_fields", [])
-    blocks = []
-    for entry in entries or []:
-        blocks.append("\n".join(
-            f"{f['label']}: {entry.get(f['key'], '')}" for f in fields))
-    return "\n\n".join(blocks)
+_case_block_text = case_block_text  # one renderer (moved to hand_fill, P26c)
 
 
 def _set_table(table, rows: list[list[str]]) -> None:
