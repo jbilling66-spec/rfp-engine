@@ -152,3 +152,64 @@ def test_access_log_lines_validate_and_the_guard_fires(tmp_path):
     with pytest.raises(ContractError):
         rs._log("owner", "not_a_purpose", "read", True)
     assert len(_log_lines(rs)) == len(lines)  # the rejected line never landed
+
+
+# ---------------------------------------------- P2-46: the L0 read doors
+
+def test_source_doors_log_and_authorize(tmp_path):
+    """P2-46 (P26b-2): existence, meta, the listing and the merge-fold
+    lookup answer to the same law as `read` — a line first, then the
+    decision. Before this the four answered silently, and the meta
+    carries the real source_client."""
+    rs = _store(tmp_path)
+    rs.write_source("cd_0123456789ab", b"raw client bytes",
+                    {"doc_id": "tw_doc", "source_client": "Meridian"})
+    for call in (
+        lambda a: rs.source_exists("cd_0123456789ab", actor=a, purpose="audit"),
+        lambda a: rs.source_meta("cd_0123456789ab", actor=a, purpose="audit"),
+        lambda a: rs.source_metas(actor=a, purpose="audit"),
+        lambda a: rs.list_source_ids(actor=a, purpose="audit"),
+        lambda a: rs.absorbed_owners(actor=a, purpose="audit"),
+    ):
+        with pytest.raises(ProvenanceAccessDenied):
+            call("mallory")
+        denied = _log_lines(rs)[-1]
+        assert denied["actor"] == "mallory" and denied["granted"] is False
+        call("owner")
+        granted = _log_lines(rs)[-1]
+        assert granted["actor"] == "owner" and granted["granted"] is True
+    actions = [line["action"] for line in _log_lines(rs)[-10:]]
+    assert actions == ["source_read", "source_read", "source_read",
+                       "source_read", "source_read", "source_read",
+                       "list_sources", "list_sources",
+                       "absorbed_lookup", "absorbed_lookup"]
+    meta_lines = [line for line in _log_lines(rs)
+                  if line.get("doc_id") == "cd_0123456789ab"]
+    assert len(meta_lines) == 4, "existence and meta reads name the artifact"
+    assert rs.source_meta("cd_0123456789ab", actor="owner",
+                          purpose="audit")["source_client"] == "Meridian"
+    # The engine's lineage reads carry their own purpose — granted to the
+    # machine identity, and only that.
+    assert rs.source_exists("cd_0123456789ab", actor="engine",
+                            purpose="ingest") is True
+    with pytest.raises(ProvenanceAccessDenied):
+        rs.source_meta("cd_0123456789ab", actor="engine", purpose="audit")
+
+
+def test_prior_models_goes_through_the_door(tmp_path):
+    """reconcile.prior_models used to read the source dir directly."""
+    from engine.kb import KBStore
+    from engine.kb.reconcile import prior_models
+
+    store = KBStore(tmp_path / "kb")
+    store.restricted.write_source("cd_aaaaaaaaaaaa", b"v1", {"doc_id": "d"})
+    store.restricted.write_source("cd_bbbbbbbbbbbb", b"v2", {"doc_id": "d"})
+    store.restricted.write_source("cd_cccccccccccc", b"x", {"doc_id": "other"})
+    with pytest.raises(ProvenanceAccessDenied):
+        prior_models(store, "d", "cd_bbbbbbbbbbbb", actor="mallory",
+                     purpose="ingest")
+    assert prior_models(store, "d", "cd_bbbbbbbbbbbb", actor="engine",
+                        purpose="ingest") == ["cd_aaaaaaaaaaaa"]
+    lines = _log_lines(store.restricted)
+    assert [l["action"] for l in lines[-2:]] == ["source_read", "source_read"]
+    assert [l["granted"] for l in lines[-2:]] == [False, True]

@@ -133,11 +133,12 @@ def test_cascade_removes_l1_models_and_l0_sources_with_full_accounting(tmp_path)
     for cd in acct["l1_models"]:
         assert not (store.root / "canonical" / f"{cd}.json").exists()
     for cd in acct["l0_sources"]:
-        assert not store.restricted.source_exists(cd)
+        assert not store.restricted.source_exists(
+            cd, actor="owner", purpose="audit")
     assert set(acct["l1_models"]) >= meridian_cds
     assert "no persisted state" in acct["l4_statement"]  # KB8 disposition
     # Other clients' layers survive.
-    assert store.restricted.list_source_ids()
+    assert store.restricted.list_source_ids(actor="owner", purpose="audit")
     assert list((store.root / "canonical").glob("*.json"))
     # The accounting is persisted in the restricted store and the access
     # log points at it.
@@ -161,7 +162,7 @@ def test_held_card_holds_its_parent_model_and_source(tmp_path):
     assert held["kb_id"] in report.held
     assert (store.root / "canonical" / f"{cd}.json").exists(), \
         "you cannot delete the parent of retained evidence"
-    assert store.restricted.source_exists(cd)
+    assert store.restricted.source_exists(cd, actor="owner", purpose="audit")
     assert cd in report.accounting["held_models"]
     assert cd in report.accounting["held_sources"]
 
@@ -187,9 +188,11 @@ def test_blocked_ingest_l0_is_reachable_by_its_clients_purge(tmp_path):
                     known_identifiers={"Zephyrline Logistics": "CLIENT"})
     report = ingest_document(store, caller, log, doc)
     assert report.status == "blocked"
-    assert store.restricted.list_source_ids(), "L0 retained on block"
+    assert store.restricted.list_source_ids(actor="owner", purpose="audit"), \
+        "L0 retained on block"
     purge = purge_client(store, "Zephyrline Logistics", actor="owner")
-    assert store.restricted.list_source_ids() == []
+    assert store.restricted.list_source_ids(
+        actor="owner", purpose="audit") == []
     assert len(purge.accounting["l0_sources"]) == 1
 
 

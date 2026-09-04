@@ -173,12 +173,17 @@ def _t_chunk_stats(ctx, args):
 
 
 def _t_proposals_queue(ctx, args):
+    from engine.contracts import ContractError
     from engine.flywheel.proposals import ProposalStore
     _require(args, {})
+    try:
+        proposed = ProposalStore(ctx.store.root).list(status="proposed")
+    except ContractError as exc:  # M-30: named, not a crash
+        raise ToolRefused(str(exc))
     rows = [{"proposal_id": p["proposal_id"], "kind": p["kind"],
              "kb_id": p.get("kb_id"), "door": p["source"].get("door"),
              "created": p["created"], "note": p.get("note", "")}
-            for p in ProposalStore(ctx.store.root).list(status="proposed")]
+            for p in proposed]
     return _render({"proposed": rows})
 
 

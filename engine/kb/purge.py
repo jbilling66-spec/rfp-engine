@@ -169,6 +169,17 @@ def _accounting_path(store: KBStore, client: str) -> Path:
 
 def purge_client(store: KBStore, client: str, *, actor: str,
                  pursuits_root: Path | None = None) -> PurgeReport:
+    """The firm-KB purge runs as one critical section under the root's
+    lock (P1-40): a steward's merge landing mid-purge would write a
+    card the closure never saw."""
+    from engine.contracts import path_lock
+    with path_lock(store.root):
+        return _purge_client_locked(store, client, actor=actor,
+                                    pursuits_root=pursuits_root)
+
+
+def _purge_client_locked(store: KBStore, client: str, *, actor: str,
+                         pursuits_root: Path | None = None) -> PurgeReport:
     report = PurgeReport(client=client)
     accounting = PurgeAccounting(client=client)
     closure, purged_identifiers = _closure(store, client, actor=actor)
@@ -198,8 +209,9 @@ def purge_client(store: KBStore, client: str, *, actor: str,
     # restricted meta names the client directly — the blocked-ingest
     # case, which minted no cards and has no provenance record.
     direct_cds = {
-        cd for cd in store.restricted.list_source_ids()
-        if store.restricted.source_meta(cd).get("source_client") == client
+        cd for cd, meta in store.restricted.source_metas(
+            actor=actor, purpose="purge").items()
+        if meta.get("source_client") == client
     }
     for cd in sorted((purged_cds | direct_cds)):
         if cd in held_cds:
@@ -210,7 +222,7 @@ def purge_client(store: KBStore, client: str, *, actor: str,
         if l1.exists():
             l1.unlink()
             accounting.l1_models.append(cd)
-        if store.restricted.source_exists(cd):
+        if store.restricted.source_exists(cd, actor=actor, purpose="purge"):
             store.restricted.delete_source(cd)
             accounting.l0_sources.append(cd)
 
@@ -275,10 +287,10 @@ def purge_pursuit_memory(pursuit_root: Path, *, actor: str,
     store = KBStore(memory_root)
     report = PurgeReport(client=f"pursuit:{pursuit_root.name}")
     all_ids = sorted(c["kb_id"] for c in store.list_cards())
-    if all_ids:
-        # Authorization UP FRONT: the restricted gate refuses before
-        # anything mutates — no partial purge on a denied actor.
-        store.restricted.read(all_ids[0], actor=actor, purpose="purge")
+    # Authorization UP FRONT and UNCONDITIONAL (P1-13): the restricted
+    # gate logs and refuses before anything mutates — an empty lane still
+    # answers to it, so no purge ever runs unlogged.
+    store.restricted.authorize(actor, "purge", "delete")
     for kb_id in all_ids:
         store.delete_card(kb_id)
         store.restricted.delete(kb_id, actor=actor)
@@ -294,12 +306,13 @@ def purge_pursuit_memory(pursuit_root: Path, *, actor: str,
     _sweep_drafts(pursuit_root.parent, set(report.purged), stub)
     accounting["drafts"] = stub.drafts
 
-    unaccounted = set(all_ids) - set(accounting["pursuit_memory_cards"])
-    if unaccounted:
+    # The accounting measures the FILESYSTEM after the delete (P1-13:
+    # comparing the report to the list it was built from proved nothing).
+    survivors = [kb_id for kb_id in all_ids if store.card_exists(kb_id)]
+    if survivors:
         raise RuntimeError(
             f"pursuit-memory purge of {pursuit_root.name!r} left card(s) "
-            f"unaccounted: {sorted(unaccounted)} — the accounting IS the "
-            "deliverable")
+            f"in place: {survivors} — the accounting IS the deliverable")
 
     sweep_over = firm_store or KBStore(memory_root)  # at minimum, itself
     report.sweep_findings = post_purge_sweep(
@@ -338,16 +351,20 @@ def purge_org(workspace: Path, org_id: str, *, actor: str,
     store = KBStore(org_dir / "memory")
     report = PurgeReport(client=f"org:{org_id}")
     all_ids = sorted(c["kb_id"] for c in store.list_cards())
-    # Deletion goes through the GUARDED restricted door — authorization
-    # UP FRONT so an unauthorized actor is refused before anything is
-    # removed (the same gate purge_client answers to).
-    if all_ids:
-        store.restricted.read(all_ids[0], actor=actor, purpose="purge")
+    # Authorization UP FRONT and UNCONDITIONAL (P1-13): the restricted
+    # gate logs and refuses before anything is removed — an org with no
+    # notes still answers to it (the same gate purge_client answers to).
+    store.restricted.authorize(actor, "purge", "delete")
     for kb_id in all_ids:
         store.delete_card(kb_id)
         store.restricted.delete(kb_id, actor=actor)
         report.purged.append(kb_id)
     shutil.rmtree(org_dir)
+    # The accounting measures the FILESYSTEM after the delete (P1-13).
+    if org_dir.exists():
+        raise RuntimeError(
+            f"org purge of {org_id!r} left the org tree in place — the "
+            "accounting IS the deliverable")
 
     findings = []
     if firm_store is not None:
@@ -376,11 +393,12 @@ def purge_org(workspace: Path, org_id: str, *, actor: str,
         "org_record_removed": True,
         "sweep_clean": report.swept_clean,
     }
-    unaccounted = set(all_ids) - set(accounting["org_cards"])
-    if unaccounted:
+    survivors = [kb_id for kb_id in all_ids
+                 if (org_dir / "memory" / "cards" / f"{kb_id}.md").exists()]
+    if survivors:
         raise RuntimeError(
-            f"org purge of {org_id!r} left card(s) unaccounted: "
-            f"{sorted(unaccounted)} — the accounting IS the deliverable")
+            f"org purge of {org_id!r} left card(s) in place: {survivors} "
+            "— the accounting IS the deliverable")
     path = _write_lane_accounting(workspace / "orgs", f"purge-{org_id}",
                                   accounting)
     report.accounting = accounting

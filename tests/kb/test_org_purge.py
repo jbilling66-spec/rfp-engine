@@ -81,3 +81,38 @@ def test_lane_purges_answer_to_the_access_gate(tmp_path):
     assert (tmp_path / "orgs" / org_id / "org.json").exists()
     assert orgs.org_snapshot(tmp_path, org_id) is not None, \
         "the note survives the refused attempt intact"
+
+
+# ------------------------------------------------ P1-13: the empty lane
+
+def test_empty_org_purge_still_answers_to_the_gate(tmp_path):
+    """P1-13 (P26b-2): an org with zero notes used to be deleted whole
+    with no authorization call and no access-log line."""
+    from engine.kb.provenance import ProvenanceAccessDenied
+
+    org = orgs.create_org(tmp_path, "Synthetic County", created_by="Pat",
+                          at=AT)
+    org_id = org["org_id"]
+    with pytest.raises(ProvenanceAccessDenied):
+        purge_org(tmp_path, org_id, actor="Intruder")
+    assert (tmp_path / "orgs" / org_id / "org.json").exists(), \
+        "refused before anything was removed"
+    log = tmp_path / "orgs" / org_id / "memory" / "restricted" / "access.jsonl"
+    lines = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
+    assert lines[-1]["actor"] == "Intruder"
+    assert lines[-1]["granted"] is False
+    assert lines[-1]["action"] == "delete"
+    report = purge_org(tmp_path, org_id, actor="owner")
+    assert report.purged == []
+    assert not (tmp_path / "orgs" / org_id).exists()
+
+
+def test_org_purge_accounting_guard_fires(tmp_path, monkeypatch):
+    """The accounting measures the filesystem after the delete: a
+    deletion that silently did nothing is caught, not reported clean."""
+    import shutil
+
+    org_id, kb_id = _org_with_note(tmp_path)
+    monkeypatch.setattr(shutil, "rmtree", lambda *_a, **_k: None)
+    with pytest.raises(RuntimeError, match="left the org tree in place"):
+        purge_org(tmp_path, org_id, actor="owner")

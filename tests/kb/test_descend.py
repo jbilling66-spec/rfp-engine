@@ -99,6 +99,28 @@ def test_top_level_siblings_and_absent_parent(seeded):
     assert parent.results == []
 
 
+def test_restricted_anchor_descends_to_recorded_empty(seeded):
+    """M-28 (P26b-2): a use_restriction card is not a navigation handle
+    either — its siblings used to come back, leaking the restricted
+    card's position in the document. Recorded-empty, the anchor
+    withheld on the trace, exactly as search records it."""
+    from engine.runlog import read_run
+
+    store, ids = seeded
+    store.update_card_front(ids["Method"], use_restriction=True)
+    result = descend(store, ids["Method"], "siblings",
+                     log=_log(store, "run_0027"), stage="drafting",
+                     agent="section_drafter")
+    assert result.results == []
+    assert result.excluded == [{"kb_id": ids["Method"],
+                                "reason": "use_restriction"}]
+    records = read_run(store.root / "runs" / "run_0027" / "run.jsonl")
+    line = [r for r in records if r["record_type"] == "kb_retrieval"][-1]
+    assert line["kb"]["step"] == "path_descend"
+    assert line["kb"]["excluded"] == [ids["Method"]]
+    assert line["kb"]["empty_result"] is True
+
+
 def test_use_restriction_honored_and_recorded(seeded):
     store, ids = seeded
     store.update_card_front(ids["Tools"], use_restriction=True)

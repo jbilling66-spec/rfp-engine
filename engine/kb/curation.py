@@ -16,7 +16,7 @@ the same surface, in the same slice.
 
 from pathlib import Path
 
-from engine.contracts import append_fsync
+from engine.contracts import ContractError, append_fsync, path_lock
 
 from engine.flywheel.proposals import ProposalStore
 
@@ -146,15 +146,20 @@ def orphans_view(store) -> list[dict]:
     reviewed, not dropped). An orphan is a card a re-ingestion of its
     document no longer covers — retained in the store, listed from the
     persisted reconciliation reports, resolved through the existing
-    proposal lane (deprecate or keep). One row per orphaned card, newest
-    report wins for its reconciliation context."""
+    proposal lane (deprecate or keep). One row per orphaned card, the
+    LATEST reconciliation wins for its context — reports of one document
+    are ordered by lineage length (P1-38: a later reconciliation carries
+    a superset of priors), name as the tiebreak."""
     import json as _json
 
     recon_dir = store.root / "reconciliation"
     rows: dict[str, dict] = {}
     if recon_dir.is_dir():
-        for path in sorted(recon_dir.glob("*.json")):
-            report = _json.loads(path.read_text(encoding="utf-8"))
+        reports = [(path.name, _json.loads(path.read_text(encoding="utf-8")))
+                   for path in recon_dir.glob("*.json")]
+        reports.sort(key=lambda item: (len(item[1].get("prior_doc_ids", [])),
+                                       item[0]))
+        for _name, report in reports:
             for kb_id in report.get("orphaned", []):
                 if not store.card_exists(kb_id):
                     continue  # deprecated since — no longer a queue item
@@ -268,6 +273,20 @@ def _apply_new_card(store, proposal: dict, fill: dict,
     claim, a human vouches for it (the owner's call, B59). The purge link
     rides derived_from (the source chunk card), so the atom cascades
     with its client without the proposal ever naming one."""
+    card, body, derived_from = _check_new_card(store, proposal, fill)
+    provenance = {
+        "source_pursuit": (proposal.get("source") or {}).get("pursuit_id", ""),
+        "ingested_by": f"steward:{operator}",
+        "derived_from": list(derived_from),
+    }
+    store.write_card(card, body, provenance, {})
+    return card["kb_id"]
+
+
+def _check_new_card(store, proposal: dict, fill: dict) -> tuple[dict, str, list]:
+    """Every refusal a new_card acceptance can raise, with NO write —
+    the validation pass of merge_batch (P1-21) runs this for the whole
+    batch before anything applies. Returns (card, body, derived_from)."""
     from engine.kb.identity import kb_id_for
     from engine.kb.ingest import _placeholders_used
 
@@ -305,13 +324,7 @@ def _apply_new_card(store, proposal: dict, fill: dict,
         raise CurationRefused(
             f"{proposal['proposal_id']}: {card['kb_id']} already exists "
             f"— this content is already in the store")
-    provenance = {
-        "source_pursuit": (proposal.get("source") or {}).get("pursuit_id", ""),
-        "ingested_by": f"steward:{operator}",
-        "derived_from": list(derived_from),
-    }
-    store.write_card(card, body, provenance, {})
-    return card["kb_id"]
+    return card, body, derived_from
 
 
 def merge_batch(store, proposal_ids: list[str], *, operator: str,
@@ -321,33 +334,85 @@ def merge_batch(store, proposal_ids: list[str], *, operator: str,
     answerable without replaying forty individual decisions.
 
     `fills` (P13/C15): {proposal_id: {owner, verified_date, …}} — the
-    steward-supplied fields a new_card acceptance requires."""
+    steward-supplied fields a new_card acceptance requires.
+
+    The whole batch — the status checks, the writes, the decisions and
+    the log line — is ONE critical section under the KB root's lock
+    (P1-40): two stewards merging at once used to interleave, and both
+    snapshot pairs lied."""
+    with path_lock(store.root):
+        return _merge_batch_locked(store, proposal_ids, operator=operator,
+                                   at=at, fills=fills)
+
+
+def _merge_batch_locked(store, proposal_ids: list[str], *, operator: str,
+                        at: str, fills: dict | None = None) -> dict:
+    """Two passes (P1-21). Pass 1 validates the WHOLE batch and writes
+    nothing: every proposal is `proposed`, every update targets a card
+    that exists and would still validate with the change applied (a
+    dry run of the write — a diff the front matter cannot take, such as
+    the flywheel's `text`, is refused here, never written), every new
+    card passes its checks with its fill. A refusal applies nothing,
+    decides nothing, logs nothing. Pass 2 applies; if it dies mid-way
+    the curation-log line is still written naming what applied and
+    why it stopped — the record of "what changed" is exactly what a
+    half-applied batch used to lose."""
     import json
 
+    from engine.contracts import validate
+
     proposals = ProposalStore(store.root)
-    snapshot_before = store.snapshot()
-    accepted = []
     fills = fills or {}
+    staged: list[tuple[str, dict, dict]] = []
     for pid in proposal_ids:
         proposal = proposals.read(pid)
         if proposal["status"] != "proposed":
             raise CurationRefused(
                 f"{pid} is already {proposal['status']} — a decision is "
                 f"made once")
+        fields: dict = {}
         if proposal["kind"] == "update_card" and proposal.get("kb_id"):
+            kb_id = proposal["kb_id"]
+            if not store.card_exists(kb_id):
+                raise CurationRefused(
+                    f"{pid}: {kb_id} no longer exists — nothing to update")
             fields = {name: change["after"]
                       for name, change in (proposal.get("diff") or {}).items()}
             if fields:
-                store.update_card_front(proposal["kb_id"], **fields)
+                card, _body = store.read_card(kb_id)
+                try:
+                    validate("kb_card", {**card, **fields})
+                except ContractError as exc:
+                    raise CurationRefused(
+                        f"{pid}: the change does not fit {kb_id}'s front "
+                        f"matter ({exc}) — refused before anything applied"
+                    ) from exc
         elif proposal["kind"] == "new_card":
-            _apply_new_card(store, proposal, fills.get(pid) or {}, operator)
-        proposals.decide(pid, decision="accepted", by=operator, at=at)
-        accepted.append(pid)
+            _check_new_card(store, proposal, fills.get(pid) or {})
+        staged.append((pid, proposal, fields))
 
-    line = {"at": at, "by": operator, "proposal_ids": accepted,
-            "snapshot_before": snapshot_before,
-            "snapshot_after": store.snapshot()}
-    log = store.root / "curation-log.jsonl"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    append_fsync(log, json.dumps(line, sort_keys=True))  # P0-6
+    snapshot_before = store.snapshot()
+    accepted: list[str] = []
+    aborted: str | None = None
+    try:
+        for pid, proposal, fields in staged:
+            if fields:
+                store.update_card_front(proposal["kb_id"], **fields)
+            elif proposal["kind"] == "new_card":
+                _apply_new_card(store, proposal, fills.get(pid) or {},
+                                operator)
+            proposals.decide(pid, decision="accepted", by=operator, at=at)
+            accepted.append(pid)
+    except BaseException as exc:  # noqa: BLE001 — logged, then re-raised
+        aborted = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        line = {"at": at, "by": operator, "proposal_ids": accepted,
+                "snapshot_before": snapshot_before,
+                "snapshot_after": store.snapshot()}
+        if aborted is not None:
+            line["aborted"] = aborted
+        log = store.root / "curation-log.jsonl"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        append_fsync(log, json.dumps(line, sort_keys=True))  # P0-6
     return line

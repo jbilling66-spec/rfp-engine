@@ -172,6 +172,35 @@ def test_accept_is_pursuit_scoped_and_stamps_final(reviewed):
     assert stamped and all(s["draft_status"] == "final" for s in stamped)
 
 
+def test_append_revised_keeps_the_id_and_refuses_an_unknown_one(tmp_path):
+    """D30 (P1-41): a revised line is a copy of an existing event under
+    the same id; the lane reads last-wins; an id the lane never minted
+    is refused — a revision revises a record."""
+    from engine.web.events import EventsError
+    from engine.workspace import PursuitDir
+
+    lane = EventsLane(PursuitDir(tmp_path, "pur_rev"))
+    event = lane.append("edit", at=FIXED_AT, actor="Pat",
+                        actor_role="pursuit_lead", section_id="s1",
+                        before="seven", after="nine")
+    revised = {**event, "flywheel_routing": {
+        "target": "fact_sheet", "action_taken": "proposal:prop_0123456789ab",
+        "processed_at": FIXED_AT}}
+    lane.append_revised(revised)
+    seen = lane.read()
+    assert len(seen) == 1
+    assert seen[0]["event_id"] == event["event_id"]
+    assert seen[0]["flywheel_routing"]["target"] == "fact_sheet"
+    raw = (lane.events_path.read_text(encoding="utf-8")).splitlines()
+    assert len(raw) == 2, "append-only: the original line stays"
+    with pytest.raises(EventsError, match="not an event of this lane"):
+        lane.append_revised({**revised, "event_id": "evt_0099"})
+    nxt = lane.append("edit", at=FIXED_AT, actor="Pat",
+                      actor_role="pursuit_lead", section_id="s1",
+                      before="nine", after="ten")
+    assert nxt["event_id"] == "evt_0002", "the mint counts ids, not lines"
+
+
 def test_accept_refuses_blocked_packaging(tmp_path):
     pursuit, report, _ = run_validation_package(
         tmp_path, script=make_validation_script(plant_unsupported=True))

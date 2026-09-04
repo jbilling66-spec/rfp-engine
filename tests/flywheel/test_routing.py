@@ -53,6 +53,23 @@ def test_a_removed_prohibited_term_reads_as_tone():
         voice_terms=["world-class"]) == "tone"
 
 
+@pytest.mark.parametrize("before,after", [
+    ("A budget of 1,200 hours.", "A budget of 2,100 hours."),
+    ("Go-live in 2024.", "Go-live in 2042."),
+    ("12 sites in wave one.", "21 sites in wave one."),
+    ("Fees of 1,975,000 over 3 years.", "Fees of 1,975,000 over 3.5 years."),
+])
+def test_a_changed_number_reads_as_factual_whatever_its_digits(before, after):
+    """P2-50 (P26b-2): the digit SET used to compare equal for every one
+    of these — the number changed, the digits did not."""
+    assert infer_edit_reason(_edit(before, after)) == "factual"
+
+
+def test_the_same_numbers_in_the_same_order_are_not_factual():
+    assert infer_edit_reason(
+        _edit("3 firms, 2 offices.", "3 firms and 2 offices.")) == "other"
+
+
 def test_inference_stays_conservative():
     """A wrong route sends a lesson to the wrong home, where a human then
     has to notice it. Unclear edits are 'other', not a confident guess."""

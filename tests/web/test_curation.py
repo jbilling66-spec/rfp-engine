@@ -229,6 +229,65 @@ def test_a_batch_merge_writes_one_curation_log_line(client, tmp_path):
     assert len(lines[0]["proposal_ids"]) == 2
 
 
+def test_concurrent_merge_through_the_route(client, monkeypatch):
+    """P1-40 at the door: two stewards' merges of one proposal, in
+    flight together on the server's thread pool — one 200, one 409,
+    never two acceptances. The write is slowed so the requests overlap."""
+    import threading
+    import time
+
+    from engine.kb.store import KBStore
+
+    proposal = client.post("/api/kb/proposals", json={
+        "kb_id": "kb_alpha0001", "changes": {"summary": "Raced."}}).json()
+    pid = proposal["proposal_id"]
+    original = KBStore.update_card_front
+
+    def slow(self, kb_id, **fields):
+        time.sleep(0.3)
+        return original(self, kb_id, **fields)
+
+    monkeypatch.setattr(KBStore, "update_card_front", slow)
+    statuses: list[int] = []
+
+    def merge():
+        statuses.append(client.post("/api/kb/proposals/merge",
+                                    json={"proposal_ids": [pid]}).status_code)
+
+    threads = [threading.Thread(target=merge) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+    assert sorted(statuses) == [200, 409], statuses
+
+
+def test_accept_then_reject_is_refused(client, tmp_path):
+    """P1-39: the reject door used to overwrite an accepted proposal's
+    decided block while the curation log still recorded the merge."""
+    proposal = client.post("/api/kb/proposals", json={
+        "kb_id": "kb_alpha0001", "changes": {"summary": "Settled."}}).json()
+    pid = proposal["proposal_id"]
+    assert client.post(f"/api/kb/proposals/{pid}/decide",
+                       json={"decision": "accepted"}).status_code == 200
+    again = client.post(f"/api/kb/proposals/{pid}/decide",
+                        json={"decision": "rejected", "note": "changed my mind"})
+    assert again.status_code == 409
+    assert "decision is made once" in again.json()["detail"]
+    kept = client.get("/api/kb/proposals", params={"status": "accepted"}).json()
+    decided = [p for p in kept["proposals"] if p["proposal_id"] == pid][0]
+    assert decided["decided"]["decision"] == "accepted"
+    assert "note" not in decided["decided"]
+    log = tmp_path / "ws" / "kb" / "curation-log.jsonl"
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_rejecting_an_unknown_proposal_is_404(client):
+    gone = client.post("/api/kb/proposals/prop_0123456789ab/decide",
+                       json={"decision": "rejected"})
+    assert gone.status_code == 404
+
+
 def test_deciding_twice_is_refused(client):
     proposal = client.post("/api/kb/proposals", json={
         "kb_id": "kb_alpha0001", "changes": {"summary": "Once."}}).json()

@@ -124,6 +124,31 @@ def test_facet_filter_narrows_without_moving_scores(seeded):
     assert line["kb"]["catalog_size"] > 0
 
 
+def test_exclude_does_not_move_scores(seeded):
+    """M-29 (P26b-2): `exclude` is per-query, so it filters AFTER the
+    idf computation like facets — a surviving card's score is identical
+    with and without it, and the catalog size on the line (the idf
+    corpus) does not shrink."""
+    log = _log(seeded, "run_0199")
+    query = "how is legacy data converted and reconciled?"
+    plain = card_search(seeded, query, log=log, stage="drafting",
+                        agent="section_drafter")
+    assert len(plain.results) >= 2
+    dropped = plain.results[0].kb_id
+    narrowed = card_search(seeded, query, log=log, stage="drafting",
+                           agent="section_drafter",
+                           exclude=frozenset({dropped}))
+    assert dropped not in {r.kb_id for r in narrowed.results}
+    assert {"kb_id": dropped, "reason": "replay_excluded"} in narrowed.excluded
+    plain_scores = {r.kb_id: r.score for r in plain.results}
+    for scored in narrowed.results:
+        if scored.kb_id in plain_scores:
+            assert scored.score == plain_scores[scored.kb_id]
+    records = read_run(seeded.root / "runs" / "run_0199" / "run.jsonl")
+    lines = [r for r in records if r["record_type"] == "kb_retrieval"][-2:]
+    assert lines[0]["kb"]["catalog_size"] == lines[1]["kb"]["catalog_size"]
+
+
 def test_card_search_lines_carry_catalog_size(seeded):
     log = _log(seeded, "run_0105")
     card_search(seeded, QUESTIONS[0][0], log=log, stage="drafting",

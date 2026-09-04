@@ -158,9 +158,6 @@ def card_search(store: KBStore | Lanes, query: str, *, log, stage, agent,
                 # fact cards never shift any score, and NOT an excluded row
                 # (those record refusals of otherwise-eligible cards).
                 continue
-            if card["kb_id"] in exclude:
-                result.excluded.append({"kb_id": card["kb_id"], "reason": "replay_excluded"})
-                continue
             if card.get("use_restriction"):
                 result.excluded.append({"kb_id": card["kb_id"], "reason": "use_restriction"})
                 continue
@@ -168,8 +165,19 @@ def card_search(store: KBStore | Lanes, query: str, *, log, stage, agent,
 
     idf = idf_weights([tokens for _, tokens in active])
     query_tokens = tokenize(query)
-    eligible = (active if not facets
-                else [(c, t) for c, t in active if _matches_facets(c, facets)])
+    # M-29 (P26b-2): `exclude` is PER-QUERY (replay hygiene), so it is a
+    # post-idf filter like facets — the rank.py law: corpus statistics
+    # never shift with per-query filtering. It used to sit in the loop
+    # above, beside the corpus-constant filters.
+    eligible = active
+    if exclude:
+        for card, _tokens in active:
+            if card["kb_id"] in exclude:
+                result.excluded.append(
+                    {"kb_id": card["kb_id"], "reason": "replay_excluded"})
+        eligible = [(c, t) for c, t in active if c["kb_id"] not in exclude]
+    if facets:
+        eligible = [(c, t) for c, t in eligible if _matches_facets(c, facets)]
     scored = sorted(
         ((bm25_score(query_tokens, tokens, idf), card) for card, tokens in eligible),
         # B15 (P13/C12): observed survival breaks score ties before
@@ -213,6 +221,17 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
     cd = card.get("canonical_doc_id")
     path = list(card.get("doc_path") or ())
     result = SearchResult()
+    if card.get("use_restriction"):
+        # M-28 (P26b-2): the ANCHOR answers to D2 too — a restricted card
+        # used to be a usable navigation handle whose position and
+        # neighbours were enumerable through descend. Recorded-empty,
+        # the withheld anchor on the trace (the same shape as search).
+        result.excluded.append({"kb_id": kb_id, "reason": "use_restriction"})
+        emit_kb_retrieval(
+            log, stage=stage, agent=agent, query=query, step="path_descend",
+            cards_returned=[], excluded=[kb_id], empty_result=True,
+            target=target, path=path, relation=relation)
+        return result
     if not cd or not model_path(store.root, cd).exists():
         emit_kb_retrieval(
             log, stage=stage, agent=agent, query=query, step="path_descend",

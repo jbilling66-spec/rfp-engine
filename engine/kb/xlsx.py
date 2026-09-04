@@ -333,15 +333,18 @@ def submit_import(store, path: Path, *, operator: str, at: str) -> dict:
         plan["proposals"] = []
         return plan
 
+    from engine.contracts import path_lock
+
     proposals = ProposalStore(store.root)
     opened = []
-    for change in plan["changes"]:
-        proposal = proposals.open(
-            source={"door": "xlsx_import", "operator": operator},
-            target="corpus", kind="update_card", at=at,
-            kb_id=change["kb_id"], diff=change["diff"],
-            note=f"Edited in the KB workbook by {operator}.")
-        opened.append(proposal["proposal_id"])
+    with path_lock(store.root):  # P1-40: the batch opens as one step
+        for change in plan["changes"]:
+            proposal = proposals.open(
+                source={"door": "xlsx_import", "operator": operator},
+                target="corpus", kind="update_card", at=at,
+                kb_id=change["kb_id"], diff=change["diff"],
+                note=f"Edited in the KB workbook by {operator}.")
+            opened.append(proposal["proposal_id"])
     plan["proposals"] = opened
     plan["message"] = (
         f"{len(opened)} change proposal(s) created; {plan['unchanged']} "

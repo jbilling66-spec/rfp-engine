@@ -31,7 +31,14 @@ ROUTE = {
     "other": "none",
 }
 
-_NUMERIC = re.compile(r"\d")
+# P2-50 (P26b-2): number TOKENS in order, thousands separators dropped
+# — the digit SET compared before, so 1,200→2,100, 2024→2042 and 12→21
+# all read "no number changed" and routed nowhere.
+_NUMERIC = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _numbers(text: str) -> list[str]:
+    return [m.replace(",", "") for m in _NUMERIC.findall(text)]
 
 
 def infer_edit_reason(event: dict, *, voice_terms=()) -> str:
@@ -48,7 +55,7 @@ def infer_edit_reason(event: dict, *, voice_terms=()) -> str:
     before = event.get("before") or ""
     after = event.get("after") or ""
 
-    if set(_NUMERIC.findall(before)) != set(_NUMERIC.findall(after)):
+    if _numbers(before) != _numbers(after):
         return "factual"
     lowered_before, lowered_after = before.lower(), after.lower()
     for term in voice_terms:

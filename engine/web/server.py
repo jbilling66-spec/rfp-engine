@@ -605,7 +605,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.get("/api/kb/proposals")
     def kb_proposals(status: str | None = None):
         from engine.flywheel.proposals import ProposalStore
-        return {"proposals": ProposalStore(kb_root).list(status=status)}
+        try:
+            return {"proposals": ProposalStore(kb_root).list(status=status)}
+        except ContractError as exc:
+            # M-30: one bad file names itself instead of 500ing the inbox.
+            raise HTTPException(status_code=409, detail=str(exc))
 
     def _kb_id_shape(value) -> str:
         """P2-23 (P26b-1, B112): the store refuses a malformed id before it
@@ -648,7 +652,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/kb/proposals/{proposal_id}/decide")
     def kb_decide(proposal_id: str, payload: dict,
                   who: str = Depends(operator)):
-        from engine.flywheel.proposals import ProposalStore
+        from engine.flywheel.proposals import ProposalStateError, ProposalStore
         proposal_id = _proposal_id_shape(proposal_id)  # P2-23
         decision = payload.get("decision")
         if decision not in ("accepted", "rejected"):
@@ -659,9 +663,14 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             # curation log records it exactly like any other merge.
             return kb_merge({"proposal_ids": [proposal_id],
                              "at": payload.get("at")}, who)
-        return ProposalStore(kb_root).decide(
-            proposal_id, decision="rejected", by=who, at=_at(payload),
-            note=payload.get("note", ""))
+        try:
+            return ProposalStore(kb_root).decide(
+                proposal_id, decision="rejected", by=who, at=_at(payload),
+                note=payload.get("note", ""))
+        except ProposalStateError as refusal:  # P1-39: decided once
+            raise HTTPException(status_code=409, detail=str(refusal))
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="no such proposal")
 
     @app.post("/api/kb/proposals/merge")
     def kb_merge(payload: dict, who: str = Depends(operator)):
@@ -676,6 +685,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                                at=_at(payload))
         except CurationRefused as refusal:
             raise HTTPException(status_code=409, detail=str(refusal))
+        except ContractError as exc:  # M-30: a bad proposal file, by name
+            raise HTTPException(status_code=409, detail=str(exc))
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="no such proposal")
 
@@ -1931,7 +1942,16 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                     section["draft_status"] = "final"
             PursuitDir(workspace, pursuit_id).write_artifact(
                 "pursuit_plan", plan)
-        return event
+            # P1-41: the flywheel turns here (the owner's call, B114 §2)
+            # — the accept is durable above; what follows is reported,
+            # never an un-accept.
+            from engine.web.learn import learn_from_accept
+            try:
+                flywheel = learn_from_accept(workspace, kb_root, pursuit_id,
+                                             at=at)
+            except Exception as exc:  # noqa: BLE001 — surfaced in the body
+                flywheel = {"error": f"{type(exc).__name__}: {exc}"}
+        return {**event, "flywheel": flywheel}
 
     @app.post("/api/pursuits/{pursuit_id}/outcome")
     def record_outcome(pursuit_id: str, payload: dict,

@@ -149,6 +149,27 @@ def test_empty_before_scores_one_not_zero():
     assert text_survival("", "brand new text") == 1.0
 
 
+def test_long_section_scores_are_length_independent():
+    """P2-45 (P26b-2): with autojunk on, one changed word in a 200+
+    character section scored far below the same edit in a short one.
+    The same edit scores the same at both lengths, within rounding."""
+    short = ("The migration factory ran seven mock conversions before the "
+             "first load, each signed off by the controller.")
+    long = " ".join(
+        f"Wave {n} converted the {kind} ledger with a governed crosswalk "
+        f"workbook signed off by the controller's office before load."
+        for n, kind in enumerate(("general", "payables", "receivables",
+                                  "assets", "payroll", "projects", "grants",
+                                  "inventory", "treasury", "budget"), 1))
+    assert len(long) > 1200
+    short_edit = short.replace("seven", "nine")
+    long_edit = long.replace("payroll ledger", "people ledger")
+    short_score = text_survival(short, short_edit)
+    long_score = text_survival(long, long_edit)
+    assert long_score > 0.95
+    assert abs(long_score - short_score) < 0.05
+
+
 def test_survival_is_bounded_and_ordered():
     assert text_survival(DRAFTED, DRAFTED) == 1.0
     assert 0.0 <= text_survival(DRAFTED, "") <= 0.1
@@ -157,6 +178,23 @@ def test_survival_is_bounded_and_ordered():
 
 
 # ------------------------------------- writer and resolver cannot diverge
+
+def test_a_routed_copy_does_not_double_count_its_edit():
+    """P1-41: the accept door appends a revised copy of a routed edit
+    (same event_id). Read through the walker's last-wins collapse it is
+    one edit; fed raw it must still not be attributed twice."""
+    from engine.metrics.walker import last_wins
+
+    edit = _edit("pur_a", "s_heavy", DRAFTED, HEAVY_EDIT)
+    revised = {**edit, "flywheel_routing": {
+        "target": "fact_sheet", "action_taken": "proposal:prop_x",
+        "processed_at": "2026-08-03T12:00:00Z"}}
+    records = [_cite("pur_a", "s_heavy", ["kb_heavy"])]
+    once = card_survival(records, [edit])
+    twice = card_survival(records, last_wins([edit, revised]))
+    assert twice == once
+    assert twice["kb_heavy"]["observations"] == 1
+
 
 def test_the_card_writer_stores_what_the_resolver_reports(tmp_path):
     """B40/D18: one implementation, two consumers. The number persisted

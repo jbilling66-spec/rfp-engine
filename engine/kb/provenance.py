@@ -112,8 +112,11 @@ class RestrictedStore:
     # Retained source bytes are UN-anonymized client material, so they live
     # behind the same restricted boundary as provenance — the accept clause
     # allows raw text only in the pursuit workspace and here. Writes follow
-    # the provenance write posture (ingestion/purge code paths); there is
-    # deliberately no read door until something needs one.
+    # the provenance write posture (ingestion/purge code paths). The READ
+    # doors below (existence, meta, the listing) answer to the same law as
+    # every other read here — a line first, then the decision (P26b-2,
+    # P2-46: they used to answer without one, and the meta carries the
+    # real source_client). The raw bytes themselves still have no reader.
 
     def _source_dir(self) -> Path:
         return self.root / "sources"
@@ -128,20 +131,38 @@ class RestrictedStore:
         write_bytes_atomic(path, raw)  # P0-6: the one primitive
         self._atomic_write(src_dir / f"{doc_id}.json", dict(meta))
 
-    def source_exists(self, doc_id: str) -> bool:
+    def source_exists(self, doc_id: str, *, actor: str, purpose: str) -> bool:
+        """An existence oracle over retained client material is a read."""
+        self._authorize(actor, purpose, "source_read", doc_id=doc_id)
         return (self._source_dir() / f"{doc_id}.src").exists()
 
-    def source_meta(self, doc_id: str) -> dict:
+    def source_meta(self, doc_id: str, *, actor: str, purpose: str) -> dict:
+        self._authorize(actor, purpose, "source_read", doc_id=doc_id)
         return json.loads(
             (self._source_dir() / f"{doc_id}.json").read_text(
                 encoding="utf-8"))
+
+    def source_metas(self, *, actor: str, purpose: str) -> dict[str, dict]:
+        """Every retained artifact's meta in one logged read (lineage and
+        purge walk all of them; one line per walk, not one per file)."""
+        self._authorize(actor, purpose, "source_read")
+        src_dir = self._source_dir()
+        out: dict[str, dict] = {}
+        if not src_dir.is_dir():
+            return out
+        for src in sorted(src_dir.glob("*.src")):
+            meta = src_dir / f"{src.stem}.json"
+            if meta.exists():
+                out[src.stem] = json.loads(meta.read_text(encoding="utf-8"))
+        return out
 
     def delete_source(self, doc_id: str) -> None:
         """Purge-path removal of a retained L0 artifact and its meta."""
         (self._source_dir() / f"{doc_id}.src").unlink(missing_ok=True)
         (self._source_dir() / f"{doc_id}.json").unlink(missing_ok=True)
 
-    def list_source_ids(self) -> list[str]:
+    def list_source_ids(self, *, actor: str, purpose: str) -> list[str]:
+        self._authorize(actor, purpose, "list_sources")
         if not self._source_dir().is_dir():
             return []
         return sorted(p.stem for p in self._source_dir().glob("*.src"))
@@ -152,7 +173,7 @@ class RestrictedStore:
         """Merge bookkeeping: a near-duplicate's contributing source joins the
         survivor's record so purging either client removes the card (D1).
         `absorbed` is the never-written candidate's content-anchored id —
-        folded into derived_from so absorbed_owner() recognizes the same
+        folded into derived_from so absorbed_owners() recognizes the same
         content next time (P13/C8: idempotent re-ingest needs the memory
         in BOTH merge branches, not just the candidate-wins one)."""
         record = json.loads(self._path(kb_id).read_text(encoding="utf-8"))
@@ -177,7 +198,7 @@ class RestrictedStore:
         The loser's OWN id joins the survivor's derived_from too (P13/C8):
         with content-anchored ids the absorbed id IS the absorbed content's
         hash, so this fold is the store's memory that the content already
-        lives here — absorbed_owner() reads it to keep re-ingestion
+        lives here — absorbed_owners() reads it to keep re-ingestion
         idempotent instead of re-fighting the merge every round."""
         src = json.loads(self._path(src_kb_id).read_text(encoding="utf-8"))
         dst = json.loads(self._path(dst_kb_id).read_text(encoding="utf-8"))
@@ -191,15 +212,27 @@ class RestrictedStore:
         self._atomic_write(self._path(dst_kb_id), dst)
         self._path(src_kb_id).unlink()
 
-    def absorbed_owner(self, kb_id: str) -> str | None:
-        """The surviving card whose record lists kb_id in derived_from —
-        i.e. the card this content was merged into. Write-path helper
-        (same posture as merge_into), not an access-controlled read."""
+    def absorbed_owners(self, *, actor: str, purpose: str) -> dict[str, str]:
+        """absorbed kb_id -> the surviving card whose record lists it in
+        derived_from (the card its content was merged into). One logged
+        walk over the provenance records (P26b-2, P2-46: the per-id
+        lookup answered without a line, and ingest asked once per
+        candidate — the caller now holds the map)."""
+        self._authorize(actor, purpose, "absorbed_lookup")
+        owners: dict[str, str] = {}
         for path in sorted(self.prov_dir.glob("*.json")):
             record = json.loads(path.read_text(encoding="utf-8"))
-            if kb_id in record.get("derived_from", []):
-                return path.stem
-        return None
+            for absorbed in record.get("derived_from", []):
+                owners.setdefault(absorbed, path.stem)
+        return owners
+
+    def authorize(self, actor: str, purpose: str, action: str = "delete",
+                  **fields) -> None:
+        """A lane-wide decision with no single record to read — the purge
+        of a whole lane authorizes here BEFORE anything is removed, empty
+        lane or not (P26b-2, P1-13: an empty lane used to skip the gate
+        and delete unlogged). Logs, then refuses."""
+        self._authorize(actor, purpose, action, **fields)
 
     def humans(self, purpose: str) -> list[str]:
         """Named humans holding a purpose — the routing targets for findings

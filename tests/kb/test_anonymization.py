@@ -12,7 +12,8 @@ from pathlib import Path
 
 from engine.contracts import validate
 from engine.kb.anonymize import apply_placeholders, scan, scan_passed
-from engine.kb.evalset import default_script, evaluate_anonymization_set
+from engine.kb.evalset import (default_script, evaluate_anonymization_set,
+                               retrievable_text)
 from engine.runlog import read_run
 
 from tests.kb.fixtures.corpus import PLANTED, ingest_corpus
@@ -21,10 +22,9 @@ CASES_PATH = Path(__file__).resolve().parents[2] / "evals" / "anonymization" / "
 
 
 def _retrievable_text(store) -> str:
-    return "\n".join(
-        p.read_text(encoding="utf-8")
-        for p in (store.root / "cards").glob("*.md")
-    )
+    # M-27: the same reach as the eval harness — cards, L1 models,
+    # proposals — never narrower than the lane the release gates on.
+    return "\n".join(retrievable_text(store).values())
 
 
 def test_planted_identifiers_absent_from_all_retrievable_text(tmp_path):
@@ -124,6 +124,28 @@ def test_anonymization_code_postpass_recall_true_over_eval_set(tmp_path):
     result, failures = evaluate_anonymization_set(CASES_PATH, tmp_path)
     assert failures == []
     assert result is True and isinstance(result, bool)
+
+
+def test_harness_catches_a_leak_in_the_canonical_model_only(tmp_path):
+    """M-27 (P26b-2): an identifier that survives into an L1 model
+    element but into no card was invisible to the harness. Plant one
+    after a clean ingest of the first case and run the harness's own
+    scan over the store: the failure names the canonical source."""
+    from engine.kb import KBStore
+
+    cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    case = next(c for c in cases if not c["input"].get("generator"))
+    ok, failures = evaluate_anonymization_set(CASES_PATH, tmp_path)
+    assert ok and failures == []
+    store = KBStore(tmp_path / case["case_id"] / "kb")
+    model_path = next((store.root / "canonical").glob("*.json"))
+    model = json.loads(model_path.read_text(encoding="utf-8"))
+    needle = case["expected"]["labels"][0]
+    model["elements"][0]["text"] += f" {needle}"
+    model_path.write_text(json.dumps(model), encoding="utf-8")
+    text = retrievable_text(store)
+    assert needle.lower() not in text["card"]
+    assert needle.lower() in text["canonical"]
 
 
 def test_eval_cases_validate_and_held_out_quota():

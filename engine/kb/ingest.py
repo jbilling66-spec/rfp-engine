@@ -444,7 +444,10 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     # artifact sits behind the access log either way, and the audit
     # human adjudicating a block needs the source). Whether THIS content
     # was seen before is captured first — it decides re-ingest below.
-    was_seen = store.restricted.source_exists(doc_id)
+    was_seen = store.restricted.source_exists(
+        doc_id, actor=actor, purpose="ingest")
+    # The merge fold, read once per ingest (P2-46): absorbed id -> owner.
+    absorbed = store.restricted.absorbed_owners(actor=actor, purpose="ingest")
     store.restricted.write_source(doc_id, source_bytes, {
         "doc_id": doc.doc_id, "source_hash": source_hash,
         # C16: the client linkage lives in the RESTRICTED meta so a
@@ -500,7 +503,8 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     # takes its prior card's id and history BEFORE anything is written,
     # so ids never rotate and edit_survival never orphans.
     recon = None
-    prior_cds = prior_models(store, doc.doc_id, doc_id)
+    prior_cds = prior_models(store, doc.doc_id, doc_id,
+                             actor=actor, purpose="ingest")
     if prior_cds or was_seen:
         lineage = prior_cds + ([doc_id] if was_seen else [])
         recon = ReconciliationReport(doc_id=doc.doc_id,
@@ -508,15 +512,30 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
                                      prior_doc_ids=lineage)
         priors = prior_cards(store, lineage)
         prior_ids = {p["kb_id"] for p, _ in priors}
+        # P1-37 (P26b-2): a drifted card keeps its ORIGINAL id by design
+        # (ids never rotate), so its filename no longer prefixes its
+        # content hash. The id bucket alone re-classified the same
+        # unchanged bytes as drifted (0.0) on every later ingest; the
+        # content bucket recognises them. Pre-WP13 cards carry no
+        # identity block and simply never populate this map.
+        prior_by_hash = {
+            p["identity"]["content_hash"]: p for p, _ in priors
+            if (p.get("identity") or {}).get("content_hash")}
         covered: set[str] = set()
         unmatched_cands = []
         for cand in candidates:
             kb_id = cand["card"]["kb_id"]
+            cand_hash = cand["card"]["identity"]["content_hash"]
             if kb_id in prior_ids:
                 recon.matched.append(kb_id)
                 covered.add(kb_id)
-            elif (store.card_exists(kb_id)
-                  or store.restricted.absorbed_owner(kb_id)):
+            elif (cand_hash in prior_by_hash
+                  and prior_by_hash[cand_hash]["kb_id"] not in covered):
+                prior = prior_by_hash[cand_hash]
+                cand["card"]["kb_id"] = prior["kb_id"]  # same bytes, kept id
+                recon.matched.append(prior["kb_id"])
+                covered.add(prior["kb_id"])
+            elif store.card_exists(kb_id) or kb_id in absorbed:
                 recon.matched.append(kb_id)  # same content, other home
             else:
                 unmatched_cands.append(cand)
@@ -630,7 +649,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
         # again with the same content-anchored id — recognize it from the
         # survivor's derived_from fold and append this source rather than
         # re-fighting the merge (idempotent re-ingest, R6).
-        owner = store.restricted.absorbed_owner(card["kb_id"])
+        owner = absorbed.get(card["kb_id"])
         if owner is not None and store.card_exists(owner):
             store.restricted.append_source(owner, provenance, identifiers)
             report.merged.append({"survivor": owner,
@@ -686,6 +705,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
                     card["edit_survival"] = top_card["edit_survival"]
                 store.write_card(card, body, provenance, identifiers)
                 store.restricted.merge_into(top_card["kb_id"], card["kb_id"])
+                absorbed[top_card["kb_id"]] = card["kb_id"]
                 store.delete_card(top_card["kb_id"])
                 existing = [(c, t) for c, t in existing
                             if c["kb_id"] != top_card["kb_id"]]
@@ -698,6 +718,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
                 store.restricted.append_source(top_card["kb_id"], provenance,
                                                identifiers,
                                                absorbed=card["kb_id"])
+                absorbed[card["kb_id"]] = top_card["kb_id"]
                 report.merged.append({"survivor": top_card["kb_id"],
                                       "absorbed": card["kb_id"],
                                       "score": top_score})

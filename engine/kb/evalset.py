@@ -128,10 +128,7 @@ def evaluate_anonymization_set(cases_path: Path, workdir: Path,
         )
         report = ingest_document(store, caller, log, doc)
 
-        retrievable = " ".join(
-            " ".join(p.read_text(encoding="utf-8").split())
-            for p in (store.root / "cards").glob("*.md")
-        ).lower()
+        retrievable = retrievable_text(store)
         expected = case.get("expected", {})
         # C11: a document carrying an image must come out media-flagged —
         # a logo or signature is identity the text scan cannot see.
@@ -142,8 +139,45 @@ def evaluate_anonymization_set(cases_path: Path, workdir: Path,
             )
         banned = expected.get("labels", []) + expected.get("must_not_contain", [])
         for needle in banned:
-            if needle.lower() in retrievable:
+            where = [source for source, text in retrievable.items()
+                     if needle.lower() in text]
+            if where:
                 failures.append(
-                    f"{case['case_id']}: {needle!r} is retrievable"
+                    f"{case['case_id']}: {needle!r} is retrievable "
+                    f"({', '.join(where)})"
                 )
     return (not failures), failures
+
+
+def retrievable_text(store) -> dict[str, str]:
+    """Everything ingestion persists that a reader could retrieve, by
+    source: the cards, every element text of every L1 model (loaded as
+    JSON — the raw file's escaping would hide a needle), and every
+    proposal's diff and note. Whitespace-collapsed, lowercased.
+
+    M-27 (P26b-2): the harness used to read cards/*.md only while
+    ingestion also writes kb/canonical/ (a figure chunk that mints no
+    card lives ONLY there) and kb/proposals/ — the identifier index the
+    code gate uses is exactly what this harness exists to double-check,
+    so it must look everywhere the gate writes."""
+    import json as _json
+
+    def _collapse(parts) -> str:
+        return " ".join(" ".join(str(p).split()) for p in parts if p).lower()
+
+    cards = [p.read_text(encoding="utf-8")
+             for p in sorted((store.root / "cards").glob("*.md"))]
+    elements = []
+    for path in sorted((store.root / "canonical").glob("*.json")):
+        model = _json.loads(path.read_text(encoding="utf-8"))
+        elements.extend(e.get("text", "") for e in model.get("elements", []))
+    proposal_strings = []
+    for path in sorted((store.root / "proposals").glob("prop_*.json")):
+        proposal = _json.loads(path.read_text(encoding="utf-8"))
+        proposal_strings.append(proposal.get("note", ""))
+        for change in (proposal.get("diff") or {}).values():
+            if isinstance(change, dict):
+                proposal_strings.extend(
+                    str(v) for v in change.values() if v is not None)
+    return {"card": _collapse(cards), "canonical": _collapse(elements),
+            "proposal": _collapse(proposal_strings)}

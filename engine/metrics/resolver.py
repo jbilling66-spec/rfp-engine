@@ -273,16 +273,21 @@ def _r_lesson_to_draft_lag_days(corpus):
     edit to the routing that acted on it. The second half of the span —
     routed lesson to a later draft citing it — needs a corpus spanning
     more than one pursuit generation and lands with real use."""
-    from datetime import datetime
+    from datetime import datetime, timezone
+
+    def _utc(stamp: str) -> datetime:
+        # A stamp without an offset is read as UTC (the events lane and
+        # the server clock both stamp UTC; P1-41 made this span real).
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
     spans = []
     for event in corpus.events():
         routing = event.get("flywheel_routing") or {}
         if not routing.get("processed_at") or not event.get("at"):
             continue
-        edited = datetime.fromisoformat(event["at"].replace("Z", "+00:00"))
-        routed = datetime.fromisoformat(
-            routing["processed_at"].replace("Z", "+00:00"))
+        edited = _utc(event["at"])
+        routed = _utc(routing["processed_at"])
         spans.append((routed - edited).total_seconds() / 86400.0)
     if not spans:
         return None

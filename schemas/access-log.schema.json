@@ -9,10 +9,11 @@
   "properties": {
     "ts": { "type": "string", "format": "date-time", "description": "Real wall-clock UTC — this is a security log, deliberately outside the byte-determinism regime (timestamped files are excluded, tests/kb/test_seed_store.py)." },
     "actor": { "type": "string", "description": "Who attempted the access — a human name from the identity seam, or 'engine' for machine paths." },
-    "purpose": { "type": "string", "enum": ["audit", "purge", "right_of_review", "anonymization_scan"], "description": "The closed purpose vocabulary — a purpose any caller can invent is a comment, not a control (S8)." },
-    "action": { "type": "string", "enum": ["read", "scan_index", "reverse_index", "delete", "sweep"], "description": "What was attempted on the restricted store." },
+    "purpose": { "type": "string", "enum": ["audit", "purge", "right_of_review", "anonymization_scan", "ingest"], "description": "The closed purpose vocabulary — a purpose any caller can invent is a comment, not a control (S8). `ingest` (P26b-2, P2-46): the machine's own lineage reads while ingesting a document." },
+    "action": { "type": "string", "enum": ["read", "scan_index", "reverse_index", "delete", "sweep", "source_read", "list_sources", "absorbed_lookup"], "description": "What was attempted on the restricted store. `source_read` / `list_sources` / `absorbed_lookup` (P26b-2, P2-46): the L0 source-meta doors and the merge-fold lookup, which used to answer without a line." },
     "granted": { "type": "boolean" },
     "kb_id": { "type": "string", "description": "The card whose provenance was touched (read/delete)." },
+    "doc_id": { "type": "string", "description": "source_read: the retained L0 artifact (canonical doc id) whose meta was read." },
     "name": { "type": "string", "description": "right_of_review: the identifier searched for." },
     "client": { "type": "string", "description": "purge sweep: the client the sweep verified removed." },
     "clean": { "type": "boolean", "description": "purge sweep verdict — the evidence the purge honored the client commitment." }

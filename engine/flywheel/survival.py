@@ -30,12 +30,20 @@ def text_survival(before: str, after: str) -> float:
 
     Whitespace-normalised so reflowing a paragraph is not an edit. An
     empty `before` yields 1.0: there was nothing to survive, and scoring
-    it 0.0 would punish a card for text it never produced."""
+    it 0.0 would punish a card for text it never produced.
+
+    `autojunk=False` (P2-45, P26b-2): SequenceMatcher's default treats
+    any character appearing in more than 1% of a 200+ character text as
+    junk, so past that length the ratio became length- and repetition-
+    dependent (one changed word in a 1,550-character section scored
+    0.80) and cross-section means compared incomparable numbers. Off,
+    the score is the plain matching-ratio at every length."""
     before_norm = " ".join((before or "").split())
     after_norm = " ".join((after or "").split())
     if not before_norm:
         return 1.0
-    return round(SequenceMatcher(None, before_norm, after_norm).ratio(), 4)
+    return round(SequenceMatcher(None, before_norm, after_norm,
+                                 autojunk=False).ratio(), 4)
 
 
 def section_survival(edits: list[dict]) -> float:

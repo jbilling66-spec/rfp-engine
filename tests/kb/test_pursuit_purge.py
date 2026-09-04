@@ -74,3 +74,35 @@ def test_sweep_catches_a_survivor_in_another_lane(tmp_path):
                                   firm_store=firm)
     assert not report.swept_clean
     assert any(minted[0] in f for f in report.sweep_findings)
+
+
+# ------------------------------------------------ P1-13: the empty lane
+
+def test_empty_memory_lane_purge_still_answers_to_the_gate(tmp_path):
+    """P1-13 (P26b-2): a pursuit with no memory cards skipped the gate."""
+    import pytest
+    from engine.kb.provenance import ProvenanceAccessDenied
+
+    pursuit = PursuitDir(tmp_path, "pur_empty")
+    with pytest.raises(ProvenanceAccessDenied):
+        purge_pursuit_memory(pursuit.root, actor="Intruder")
+    log = pursuit.root / "memory" / "restricted" / "access.jsonl"
+    lines = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
+    assert lines[-1] == {**lines[-1], "actor": "Intruder", "granted": False,
+                         "action": "delete", "purpose": "purge"}
+    report = purge_pursuit_memory(pursuit.root, actor="owner")
+    assert report.purged == []
+    assert report.accounting["pursuit_memory_cards"] == []
+
+
+def test_memory_purge_accounting_guard_fires(tmp_path, monkeypatch):
+    """A card delete that silently did nothing is caught by the
+    post-delete scan, never reported as purged."""
+    import pytest
+    from engine.kb.store import KBStore
+
+    firm, _ = ingest_corpus(tmp_path / "kb")
+    pursuit, minted = _seeded_pursuit(tmp_path)
+    monkeypatch.setattr(KBStore, "delete_card", lambda self, kb_id: None)
+    with pytest.raises(RuntimeError, match="left card\\(s\\) in place"):
+        purge_pursuit_memory(pursuit.root, actor="owner", firm_store=firm)

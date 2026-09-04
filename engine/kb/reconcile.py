@@ -26,6 +26,7 @@ evidence, gitignored like kb/runs/) with a content-addressed filename,
 so kill/resume rewrites the identical bytes.
 """
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -60,18 +61,14 @@ class ReconciliationReport:
         }
 
 
-def prior_models(store, doc_id: str, current_cd: str) -> list[str]:
+def prior_models(store, doc_id: str, current_cd: str, *, actor: str,
+                 purpose: str) -> list[str]:
     """Every previous canonical model of this logical document, from the
-    restricted L0 meta records."""
-    out = []
-    for cd in store.restricted.list_source_ids():
-        if cd == current_cd:
-            continue
-        meta_path = store.restricted._source_dir() / f"{cd}.json"
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        if meta.get("doc_id") == doc_id:
-            out.append(cd)
-    return sorted(out)
+    restricted L0 meta records — read through the logged door (P2-46:
+    this used to reach into the source dir directly)."""
+    metas = store.restricted.source_metas(actor=actor, purpose=purpose)
+    return sorted(cd for cd, meta in metas.items()
+                  if cd != current_cd and meta.get("doc_id") == doc_id)
 
 
 def prior_cards(store, prior_cd_ids: list[str]) -> list[tuple[dict, str]]:
@@ -126,9 +123,21 @@ def match_drifted(unmatched_candidates: list[dict],
     return out
 
 
+def priors_digest(prior_doc_ids: list[str]) -> str:
+    """Eight hex characters of the sorted prior set — clock-free and
+    machine-independent, like everything else in the name."""
+    joined = "\n".join(sorted(prior_doc_ids))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:8]
+
+
 def report_path(kb_root: Path, report: ReconciliationReport) -> Path:
+    """P1-38 (P26b-2): the name is keyed on the PRIOR SET too. The same
+    source bytes reconciled against different priors are different
+    reconciliations; before this the second erased the first's drift
+    record. Same bytes + same priors still overwrite in place."""
     return (Path(kb_root) / "reconciliation"
-            / f"{report.doc_id}-{report.canonical_doc_id}.json")
+            / f"{report.doc_id}-{report.canonical_doc_id}"
+              f"-{priors_digest(report.prior_doc_ids)}.json")
 
 
 def write_report(kb_root: Path, report: ReconciliationReport) -> Path:

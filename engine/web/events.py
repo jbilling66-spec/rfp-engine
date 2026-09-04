@@ -63,10 +63,36 @@ class EventsLane:
     # -- the record --------------------------------------------------------
 
     def read(self) -> list[dict]:
+        """The lane as a reader sees it: revised lines win by event_id
+        (D30; the collapse lives in engine.metrics.walker so the
+        resolver and this door agree)."""
+        from engine.metrics.walker import last_wins
+
         if not self.events_path.exists():
             return []
-        return [json.loads(line) for line in
-                self.events_path.read_text(encoding="utf-8").splitlines()]
+        return last_wins([json.loads(line) for line in
+                          self.events_path.read_text(
+                              encoding="utf-8").splitlines()])
+
+    def append_revised(self, event: dict) -> dict:
+        """D30's append-only revision (P1-41): a copy of an EXISTING
+        event carrying flywheel_routing, appended under the same id so
+        the original line stays and the lane reads last-wins. Refuses
+        an id this lane never minted — a revision revises a record."""
+        event_id = event.get("event_id")
+        with _APPEND_LOCK:
+            known = {e["event_id"] for e in self.read() if e.get("event_id")}
+            if event_id not in known:
+                raise EventsError(
+                    f"{event_id!r} is not an event of this lane — a "
+                    "revised line revises an existing record")
+            validate("feedback_event", event)
+            self.events_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.events_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event, sort_keys=True) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+        return event
 
     def current_revision(self) -> int:
         path = self.pursuit.root / "drafts" / "draft.json"

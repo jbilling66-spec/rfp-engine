@@ -51,6 +51,27 @@ def is_pursuit_dir(root: Path) -> bool:
                               or (root / "inbox").exists())
 
 
+def last_wins(events: list[dict]) -> list[dict]:
+    """D30 made real in ONE home (P26b-2, P1-41): a revised copy of an
+    event — same event_id, appended later, carrying flywheel_routing —
+    replaces the original in what any reader sees; lines with no id are
+    kept as they are. Before this no reader collapsed them, so a routed
+    edit would have been attributed twice and re-routed at the next
+    accept. Order is the first appearance's."""
+    out: list[dict] = []
+    index: dict[str, int] = {}
+    for event in events:
+        event_id = event.get("event_id")
+        if not event_id:
+            out.append(event)
+        elif event_id in index:
+            out[index[event_id]] = event
+        else:
+            index[event_id] = len(out)
+            out.append(event)
+    return out
+
+
 def read_pursuit(root: Path) -> PursuitRecords:
     root = Path(root)
     torn: list[str] = []
@@ -63,7 +84,7 @@ def read_pursuit(root: Path) -> PursuitRecords:
         pursuit_id=root.name,
         root=root,
         runs=runs,
-        events=_read_jsonl(root / "events" / "events.jsonl", torn),
+        events=last_wins(_read_jsonl(root / "events" / "events.jsonl", torn)),
         pings=_read_jsonl(root / "pings" / "pings.jsonl", torn),
         torn_lines=torn,
     )
