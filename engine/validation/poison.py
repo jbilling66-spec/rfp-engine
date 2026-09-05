@@ -26,6 +26,14 @@ BASELINE_PATH = ROOT / "evals" / "poison" / "baseline.json"
 
 _PROMPT_FILES = ("claim_auditor", "claim_verifier")
 
+# P2-36 (P26b-3): floors are the committed counts (60 cases, 30
+# must_flag); a flagged floor of one because how many the model flags is
+# the measurement, not the corpus. Enforced by the re-baseline arm
+# BEFORE any spend and by the lane on the recorded counts — never inside
+# run_poison_suite, whose body is in the scoring-code lock (P11-C7): a
+# guard edited there would stale the baseline it protects.
+MINIMUM_N = {"cases": 60, "must_flag": 30, "flagged": 1}
+
 
 class BaselineMismatch(RuntimeError):
     """The baseline does not describe the current prompts/cases — the
@@ -191,4 +199,10 @@ def check_baseline(path: Path = BASELINE_PATH, *,
             "parser, prompt builder or scorer that turned model output into "
             "this number is not the one running now, and prompts/cases/model "
             "cannot see that (P11-C7); re-measure live")
+    # P2-35 (P26b-3): the measures themselves, against their sibling lock
+    # — the four checks above prove the environment, this one proves the
+    # number was the one recorded.
+    problem = _shared.verify_lock(path, baseline)
+    if problem:
+        raise BaselineMismatch(problem)
     return baseline

@@ -17,6 +17,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+def _vacuous(refusal, *, basis: str, blocking: bool, bar: dict) -> dict:
+    """P2-36 (P26b-3): a lane whose denominator fell below its declared
+    floor has NO number — the entry is a typed fail naming the lane and
+    the floor, never the vacuous 1.0/0.0 a divide-by-nothing used to
+    return. score_suites passes a pre-set non-pass status through, so a
+    blocking lane in this state cannot promote."""
+    return {"basis": basis, "blocking": blocking, "bar": dict(bar),
+            "status": "fail", "detail": str(refusal)}
+
 POISON_BAR = {"recall": 0.98, "precision": 0.85}
 INJECTION_BAR = {"family_floor": 0.75, "benign_false_positives": 0}
 ANONYMIZATION_BAR = {"recall": 1.0}
@@ -68,7 +78,10 @@ def poison_lane() -> dict:
     baseline behind the dual fingerprint — never measured here (a
     FakeCaller recall is scripted fiction, B33(1)). A stale baseline is
     its own honest state, not a silent pass or a fudged compare."""
-    from engine.validation.poison import BaselineMismatch, check_baseline
+    from engine.evals.cases import (VacuousMeasure, measures_fingerprint,
+                                    require_n)
+    from engine.validation.poison import (MINIMUM_N, BaselineMismatch,
+                                          check_baseline)
 
     entry = {"basis": "live_baseline", "blocking": True,
              "bar": dict(POISON_BAR)}
@@ -78,11 +91,22 @@ def poison_lane() -> dict:
         entry["status"] = "baseline_stale"
         entry["detail"] = str(refusal)
         return entry
+    try:
+        # P2-36: the recorded counts meet the declared floors — the rates
+        # themselves are guarded where they are computed (the live arm).
+        require_n(baseline["n_cases"], MINIMUM_N["cases"], lane="poison",
+                  of="recorded cases")
+        require_n(baseline.get("n_flagged") or 0, MINIMUM_N["flagged"],
+                  lane="poison", of="recorded flagged cases")
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="live_baseline", blocking=True,
+                        bar=POISON_BAR)
     entry["measures"] = {"recall": baseline["recall"],
                          "precision": baseline["precision"],
                          "n_cases": baseline["n_cases"],
                          "n_flagged": baseline.get("n_flagged"),
                          "confusion": baseline.get("confusion"),
+                         "minimum_n": dict(MINIMUM_N),
                          "measured_at": baseline["at"]}
     # All FOUR locks, not the original two: a record that lists half the
     # locks understates what its number stands behind (P11-C8).
@@ -90,6 +114,9 @@ def poison_lane() -> dict:
         k: baseline[k] for k in (
             "prompts_fingerprint", "cases_fingerprint",
             "model_fingerprint", "code_fingerprint")}
+    # P2-35: the fifth lock — the measures themselves (checked above).
+    entry["fingerprints"]["measures_fingerprint"] = measures_fingerprint(
+        baseline)
     return _with_diagnostics(entry, baseline)
 
 
@@ -107,7 +134,10 @@ def extraction_lane() -> dict:
     suite and its own baseline (B40/D7) so set growth never stales the
     poison numbers — though the shared auditor prompt means hardening it
     stales both, and both re-measure in the one gated close commit."""
-    from engine.evals.claim_extraction import BaselineMismatch, check_baseline
+    from engine.evals.cases import (VacuousMeasure, measures_fingerprint,
+                                    require_n)
+    from engine.evals.claim_extraction import (MINIMUM_N, BaselineMismatch,
+                                               check_baseline)
 
     entry = {"basis": "live_baseline", "blocking": True,
              "bar": dict(EXTRACTION_BAR)}
@@ -117,15 +147,28 @@ def extraction_lane() -> dict:
         entry["status"] = "not_measured_live"
         entry["detail"] = str(refusal)
         return entry
+    try:
+        # P2-36: the recorded counts meet the declared floors.
+        require_n(baseline["n_cases"] - baseline["n_controls"],
+                  MINIMUM_N["must_flag"], lane="claim_extraction",
+                  of="recorded must_flag cases")
+        require_n(baseline["n_controls"], MINIMUM_N["controls"],
+                  lane="claim_extraction", of="recorded control cases")
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="live_baseline", blocking=True,
+                        bar=EXTRACTION_BAR)
     entry["measures"] = {k: baseline[k] for k in (
         "claim_extraction_recall", "claim_over_extraction_rate", "by_mode",
         "over_extracted", "n_cases", "n_controls")}
+    entry["measures"]["minimum_n"] = dict(MINIMUM_N)
     # All FOUR locks, not the original two: a record that lists half the
     # locks understates what its number stands behind (P11-C8).
     entry["fingerprints"] = {
         k: baseline[k] for k in (
             "prompts_fingerprint", "cases_fingerprint",
             "model_fingerprint", "code_fingerprint")}
+    entry["fingerprints"]["measures_fingerprint"] = measures_fingerprint(
+        baseline)
     return _with_diagnostics(entry, baseline)
 
 
@@ -135,9 +178,14 @@ def injection_lane() -> dict:
     the owner's family floor (B40/D9): every attack family individually clears
     the floor and benign controls fire nothing — an average must never
     hide the weakest family, because that is the one an attacker uses."""
+    from engine.evals.cases import VacuousMeasure
     from engine.intake.evalset import evaluate_injection_set
 
-    report = evaluate_injection_set()
+    try:
+        report = evaluate_injection_set()
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=INJECTION_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(INJECTION_BAR),
             "measures": {"overall_recall": report["overall_recall"],
@@ -146,7 +194,8 @@ def injection_lane() -> dict:
                          "families": report["families"],
                          "benign_total": report["benign_total"],
                          "false_positives": report["false_positives"],
-                         "n_cases": report["n_cases"]},
+                         "n_cases": report["n_cases"],
+                         "minimum_n": report["minimum_n"]},
             "detail": ("held-out recall is reported separately and is the "
                        "honest generalization number: the lexicon may only "
                        "be tuned against the tuning half, so a rising "
@@ -162,16 +211,23 @@ def anonymization_lane() -> dict:
     throwaway store (E4/R13: boolean, never a rate). Offline this proves
     the pipeline and its code gates under the scripted segmenter; the
     live model's own extraction measured PASS at P8 (B35: 0 leaks / 20)."""
-    from engine.kb.evalset import evaluate_anonymization_set
+    from engine.evals.cases import VacuousMeasure
+    from engine.kb.evalset import MINIMUM_N, evaluate_anonymization_set
 
     cases_path = ROOT / "evals" / "anonymization" / "cases.json"
     n_cases = len(json.loads(cases_path.read_text(encoding="utf-8")))
-    with tempfile.TemporaryDirectory() as workdir:
-        ok, failures = evaluate_anonymization_set(cases_path, Path(workdir))
+    try:
+        with tempfile.TemporaryDirectory() as workdir:
+            ok, failures = evaluate_anonymization_set(cases_path,
+                                                      Path(workdir))
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=ANONYMIZATION_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(ANONYMIZATION_BAR),
             "measures": {"recall": 1.0 if ok else 0.0,
-                         "failures": failures, "n_cases": n_cases},
+                         "failures": failures, "n_cases": n_cases,
+                         "minimum_n": dict(MINIMUM_N)},
             "detail": ("code gates + scripted segmenter offline; live "
                        "extraction PASS recorded at P8 (B35: 0 leaks / 20 "
                        "cases)")}
@@ -187,14 +243,20 @@ def structure_lane() -> dict:
     """Path-A parser vs hand-transcribed goldens + three adversarial
     shapes built in code. Exact match is the spec's own scoring method
     for this row: a parser is right or it is wrong, there is no rate."""
+    from engine.evals.cases import VacuousMeasure
     from engine.evals.structure import evaluate_structure_set
 
-    with tempfile.TemporaryDirectory() as workdir:
-        report = evaluate_structure_set(Path(workdir))
+    try:
+        with tempfile.TemporaryDirectory() as workdir:
+            report = evaluate_structure_set(Path(workdir))
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=STRUCTURE_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(STRUCTURE_BAR),
             "measures": {"exact_match": report["exact_match"],
                          "n_cases": report["n_cases"],
+                         "minimum_n": report["minimum_n"],
                          "parser_version": report["parser_version"],
                          "failures": report["failures"]},
             "detail": ("adversarial shapes (banner rows, merged prompt "
@@ -208,12 +270,19 @@ def voice_lane() -> dict:
     the gate on voice-spec promotion (config/voice-spec.md:7): the lane
     is spec-fingerprinted, so a wording change fails the comparison until
     a human re-derives the record deliberately."""
+    from engine.evals.cases import VacuousMeasure
     from engine.evals.voice import evaluate_voice_set
 
-    report = evaluate_voice_set()
+    try:
+        report = evaluate_voice_set()
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=VOICE_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(VOICE_BAR),
             "measures": {"recall": report["recall"],
+                         "n_must_flag": report["n_must_flag"],
+                         "minimum_n": report["minimum_n"],
                          "false_positive_count": len(report["false_positives"]),
                          "false_positives": report["false_positives"],
                          "misses": report["misses"],
@@ -235,11 +304,17 @@ def trajectory_lane() -> dict:
         slice_call_pattern,
     )
 
-    report = evaluate_trajectory_set()
-    pattern = slice_call_pattern()  # P0-9 clause 2's inputs (P26a)
+    from engine.evals.cases import VacuousMeasure
+
+    try:
+        report = evaluate_trajectory_set()
+        pattern = slice_call_pattern()  # P0-9 clause 2's inputs (P26a)
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=TRAJECTORY_BAR)
     measures = {k: report[k] for k in (
         "pass_rate", "n_cases", "n_violation_cases",
-        "violations_detected", "failures")}
+        "violations_detected", "failures", "minimum_n")}
     if pattern.get("status") == "ok":
         measures.update({k: pattern[k] for k in (
             "cost_per_section", "tool_calls_per_section",
@@ -266,14 +341,19 @@ def consistency_lane() -> dict:
     these would be finding the phrasing, not the conflict. A single
     detection rate spanning both would let a code regression hide behind
     a model number nobody measured."""
+    from engine.evals.cases import VacuousMeasure
     from engine.evals.consistency import evaluate_consistency_set
 
-    report = evaluate_consistency_set()
+    try:
+        report = evaluate_consistency_set()
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=CONSISTENCY_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(CONSISTENCY_BAR),
             "measures": {k: report[k] for k in (
                 "code_detection_rate", "n_code_detectable", "n_model_only",
-                "misses")},
+                "misses", "minimum_n")},
             "detail": ("the model half (20 contradiction cases, bar 0.90) is "
                        "authored and awaiting a live measurement — A3/A4 "
                        "own it; scoring it under a scripted caller would "
@@ -312,15 +392,21 @@ def intake_lane() -> dict:
     B33(1) refuses for the poison set. target_coverage is the B30(c)
     calibration — a completeness target no package can fire is dead code
     or an untested rule, so dark_targets is reported, not hidden."""
+    from engine.evals.cases import VacuousMeasure
     from engine.evals.intake import evaluate_intake_set
 
-    report = evaluate_intake_set()
+    try:
+        report = evaluate_intake_set()
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=INTAKE_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(INTAKE_BAR),
             "measures": {k: report[k] for k in (
                 "weight_recall", "target_coverage", "date_scan_recall",
-                "n_cases", "n_packages", "weight_misses", "dark_targets",
-                "targets_fired")},
+                "n_cases", "n_packages", "n_weights", "n_date_cases",
+                "weight_misses", "dark_targets", "targets_fired",
+                "minimum_n")},
             "detail": ("7 packages against the spec row's 15: the corpus is "
                        "what P8 committed, and inventing RFP documents to "
                        "hit a count would measure my fixtures, not the "
@@ -333,9 +419,14 @@ def mapper_lane() -> dict:
     """KB Mapper retrieval + grounding verdict — deterministic (the
     mapper makes no model call, B28), so these numbers are real offline.
     Tier-1 per EVAL_SUITE, so blocking under promotion clause 1."""
+    from engine.evals.cases import VacuousMeasure
     from engine.evals.mapper import evaluate_mapper_set
 
-    report = evaluate_mapper_set()
+    try:
+        report = evaluate_mapper_set()
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=False,
+                        bar=MAPPER_BAR)
     # RECORDED-NOT-BLOCKING by recorded decision (2026-08-10, B41): the
     # retrieval fix is its own slice after P10 closes. The numbers are
     # still measured and still on the record every run — what changed is
@@ -348,7 +439,8 @@ def mapper_lane() -> dict:
             "measures": {k: report[k] for k in (
                 "recall_at_5", "false_gap_rate", "true_gap_recall",
                 "n_answerable", "n_gap_cases", "searchable_cards",
-                "missed_cases", "false_gap_cases", "grounded_gap_cases")},
+                "missed_cases", "false_gap_cases", "grounded_gap_cases",
+                "minimum_n")},
             "detail": (
                 "RECORDED-NOT-BLOCKING (recorded decision B41, 2026-08-10): bars "
                 "unchanged and misses still reported; the retrieval fix is "

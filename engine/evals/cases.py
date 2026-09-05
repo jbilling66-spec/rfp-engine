@@ -23,6 +23,33 @@ def load_cases(path: Path) -> list[dict]:
     return cases
 
 
+class VacuousMeasure(ValueError):
+    """A rate was asked for over a denominator below its declared floor
+    (P2-36, P26b-3). Refused by name — never emitted as the vacuous
+    1.0/0.0 every lane used to return over an empty denominator, which
+    is how a cases file that stops marking any case `must_flag` would
+    have re-baselined to a perfect number."""
+
+
+def rate(numerator: int, denominator: int, *, floor: int, lane: str,
+         of: str, digits: int | None = 4) -> float:
+    """numerator / denominator, rounded like every lane always did —
+    or a typed refusal when the denominator is below the lane's
+    declared floor. Zero is never a denominator whatever the floor."""
+    require_n(denominator, floor, lane=lane, of=of)
+    value = numerator / denominator
+    return round(value, digits) if digits is not None else value
+
+
+def require_n(n: int, floor: int, *, lane: str, of: str) -> None:
+    """The floor check on its own, for the counts a lane gates without
+    a rate (benign controls, a boolean suite's case count)."""
+    if n <= 0 or n < floor:
+        raise VacuousMeasure(
+            f"{lane}: {of} has n={n}, below the declared floor {floor} — "
+            f"no rate is emitted over a vacuous denominator (P2-36)")
+
+
 def object_fingerprint(obj) -> str:
     """sha256 over the sort-keys JSON of a live object (the cases that
     RAN, a pattern registry) — derived from what executed, never from a
@@ -33,12 +60,75 @@ def object_fingerprint(obj) -> str:
 
 
 def files_fingerprint(*paths: Path) -> str:
-    """sha256 over the raw bytes of the named files, in order (prompt
-    files, spec files) — the lock a recorded measure stands behind."""
+    """sha256 over the named files, in order (prompt files, spec files)
+    — the lock a recorded measure stands behind.
+
+    M-19 (P26b-3): each file is framed by its byte length and its name
+    before its bytes, so two rosters that concatenate to the same
+    stream ("ab"+"c" and "a"+"bc") no longer share a digest. The three
+    committed digests moved on 2026-09-04 and were re-pinned WITHOUT a
+    re-measure: the bytes under them did not move, proven by
+    tests/evals/test_baseline_lock.py recomputing the legacy
+    concatenation over the same files against the 0.7.0 record."""
     digest = hashlib.sha256()
     for path in paths:
-        digest.update(Path(path).read_bytes())
+        data = Path(path).read_bytes()
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(Path(path).name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(data)
     return digest.hexdigest()
+
+
+# --- The baseline lock (P2-35, P26b-3) -------------------------------------
+# The four fingerprints prove the ENVIRONMENT a recorded number was
+# measured in; nothing proved the number itself, because they sat in the
+# same file as the measures — an edited recall cleared a blocking bar
+# under commit review alone. The lock is a sibling file carrying a digest
+# of every non-fingerprint field of the baseline (measures, counts, miss
+# lists, provenance), written by the live re-baseline arm and read back
+# by check_baseline. One edit can no longer clear a bar; a two-file edit
+# is still commit review's to catch (stated limit, B120).
+LOCK_NAME = "baseline.lock.json"
+
+
+def lock_path(baseline_path: Path) -> Path:
+    return Path(baseline_path).with_name(LOCK_NAME)
+
+
+def measures_fingerprint(baseline: dict) -> str:
+    """Digest of everything in the baseline that is NOT an environment
+    fingerprint — canonical JSON, so whitespace never stales it."""
+    return object_fingerprint({k: v for k, v in baseline.items()
+                               if not k.endswith("_fingerprint")})
+
+
+def write_lock(baseline_path: Path, *, suite: str, run_id: str | None,
+               at: str | None, locked_by: str = "rebaseline") -> Path:
+    """Lock the baseline on disk as it is — computed from the file, never
+    from the report object, so the lock and the check read one source."""
+    baseline_path = Path(baseline_path)
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    lock = {"suite": suite,
+            "measures_fingerprint": measures_fingerprint(baseline),
+            "run_id": run_id, "at": at, "locked_by": locked_by}
+    return write_report(lock, lock_path(baseline_path))
+
+
+def verify_lock(baseline_path: Path, baseline: dict) -> str | None:
+    """None when the lock is present and matches; otherwise the refusal,
+    for the caller to raise in its own BaselineMismatch vocabulary."""
+    path = lock_path(baseline_path)
+    if not path.exists():
+        return (f"no lock beside {Path(baseline_path).name} — an unlocked "
+                f"baseline cannot prove its measures were the ones "
+                f"recorded; only a live re-baseline writes the lock (P2-35)")
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    if lock.get("measures_fingerprint") != measures_fingerprint(baseline):
+        return ("the baseline's measures no longer match their lock — an "
+                "edited baseline or a lock written by hand; only a live "
+                "re-baseline writes both (P2-35)")
+    return None
 
 
 def model_fingerprint(*agents: str) -> str:

@@ -46,6 +46,14 @@ class UseRestrictedCard(LookupError):
     """targeted_open refused a use_restriction card (D2)."""
 
 
+class DeprecatedCard(UseRestrictedCard):
+    """targeted_open refused a card a steward deprecated (P26c, B117 §6
+    closed the same day): a frozen plan that selected the card before
+    the deprecation still names it, and the drafter and reviser used to
+    open it anyway. A subclass, so every D2 catch site withholds it the
+    same way and says why."""
+
+
 @dataclass
 class ScoredCard:
     kb_id: str
@@ -302,12 +310,16 @@ def targeted_open(store: KBStore, kb_id: str, *, log, stage, agent,
     the refusal is on the trace (D2). A Lanes bundle opens from the lane
     that minted the id (prefix dispatch, P17/C3)."""
     card, body = as_lanes(store).store_for(kb_id).read_card(kb_id)
-    if card.get("use_restriction"):
+    withheld = _withheld_reason(card)
+    if withheld:
         emit_kb_retrieval(
             log, stage=stage, agent=agent, query=query, step="targeted_open",
             cards_returned=[], excluded=[kb_id], empty_result=True,
             target=target,
         )
+        if withheld == "deprecated":
+            raise DeprecatedCard(
+                f"{kb_id} was deprecated by a steward and may not be opened")
         raise UseRestrictedCard(
             f"{kb_id} carries use_restriction (D2) and may not be opened"
         )

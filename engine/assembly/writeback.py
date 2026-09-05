@@ -22,10 +22,11 @@ because only the named cells are assigned (v1 EC-5).
 """
 
 import hashlib
-import shutil
 
 from openpyxl import load_workbook
 
+from engine.assembly.hygiene import firm_identity
+from engine.assembly.xlsx_patch import assert_roundtrip, write_cells
 from engine.contracts import ContractError
 
 WRITEBACK_DIR = "exports/writeback"
@@ -150,19 +151,19 @@ def preview_writeback(pursuit, *, at: str,
 
 def run_writeback(pursuit, log, *, at: str, confirmed_by: str,
                   binding: dict | None = None) -> dict:
-    """The confirmed write: re-derives the facts server-side, copies the
-    buyer file, assigns ONLY the written cells, records everything."""
+    """The confirmed write: re-derives the facts server-side, rebuilds the
+    buyer file byte-for-byte with ONLY the written cells patched into
+    their sheet parts (P1-19 — never through openpyxl's lossy save),
+    proves the round-trip, records everything."""
     facts = compute_facts(pursuit, at=at, confirmed_by=confirmed_by,
                           binding=binding)
     source = pursuit.root / facts["source_file"]
     output = pursuit.root / facts["output_file"]
-    output.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, output)
-    workbook = load_workbook(output)
-    for row in facts["cells"]:
-        if row["decision"] == "written":
-            workbook[row["sheet"]][row["cell"]] = row["after"]
-    workbook.save(output)
+    writes = {(row["sheet"], row["cell"]): row["after"]
+              for row in facts["cells"] if row["decision"] == "written"}
+    write_cells(source, output, writes,
+                firm=firm_identity(pursuit.root.parent), at=at)
+    assert_roundtrip(source, output, set(writes))
     facts_path = pursuit.write_artifact(
         "writeback_facts", facts,
         name=binding["facts_name"] if binding else FACTS_NAME)

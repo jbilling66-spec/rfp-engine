@@ -32,6 +32,7 @@ from pathlib import Path
 
 from engine.contracts import append_fsync
 
+from engine.evals import cases as _shared
 from engine.evals import claim_extraction as _claim_extraction
 from engine.kb import KBStore
 from engine.runlog import RunLogger
@@ -60,6 +61,28 @@ SUITES = {
         "headline": ("claim_extraction_recall", "claim_over_extraction_rate"),
     },
 }
+
+
+def _refuse_vacuous_corpus(name: str, cases: list[dict], floors: dict) -> None:
+    """P2-36 (P26b-3): a corpus below the suite's declared floors is
+    refused BEFORE the run spends anything — a cases file that stopped
+    marking any case must_flag would otherwise re-baseline to a perfect
+    number. The floors live beside each suite (MINIMUM_N); the check
+    lives here, not inside the suite function, because that function's
+    body is in the scoring-code lock (P11-C7)."""
+    from engine.evals.cases import VacuousMeasure, require_n
+
+    must_flag = sum(1 for c in cases if c["expected"].get("must_flag"))
+    try:
+        require_n(len(cases), floors.get("cases", 1), lane=name, of="cases")
+        require_n(must_flag, floors.get("must_flag", 1), lane=name,
+                  of="must_flag cases")
+        if "controls" in floors:
+            require_n(len(cases) - must_flag, floors["controls"], lane=name,
+                      of="control cases")
+    except VacuousMeasure as exc:
+        raise RebaselineRefused(
+            f"re-baseline refused before any spend — {exc}") from exc
 
 
 def _next_run_id(workspace: Path) -> str:
@@ -138,6 +161,7 @@ def rebaseline(name: str, *, make_caller, workspace: Path = DEFAULT_WORKSPACE,
     path = Path(baseline_path) if baseline_path else module.BASELINE_PATH
 
     cases = module.load_cases()
+    _refuse_vacuous_corpus(name, cases, getattr(module, "MINIMUM_N", {}))
     store = KBStore(ROOT / "kb")
     workspace = Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
@@ -169,10 +193,14 @@ def rebaseline(name: str, *, make_caller, workspace: Path = DEFAULT_WORKSPACE,
     # gains an entry for a baseline that still stands.
     append_history(path, spec=spec)
     module.write_baseline(report, path)
+    # P2-35: the lock is written from the file just written, by the ONE
+    # writer allowed to — then the guard re-read proves both together.
+    lock = _shared.write_lock(path, suite=name, run_id=run_id, at=at)
     try:
         module.check_baseline(path, cases=cases)
     except module.BaselineMismatch as exc:
         path.unlink(missing_ok=True)
+        lock.unlink(missing_ok=True)
         raise RebaselineRefused(
             f"the baseline just written does not satisfy its own guard "
             f"({exc}) — nothing was left behind; something moved mid-run"
@@ -181,4 +209,4 @@ def rebaseline(name: str, *, make_caller, workspace: Path = DEFAULT_WORKSPACE,
     for key in spec["headline"]:
         out(f"    {key}: {report[key]}")
     return {"suite": name, "report": report, "baseline_path": path,
-            "run_path": log.path, "run_id": run_id}
+            "lock_path": lock, "run_path": log.path, "run_id": run_id}

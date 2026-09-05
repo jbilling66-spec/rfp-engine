@@ -21,6 +21,41 @@ def report():
     return evaluate_trajectory_set()
 
 
+def test_a_trace_name_cannot_escape_either_directory():
+    """M-20 (P26b-3): the case-supplied name resolves inside one of the
+    two trace directories or refuses typed — never a read elsewhere."""
+    from engine.contracts import ContractError
+
+    with pytest.raises(ContractError, match="escapes"):
+        load_trace("../cases.json")
+    with pytest.raises(ContractError, match="escapes"):
+        load_trace("/etc/hosts")
+
+
+def test_a_missing_trace_names_both_directories():
+    """No silent fall-through: a name in neither directory is refused
+    naming both, so the reader looks in the right place."""
+    with pytest.raises(FileNotFoundError) as caught:
+        load_trace("nonesuch.jsonl")
+    assert str(TRACES_DIR) in str(caught.value)
+    assert str(LIVE_RUNS) in str(caught.value)
+
+
+def test_a_call_without_cost_is_unmeasurable():
+    """M-21 (P26b-3): a present call with no cost_usd used to count as
+    free, so max_cost_usd held vacuously over it. Now it is the same
+    verdict as no calls at all — unmeasurable, never a pass."""
+    priced = [{"record_type": "agent_call", "seq": 1, "cost_usd": 0.01}]
+    holds, _ = check_assertion(priced, {"assert": "max_cost_usd",
+                                        "value": 0.05})
+    assert holds is True
+    unpriced = priced + [{"record_type": "agent_call", "seq": 2}]
+    holds, detail = check_assertion(unpriced, {"assert": "max_cost_usd",
+                                               "value": 0.05})
+    assert holds is False
+    assert "[2]" in detail and "unmeasurable" in detail
+
+
 def test_cited_not_subset_of_opened_flags():
     """THE acceptance clause. A hand-built violating record list fires
     the assertion; the live trace does not."""

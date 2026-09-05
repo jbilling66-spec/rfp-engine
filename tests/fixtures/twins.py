@@ -330,12 +330,73 @@ def build_demo_twin(path: Path) -> Path:
     return path
 
 
+def build_writeback_twin(path: Path) -> Path:
+    """P1-19 (P26b-3): the parts openpyxl's save would rewrite or drop —
+    a chart with its drawing, a cell comment with its VML, a data
+    validation, and a formula with a CACHED value spliced in (Excel
+    always writes one; openpyxl never can). The write-back must hand
+    all of them back byte-for-byte. No image: Pillow is not in the
+    lock, so openpyxl could not even build one here."""
+    from openpyxl.chart import BarChart, Reference
+    from openpyxl.comments import Comment
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Instructions"
+    ws["A1"] = "Synthetic County — ERP Services RFP"
+    ws["A2"] = "Respond in the yellow cells only."
+
+    q = wb.create_sheet("1. Questions")
+    q["A1"] = "Ref"
+    q["B1"] = "Question"
+    q["C1"] = "Response"
+    rows = [
+        ("1.0.1", "Provide an overview of your firm and ERP practice."),
+        ("1.0.2", "Describe your implementation methodology."),
+        ("1.0.3", "Summarize comparable implementations."),
+    ]
+    for i, (ref, question) in enumerate(rows, start=2):
+        q[f"A{i}"] = ref
+        q[f"B{i}"] = question
+        q[f"C{i}"] = ""
+        q[f"C{i}"].fill = ANSWER_FILL
+    q["B2"].comment = Comment("Limit to 250 words.", "Buyer")
+
+    p = wb.create_sheet("Pricing")
+    p["A1"] = "Item"
+    p["B1"] = "Fee"
+    for i, (item, fee) in enumerate((("Discovery", 100), ("Build", 150),
+                                     ("Hypercare", 50)), start=2):
+        p[f"A{i}"] = item
+        p[f"B{i}"] = fee
+    p["A5"] = "Total"
+    p["B5"] = "=SUM(B2:B4)"
+    validation = DataValidation(type="list", formula1='"Fixed,T&M"')
+    p.add_data_validation(validation)
+    validation.add("C2")
+    p["C1"] = "Basis"
+    chart = BarChart()
+    chart.title = "Fees"
+    chart.add_data(Reference(p, min_col=2, min_row=1, max_row=4),
+                   titles_from_data=True)
+    chart.set_categories(Reference(p, min_col=1, min_row=2, max_row=4))
+    p.add_chart(chart, "E2")
+
+    _freeze(wb, path)
+    # The cached value Excel would have written: 100 + 150 + 50.
+    _splice_member(path, "xl/worksheets/sheet3.xml",
+                   b"<f>SUM(B2:B4)</f><v></v>", b"<f>SUM(B2:B4)</f><v>300</v>")
+    return path
+
+
 GOLDENS = {
     "structured-twin.xlsx": build_structured_twin,
     "nofill-twin.xlsx": build_nofill_twin,
     "gapcase-twin.xlsx": build_gapcase_twin,
     "demo-twin.xlsx": build_demo_twin,
     "formula-twin.xlsx": build_formula_twin,  # P1-24 (P26b-1)
+    "writeback-twin.xlsx": build_writeback_twin,  # P1-19 (P26b-3)
 }
 
 

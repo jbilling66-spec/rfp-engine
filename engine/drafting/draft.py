@@ -205,10 +205,11 @@ def _draft_section(pursuit, caller, log, store, section, rp, slots_by_id,
         try:
             body = targeted_open(store, kb_id, log=log, stage=STAGE,
                                  agent=AGENT, query=query, target=target)
-        except UseRestrictedCard:
+        except UseRestrictedCard as exc:
             restricted.append(kb_id)
-            warnings.append(f"{kb_id}: use_restriction honored at draft time "
-                            "(D2) — withheld from the prompt")
+            # D2, or a steward's deprecation (P26c) — withheld either way
+            warnings.append(f"{kb_id}: withheld from the prompt at draft "
+                            f"time — {exc}")
             continue
         # P17/C4: the card front comes from the lane that minted the id
         # (a Lanes bundle dispatches by prefix; a bare store is itself).

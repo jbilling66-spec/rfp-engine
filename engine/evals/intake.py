@@ -22,7 +22,7 @@ Two measures:
 
 from pathlib import Path
 
-from engine.evals.cases import load_cases
+from engine.evals.cases import load_cases, rate
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "evals" / "intake" / "cases.json"
@@ -39,6 +39,11 @@ ALL_TARGETS = (
     "procurement.deadlines",
     "requirements_matrix.weight",
 )
+
+
+# P2-36 (P26b-3): floors are the committed counts — 9 golden weights
+# over the three cases that state any, 2 DATES cases, 6 targets.
+MINIMUM_N = {"weights": 9, "date_cases": 2, "targets": 6}
 
 
 def evaluate_intake_set(path: Path = CASES_PATH) -> dict:
@@ -82,12 +87,19 @@ def evaluate_intake_set(path: Path = CASES_PATH) -> dict:
         "suite": "intake_extraction",
         "n_cases": len(cases),
         "n_packages": len({c["input"]["files"][0] for c in cases}),
-        "weight_recall": (round(found / expected_total, 4)
-                          if expected_total else 1.0),
+        "n_weights": expected_total,
+        "weight_recall": rate(found, expected_total,
+                              floor=MINIMUM_N["weights"],
+                              lane="intake", of="golden weights"),
         "weight_misses": sorted(misses),
-        "target_coverage": round(len(fired_targets) / len(ALL_TARGETS), 4),
+        "target_coverage": rate(len(fired_targets), len(ALL_TARGETS),
+                                floor=MINIMUM_N["targets"],
+                                lane="intake", of="completeness targets"),
         "targets_fired": sorted(fired_targets),
         "dark_targets": dark,
-        "date_scan_recall": (round(date_hits / date_cases, 4)
-                             if date_cases else 1.0),
+        "n_date_cases": date_cases,
+        "date_scan_recall": rate(date_hits, date_cases,
+                                 floor=MINIMUM_N["date_cases"],
+                                 lane="intake", of="DATES cases"),
+        "minimum_n": dict(MINIMUM_N),
     }

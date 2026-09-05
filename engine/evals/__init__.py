@@ -11,6 +11,9 @@ recorded-equality test in tests/evals/test_injection_suite.py compare
 stored fingerprints against recomputed ones).
 """
 
+from engine.evals.cases import (VacuousMeasure, lock_path,
+                                measures_fingerprint, rate, require_n,
+                                verify_lock, write_lock)
 from engine.evals.cases import (  # noqa: F401
     files_fingerprint,
     load_cases,

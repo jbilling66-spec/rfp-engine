@@ -1,0 +1,7 @@
+{
+ "at": "2026-08-14T07:56:43Z",
+ "locked_by": "initial lock, P26b-3 step 2 (2026-09-04): digest over the baseline as recorded live on 2026-08-14T07:56:43Z (run_0008); every later lock is written by rebaseline",
+ "measures_fingerprint": "79456c3db3acfdd812d0e262ea1e8efd8e12aee9495b125f1dc2951d3c069f43",
+ "run_id": "run_0008",
+ "suite": "claim_extraction_set"
+}

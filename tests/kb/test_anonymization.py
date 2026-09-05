@@ -10,6 +10,8 @@ import json
 import math
 from pathlib import Path
 
+import pytest
+
 from engine.contracts import validate
 from engine.kb.anonymize import apply_placeholders, scan, scan_passed
 from engine.kb.evalset import (default_script, evaluate_anonymization_set,
@@ -159,6 +161,54 @@ def test_eval_cases_validate_and_held_out_quota():
                                    "bar": 1.0, "blocking": True}
     held_out = sum(1 for c in cases if c.get("held_out"))
     assert held_out >= math.ceil(len(cases) * 0.2)
+    # M-26 (P26b-3): every case asserts something — a label, a needle or
+    # a media flag. The harness names a case that does not; this pins
+    # the committed corpus so the harness never has to.
+    for case in cases:
+        expected = case.get("expected", {})
+        assert (expected.get("labels") or expected.get("must_not_contain")
+                or (expected.get("media") or {}).get("must_flag")), (
+            f"{case['case_id']} asserts nothing")
+
+
+def test_a_case_that_asserts_nothing_fails_the_eval(tmp_path):
+    """M-26 (P26b-3): a case with neither labels nor needles nor a media
+    flag used to skip silently — indistinguishable from a pass. Now the
+    harness fails it by name, and the corpus-count floor (P2-36) refuses
+    a shrunken suite outright."""
+    import shutil
+
+    from engine.evals.cases import VacuousMeasure
+
+    cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    docs = tmp_path / "suite" / "docs"
+    docs.mkdir(parents=True)
+    hollow = []
+    for case in cases:
+        case = dict(case)
+        if case["input"].get("generator"):
+            continue
+        shutil.copy(CASES_PATH.parent / case["input"]["files"][0],
+                    docs / Path(case["input"]["files"][0]).name)
+        hollow.append(case)
+    hollow[0] = dict(hollow[0], expected={})
+    hollow_path = tmp_path / "suite" / "cases.json"
+    hollow_path.write_text(json.dumps(hollow), encoding="utf-8")
+    # 20 text cases is below the committed floor of 22 — refused typed.
+    with pytest.raises(VacuousMeasure, match="anonymization: cases has n=20"):
+        evaluate_anonymization_set(hollow_path, tmp_path / "work")
+    # With the floor lifted for the unit, the hollow case is named.
+    import engine.kb.evalset as evalset
+    original = dict(evalset.MINIMUM_N)
+    evalset.MINIMUM_N["cases"] = 1
+    try:
+        ok, failures = evaluate_anonymization_set(hollow_path,
+                                                  tmp_path / "work")
+    finally:
+        evalset.MINIMUM_N.update(original)
+    assert not ok
+    assert any(f.startswith(f"{hollow[0]['case_id']}: asserts nothing")
+               for f in failures), failures
 
 
 def test_media_leak_caught_by_eval_not_scan(tmp_path, monkeypatch):

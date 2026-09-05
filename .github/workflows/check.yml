@@ -22,8 +22,16 @@ jobs:
   check:
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+      # macOS runs ONLY where minutes are free (the public mirror). On the
+      # private repo the leg is PAUSED, not ended (M-33, B118, 2026-09-04):
+      # macOS bills at 10x and one push-per-commit matrix reached 90% of
+      # the plan's included Actions minutes in five days. The proof it
+      # gave — the documented bootstrap from nothing on a clean Mac —
+      # still runs at every release cut, where this same file lands in the
+      # mirror. Reopen when the private repo's minutes are no longer the
+      # constraint (a paid Actions plan or a self-hosted macOS runner) or
+      # when a macOS-only bootstrap regression ever reaches a cut.
+      matrix: ${{ github.event.repository.private && fromJSON('{"os":["ubuntu-latest"]}') || fromJSON('{"os":["ubuntu-latest","macos-latest"]}') }}
     runs-on: ${{ matrix.os }}
     # The suite runs ~3min; its web job-runner tests have polled up to
     # ~11min under load (lessons.md). 30min turns a hang into a legible
@@ -32,15 +40,27 @@ jobs:
     steps:
       # Actions pinned to full commit SHAs (B89): a moving major tag is a
       # supply-chain door into the runner that writes the mirror's proof.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # checkout v5 = v4 on Node 24 (the runner's Node 20 deprecation
+      # annotation, P2-28). setup-uv stays on v5.4.2: its first Node 24
+      # release (v7) stacks v6's breaking input changes; bump when GitHub
+      # names the Node 20 removal date or the action reds (B118 §3).
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # The tripwire's history track scans every commit reachable from
           # any ref — a shallow clone would blind it.
           fetch-depth: 0
+          # The job only reads; no step pushes, so no token is left in
+          # the checkout's git config for a test to find (P2-28).
+          persist-credentials: false
 
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
-          enable-cache: true
+          # Only a push to main uses the cache — a pull_request run gets
+          # none, so a branch can never seed what main restores (P2-28).
+          # Keyed on the hashed lock: the action's default glob never
+          # matched requirements.lock, so the cache could never invalidate.
+          enable-cache: ${{ github.event_name == 'push' }}
+          cache-dependency-glob: requirements.lock
 
       - name: Bootstrap (the documented path)
         run: |
@@ -54,6 +74,11 @@ jobs:
         # Public mirror: no secret — the committed attestation covers the
         # empty-list posture. Neither present -> the tripwire fails loudly,
         # which is the intended signal to configure one of the two.
+        # Push events only (P2-28): a same-repo pull_request runs the
+        # PR's own Makefile and tests, and they never get the list on
+        # disk — on the private repo such a run reds at the tripwire,
+        # loudly, and the reviewer gates it locally instead.
+        if: github.event_name == 'push'
         env:
           TRIPWIRE_TOKENS: ${{ secrets.TRIPWIRE_TOKENS }}
         run: |

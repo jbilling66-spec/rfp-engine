@@ -29,6 +29,7 @@ collision is banned (B77§3).
 import hashlib
 from pathlib import Path
 
+from engine.assembly.hygiene import firm_identity, hygiene_entry
 from engine.contracts import ContractError
 
 BUNDLE_NAME = "exports/submission-bundle.json"
@@ -142,6 +143,9 @@ def _entry(pursuit, binding: dict, refusals: list[dict]) -> dict:
         out["sha256"] = _sha256(output_path)
         out["facts_path"] = binding["facts_name"]
         out["revision_n"] = facts["revision_n"]
+        # P3-15: what the file carries at the part level, on the record.
+        out["hygiene"] = hygiene_entry(output_path,
+                                       firm_identity(pursuit.root.parent))
         return out
     out["status"] = "absent"
     return out
@@ -159,6 +163,8 @@ def _render_entry(pursuit, refusals: list[dict]) -> dict:
     if output_path.is_file():
         out["status"] = "produced"
         out["sha256"] = _sha256(output_path)
+        out["hygiene"] = hygiene_entry(output_path,
+                                       firm_identity(pursuit.root.parent))
         return out
     out["status"] = "absent"
     return out

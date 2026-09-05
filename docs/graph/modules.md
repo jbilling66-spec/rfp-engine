@@ -138,13 +138,14 @@ All LLM judgment flows through one boundary, `engine/llm`:
 
 **Call sites** (the drift test AST-detects these: a `call`/`call_for` invocation
 carrying `tier=` with a literal or module-constant agent name, across `engine/`
-excluding `engine/llm/` itself — 18 sites: 17 `TracedCaller.call` + 1 raw
+excluding `engine/llm/` itself — 19 sites: 18 `TracedCaller.call` + 1 raw
 `call_for`):
 
 | file | agent | door | sites |
 |---|---|---|---|
 | engine/assistant/loop.py | steward_assistant | call | 1 |
 | engine/drafting/draft.py | section_drafter | call | 2 |
+| engine/evals/remeasure.py | questioner | call | 1 |
 | engine/intake/brief.py | intake_analyst | call | 1 |
 | engine/intake/brief.py | intake_questioner | call | 1 |
 | engine/kb/ingest.py | ingestion_agent | call | 1 |
@@ -160,8 +161,12 @@ excluding `engine/llm/` itself — 18 sites: 17 `TracedCaller.call` + 1 raw
 | engine/validation/validate.py | consistency_checker | call | 1 |
 | engine/web/server.py | advisor | call_for | 1 |
 
-Every agent's prompt lives at `prompts/<agent>/prompt.md`, with ONE exception:
-`steward_assistant` reads `prompts/assistant/prompt.md`. (`prompts/shared/` holds
+Every agent's prompt lives at `prompts/<agent>/prompt.md`, with TWO exceptions:
+`steward_assistant` reads `prompts/assistant/prompt.md`, and `questioner` — the
+P17 re-measure harness's one-line question-forms prompt (P2-37, P26b-3) — lives
+inline in `engine/evals/remeasure.py::live_questioner`: it is a UAT-session
+measurement tool over a traced LiveCaller, never a pipeline stage, and its
+prompt is not fingerprint-locked to any baseline. (`prompts/shared/` holds
 fragments, not an agent.) The advisor is also the one site that bypasses
 `TracedCaller` — it runs zero-spend by default and traces to
 `support/traces.jsonl` instead.

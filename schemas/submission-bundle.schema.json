@@ -25,7 +25,23 @@
           "facts_path": { "type": "string", "description": "produced/refused: pursuit-relative path of this deliverable's decision record (writeback-facts / template-fill-facts) — the per-file record whose name the fNN scheme keeps collision-free (B77§2 D1)." },
           "revision_n": { "type": "integer", "minimum": 0, "description": "produced: the drafts revision the deliverable was built from." },
           "status": { "type": "string", "enum": ["produced", "absent", "refused"], "description": "produced = on disk, digested, decision record attached; absent = the container expects it and no lane has produced it yet (the RECORDED absence); refused = its lane ran and refused, reason carried. Writer-enforced (the slot_count precedent — the composer, not jsonschema conditionals, holds the per-status obligations): produced always carries sha256, plus facts_path for the lanes that keep a decision record (write-back and fill; submission_render has none — its proof is the export artifact line); refused carries reason." },
-          "reason": { "type": "string", "description": "refused: the lane's refusal, verbatim — the record answers 'why is this not here?' without a log dive." }
+          "reason": { "type": "string", "description": "refused: the lane's refusal, verbatim — the record answers 'why is this not here?' without a log dive." },
+          "hygiene": {
+            "type": "object",
+            "description": "produced: what the file carries at the part level (P3-15, P26b-3) — the identity stamped on it and the parts a text-and-style verifier cannot see. Counts by tag and part names only, never text. `firm_identity` says whether the workspace's firm.json was set when the file was stamped; unconfigured means a blank author, never the generator's.",
+            "required": ["creator", "last_modified_by", "parts", "comment_parts", "media_parts", "revision_marks", "generator_strings", "firm_identity"],
+            "additionalProperties": false,
+            "properties": {
+              "creator": { "type": "string" },
+              "last_modified_by": { "type": "string" },
+              "parts": { "type": "integer", "minimum": 0 },
+              "comment_parts": { "type": "array", "items": { "type": "string" } },
+              "media_parts": { "type": "array", "items": { "type": "string" } },
+              "revision_marks": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "tag → count over word/document.xml and every header/footer part (w:ins, w:del, w:rPrChange, w:pPrChange, w:moveFrom, w:moveTo); empty on a clean file." },
+              "generator_strings": { "type": "array", "items": { "type": "string" }, "description": "core-property fields that still name a generator; empty on a hygienic output." },
+              "firm_identity": { "type": "string", "enum": ["configured", "unconfigured"] }
+            }
+          }
         }
       }
     }

@@ -28,7 +28,14 @@ nothing, and is the gate before every commit. `python -m engine serve
 --workspace pursuits/web --port 8400` starts the workbench; it binds
 to the machine itself only, by decision — putting it on a network is
 the Azure phase's job, not a config flag. `make slice` proves the
-end-to-end pipeline headless; `make eval` runs the release gates.
+end-to-end pipeline headless; `make eval` runs the release gates. Those
+gates guard themselves (P26b-3): every lane's rate refuses below a
+declared floor equal to the committed corpus size (shrinking a suite is
+a deliberate edit of the floor, with its B-entry); the two live
+baselines carry a sibling `baseline.lock.json` that only a live
+re-baseline writes, so an edited number is refused by name; and the
+mapper re-measure reads its baseline from the shipped, drift-tested
+`evals/mapper/recorded.json` and refuses `live=True` without `RFP_LIVE=1` and a traced live caller.
 
 ## Spending money
 

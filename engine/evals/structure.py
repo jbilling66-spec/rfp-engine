@@ -43,6 +43,10 @@ ADVERSARIAL_GOLDENS = {
     "adv_blank_spacers": 3,
 }
 
+# P2-36 (P26b-3): the floor is the committed case count (4 twins + 3
+# adversarial shapes).
+MINIMUM_N = {"cases": 7}
+
 
 def _write_workbook(path: Path, rows, *, merges=()):
     from openpyxl import Workbook
@@ -99,6 +103,7 @@ def evaluate_structure_set(workdir: Path) -> dict:
     """Exact-match over both halves. A case that RAISES is a failure with
     its exception recorded — a parser that crashes on an adversarial
     shape has told us something, and it must not read as a silent skip."""
+    from engine.evals.cases import rate
     from engine.structure import PARSER_VERSION, parse_workbook
 
     cases = 0
@@ -138,6 +143,8 @@ def evaluate_structure_set(workdir: Path) -> dict:
         "suite": "structure_parse",
         "parser_version": PARSER_VERSION,
         "n_cases": cases,
-        "exact_match": round(matched / cases, 4) if cases else 1.0,
+        "exact_match": rate(matched, cases, floor=MINIMUM_N["cases"],
+                            lane="structure", of="golden cases"),
+        "minimum_n": dict(MINIMUM_N),
         "failures": sorted(failures),
     }

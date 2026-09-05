@@ -42,6 +42,12 @@ BASELINE_PATH = ROOT / "evals" / "claim-extraction" / "baseline.json"
 
 _PROMPT_FILES = ("claim_auditor",)
 
+# P2-36 (P26b-3): floors are the committed counts — 17 must_flag, 4
+# controls. Enforced by the re-baseline arm BEFORE any spend and by the
+# lane on the recorded counts — never inside run_extraction_suite, whose
+# body is in the scoring-code lock (P11-C7).
+MINIMUM_N = {"must_flag": 17, "controls": 4}
+
 
 class BaselineMismatch(RuntimeError):
     """The baseline no longer describes the current prompt/cases — the
@@ -240,4 +246,10 @@ def check_baseline(path: Path = BASELINE_PATH, *,
             "parser, prompt builder or scorer that turned model output into "
             "this number is not the one running now, and prompts/cases/model "
             "cannot see that (P11-C7); re-measure live")
+    # P2-35 (P26b-3): the measures themselves, against their sibling lock
+    # — the four checks above prove the environment, this one proves the
+    # number was the one recorded.
+    problem = _shared.verify_lock(path, baseline)
+    if problem:
+        raise BaselineMismatch(problem)
     return baseline

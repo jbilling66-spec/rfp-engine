@@ -55,6 +55,8 @@ from engine.assembly.hand_fill import (
     hand_slots,
     read_hand_fill,
 )
+from engine.assembly.hygiene import (firm_identity, refuse_marked_template,
+                                     stamp_docx)
 from engine.contracts import ContractError, validate
 from engine.planning.plan import REFERENCE_DEFAULT
 from engine.structure.docx_default import parse_default_template
@@ -85,6 +87,10 @@ def _template_source(pursuit):
             "the firm template drifted since planning — refusing to fill "
             "a template the frozen plan was not built against (re-run "
             "planning against the current template)")
+    # P3-15 (the owner's call, B119 §1b): the firm's own template with
+    # unaccepted tracked changes or a comments part refuses here — the
+    # preview and the confirm both, before any copy is made.
+    refuse_marked_template(template)
     return template, ref_sha, frozen, container
 
 
@@ -495,14 +501,28 @@ def _assert_fill_roundtrip(template: Path, output: Path,
 
 
 def _render(template: Path, target: Path, facts, prose_by_section,
-            hand_values, parsed, *, buyer: bool) -> None:
+            hand_values, parsed, *, buyer: bool, firm: dict, at: str,
+            title: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(template, target)
     doc = Document(str(target))
     intended = _fill_document(doc, facts, prose_by_section, hand_values,
                               parsed, buyer=buyer)
+    # P3-15: both copies are firm-owned — the template's own core.xml
+    # (python-docx's creator) never reaches a buyer or a reviewer.
+    stamp_docx(doc, firm=firm, at=at,
+               title=title if buyer else f"{title} (working copy)",
+               owned_by_firm=True)
     doc.save(str(target))
     _assert_fill_roundtrip(template, target, intended)
+
+
+def _fill_title(pursuit) -> str:
+    try:
+        buyer = pursuit.read_frozen("bid_brief").get("buyer", {}).get("name", "")
+    except (FileNotFoundError, ContractError):
+        buyer = ""
+    return f"Response — {buyer}" if buyer else "Response"
 
 
 def run_template_fill(pursuit, log, *, confirmed_by: str, at: str) -> dict:
@@ -519,13 +539,15 @@ def run_template_fill(pursuit, log, *, confirmed_by: str, at: str) -> dict:
     parsed = parse_default_template(template)
     hand_values = _hand_values(pursuit, facts["template_sha256"])
 
+    firm = firm_identity(pursuit.root.parent)
+    title = _fill_title(pursuit)
     working = pursuit.root / WORKING_NAME
     _render(template, working, facts, prose_by_section, hand_values,
-            parsed, buyer=False)
+            parsed, buyer=False, firm=firm, at=at, title=title)
     output = pursuit.root / OUTPUT_NAME
     if facts["buyer_copy_produced"]:
         _render(template, output, facts, prose_by_section, hand_values,
-                parsed, buyer=True)
+                parsed, buyer=True, firm=firm, at=at, title=title)
     elif output.exists():
         output.unlink()  # a stale buyer copy never outlives its facts
 

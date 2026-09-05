@@ -137,9 +137,18 @@ def test_release_mode_runs_the_deletion_guard(cut, monkeypatch, tmp_path):
     monkeypatch.setenv("PUBLIC_CUT_DIR", str(tmp_path / "staging2"))
     mod.DELETIONS.write_text("stale.txt\n")
     _commit_all(mod, repo, "acknowledge the deletion")  # the record is committed
+    import tempfile as _tf
+    from pathlib import Path as _Path
+    system_tmp = _Path(_tf.gettempdir())
+    before = {p.name for p in system_tmp.glob("rfp-public-release-*")}
     mod.main()
     assert verified and not (verified[-1] / "stale.txt").exists()
     assert _git(mod, verified[-1], "rev-list", "--count", "HEAD") == "2"
+    # M-32: the release clone lands beside the staging dir (under this
+    # test's tmp_path), never as litter in the system temp root
+    assert verified[-1].parent == tmp_path, verified[-1]
+    after = {p.name for p in system_tmp.glob("rfp-public-release-*")}
+    assert after == before, "a release clone leaked into the system temp"
 
 
 def test_a_red_suite_in_the_cut_tree_names_what_failed(tmp_path, monkeypatch,

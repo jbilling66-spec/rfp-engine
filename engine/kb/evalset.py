@@ -29,6 +29,10 @@ from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 from engine.workspace.pursuit import mint_run_id
 
+# P2-36 (P26b-3): the floor is the committed case count — a boolean
+# suite over a shrunken corpus is a vacuous pass by another route.
+MINIMUM_N = {"cases": 22}
+
 _META_LINE = re.compile(r"<!--\s*(.*?)\s*-->", re.DOTALL)
 
 
@@ -90,6 +94,8 @@ def evaluate_anonymization_set(cases_path: Path, workdir: Path,
     scripted FakeCaller for a real one (the RFP_LIVE measurement path);
     omitted, the scripted default stands and the suite spends nothing."""
     cases = _shared.load_cases(Path(cases_path))
+    _shared.require_n(len(cases), MINIMUM_N["cases"], lane="anonymization",
+                      of="cases")
     failures: list[str] = []
     for case in cases:
         root = Path(workdir) / case["case_id"]
@@ -138,6 +144,12 @@ def evaluate_anonymization_set(cases_path: Path, workdir: Path,
                 "report is not media-flagged"
             )
         banned = expected.get("labels", []) + expected.get("must_not_contain", [])
+        if not banned and not (expected.get("media") or {}).get("must_flag"):
+            # M-26 (P26b-3): a case with nothing to assert used to pass
+            # silently, indistinguishable from one that held. Named.
+            failures.append(
+                f"{case['case_id']}: asserts nothing — no label, no needle, "
+                "no media flag")
         for needle in banned:
             where = [source for source, text in retrievable.items()
                      if needle.lower() in text]

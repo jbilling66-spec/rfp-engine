@@ -38,7 +38,7 @@
  "n_cases": 21,
  "n_controls": 4,
  "over_extracted": [],
- "prompts_fingerprint": "522894ff88d3cd86a4185dc50b4e70a9e4740419739b03e516feb33f8e2f1bbe",
+ "prompts_fingerprint": "f6a6b7bb6871fa968e3179315777122e2f4e8de3a2088f369e9fa8e702e0e74c",
  "run_id": "run_0008",
  "suite": "claim_extraction_set"
 }

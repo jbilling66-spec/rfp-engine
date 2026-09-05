@@ -11,6 +11,7 @@ import pytest
 from engine.kb import KBStore
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
+from engine.evals.cases import write_lock
 from engine.validation.poison import (
     BaselineMismatch,
     CASES_PATH,
@@ -149,6 +150,7 @@ def test_baseline_quadruple_fingerprint_refusals(tmp_path, cases):
               "code_fingerprint": code_fingerprint()}
     path = tmp_path / "baseline.json"
     write_baseline(report, path)
+    write_lock(path, suite="poison_set", run_id=None, at=AT)  # P2-35
     assert check_baseline(path, cases=cases)["recall"] == 0.5
 
     # Stale cases fingerprint: the corpus moved under the guard.

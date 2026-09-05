@@ -19,7 +19,7 @@ would let a code regression hide behind a model number nobody measured.
 
 from pathlib import Path
 
-from engine.evals.cases import load_cases
+from engine.evals.cases import load_cases, rate
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "evals" / "consistency" / "cases.json"
@@ -60,6 +60,10 @@ CROSS_REF_CASES = [
      "why": "CONTROL: no cross-references at all",
      "sections": [{"ref_id": "8.1", "status": "drafted"}]},
 ]
+
+
+# P2-36 (P26b-3): the floor is the committed code-detectable count.
+MINIMUM_N = {"code_detectable": 5}
 
 
 def _drafted_from(case: dict):
@@ -107,7 +111,10 @@ def evaluate_consistency_set(path: Path = CASES_PATH) -> dict:
         "n_cases": len(model_cases) + len(code_cases),
         "n_code_detectable": len(code_cases),
         "n_model_only": len(model_cases),
-        "code_detection_rate": (round(caught / len(code_cases), 4)
-                                if code_cases else 1.0),
+        "code_detection_rate": rate(caught, len(code_cases),
+                                    floor=MINIMUM_N["code_detectable"],
+                                    lane="consistency",
+                                    of="code-detectable cases"),
+        "minimum_n": dict(MINIMUM_N),
         "misses": sorted(misses),
     }

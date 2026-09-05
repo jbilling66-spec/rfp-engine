@@ -27,11 +27,21 @@ measure needs a real KB and arrives at A1.
 
 from pathlib import Path
 
-from engine.evals.cases import load_cases
+from engine.evals.cases import load_cases, rate, write_report
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "evals" / "mapper" / "cases.json"
+# P2-37 (P26b-3): the recorded mapper numbers, the voice/injection
+# pattern — re-derived only by write_recorded, drift-tested against a
+# live recompute, and SHIPPED (the release record under docs/releases/
+# is deny-listed from the public mirror, so nothing that runs there may
+# read it; the dry-run cut caught the first design).
+RECORDED_PATH = ROOT / "evals" / "mapper" / "recorded.json"
 RECALL_K = 5
+
+# P2-36 (P26b-3): floors are the committed counts (76 answerable, 24 gap
+# cases); a shrink is a bar edit with a B-entry.
+MINIMUM_N = {"answerable": 76, "gap_cases": 24}
 
 
 def _searchable_card_count(store) -> int:
@@ -94,13 +104,24 @@ def evaluate_mapper_set(path: Path = CASES_PATH, *, store=None) -> dict:
         "n_cases": len(cases),
         "n_answerable": answerable,
         "n_gap_cases": gap_cases,
-        "recall_at_5": round(hits / answerable, 4) if answerable else 1.0,
-        "false_gap_rate": (round(false_gaps / answerable, 4)
-                           if answerable else 0.0),
-        "true_gap_recall": (round(true_gap_caught / gap_cases, 4)
-                            if gap_cases else 1.0),
+        "recall_at_5": rate(hits, answerable, floor=MINIMUM_N["answerable"],
+                            lane="mapper", of="answerable cases"),
+        "false_gap_rate": rate(false_gaps, answerable,
+                               floor=MINIMUM_N["answerable"],
+                               lane="mapper", of="answerable cases"),
+        "true_gap_recall": rate(true_gap_caught, gap_cases,
+                                floor=MINIMUM_N["gap_cases"],
+                                lane="mapper", of="gap cases"),
+        "minimum_n": dict(MINIMUM_N),
         "searchable_cards": _searchable_card_count(store),
         "missed_cases": sorted(missed_ids),
         "false_gap_cases": sorted(false_gap_ids),
         "grounded_gap_cases": sorted(grounded_gap_ids),
     }
+
+
+def write_recorded(path: Path = RECORDED_PATH) -> Path:
+    """Re-derive the recorded mapper numbers CONSCIOUSLY (the drift test
+    names this call): `python -c "from engine.evals.mapper import
+    write_recorded; write_recorded()"`."""
+    return write_report(evaluate_mapper_set(), path)

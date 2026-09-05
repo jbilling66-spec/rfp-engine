@@ -20,12 +20,16 @@ train reviewers to ignore it).
 
 from pathlib import Path
 
-from engine.evals.cases import files_fingerprint, load_cases, write_report
+from engine.evals.cases import (files_fingerprint, load_cases, rate,
+                                write_report)
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "evals" / "voice" / "cases.json"
 RECORDED_PATH = ROOT / "evals" / "voice" / "recorded.json"
 VOICE_SPEC = ROOT / "config" / "voice-spec.md"
+
+# P2-36 (P26b-3): the floor is the committed must_flag count.
+MINIMUM_N = {"must_flag": 22}
 
 
 def spec_fingerprint() -> str:
@@ -64,7 +68,10 @@ def evaluate_voice_set(path: Path = CASES_PATH) -> dict:
         "suite": "voice_scan",
         "n_cases": len(cases),
         "n_terms": len(terms),
-        "recall": round(caught / should_catch, 4) if should_catch else 1.0,
+        "n_must_flag": should_catch,
+        "recall": rate(caught, should_catch, floor=MINIMUM_N["must_flag"],
+                       lane="voice", of="must_flag cases"),
+        "minimum_n": dict(MINIMUM_N),
         "benign_total": benign_total,
         "false_positives": sorted(false_positives),
         "misses": sorted(misses),

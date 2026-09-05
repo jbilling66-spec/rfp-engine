@@ -125,7 +125,9 @@ The engine ships configured for a synthetic firm. To tailor it:
   register that is not part of this repository. Treat them as provenance
   markers, not links.
 - Windows is unsupported (POSIX file locking, `.venv/bin` layout).
-- CI runs the documented bootstrap on ubuntu and macOS
+- CI runs the documented bootstrap on ubuntu at every push, and on
+  ubuntu + macOS wherever the repository is public — the macOS leg is
+  paused on a private repository, where it bills at ten times the rate
   (`.github/workflows/check.yml`).
 
 ## Contributing and security

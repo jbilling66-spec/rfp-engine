@@ -27,6 +27,11 @@
  "held_out_recall": 0.5,
  "held_out_total": 6,
  "lexicon_fingerprint": "b8a2f5a925a24c2c6012d95da91d812cb59170a093efd7082c8b6e59d42d4be4",
+ "minimum_n": {
+  "benign": 6,
+  "held_out": 6,
+  "per_family": 1
+ },
  "n_cases": 29,
  "overall_recall": 0.8696,
  "suite": "injection_set"

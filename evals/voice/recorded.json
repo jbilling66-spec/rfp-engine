@@ -1,10 +1,14 @@
 {
  "benign_total": 5,
  "false_positives": [],
+ "minimum_n": {
+  "must_flag": 22
+ },
  "misses": [],
  "n_cases": 27,
+ "n_must_flag": 22,
  "n_terms": 22,
  "recall": 1.0,
- "spec_fingerprint": "6c790824cf4828922bc96e9550a0ac08cfca949833d813c2d117f85c28e803c5",
+ "spec_fingerprint": "46057b59873cf56f7f89bffe4201b9c77e328d5e91ebbe45e02a82c96e0e29f2",
  "suite": "voice_scan"
 }

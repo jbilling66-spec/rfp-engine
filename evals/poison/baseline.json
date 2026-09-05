@@ -67,7 +67,7 @@
  "n_cases": 60,
  "n_flagged": 30,
  "precision": 1.0,
- "prompts_fingerprint": "47d93f1c239c1a6f263b9c3482e0507122a26c564935faba70f8a6de542f9d3e",
+ "prompts_fingerprint": "6382ca732b2e9267a45fc79fe2b5adda58872a97482f7a440c1d49589ea9f836",
  "recall": 1.0,
  "run_id": "run_0009",
  "suite": "poison_set"

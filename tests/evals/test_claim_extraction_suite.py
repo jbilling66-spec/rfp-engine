@@ -11,6 +11,7 @@ at the owner-gated close step.
 import json
 
 import pytest
+from engine.evals.cases import write_lock
 from engine.evals.claim_extraction import (BaselineMismatch, CASES_PATH,
                                      cases_fingerprint, check_baseline,
                                      load_cases, prompts_fingerprint,
@@ -470,6 +471,7 @@ def test_baseline_refuses_a_stale_comparison(tmp_path, cases):
               "model_fingerprint": model_fingerprint(),
               "code_fingerprint": code_fingerprint()}
     write_baseline(report, path)
+    write_lock(path, suite="claim_extraction_set", run_id=None, at=AT)  # P2-35
     assert check_baseline(path, cases=cases)["claim_extraction_recall"] == 0.5
 
     # The set moved under the guard.

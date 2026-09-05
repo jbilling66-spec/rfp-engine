@@ -256,9 +256,9 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                                          agent=AGENT,
                                          query=f"revise:{section_id}",
                                          target=target)
-                except UseRestrictedCard:
-                    warnings.append(f"{kb_id}: use_restriction honored at "
-                                    "revise time — withheld")
+                except UseRestrictedCard as exc:
+                    warnings.append(f"{kb_id}: withheld at revise time — "
+                                    f"{exc}")
                     continue
                 front, _ = store.read_card(kb_id)
                 opened.append(kb_id)

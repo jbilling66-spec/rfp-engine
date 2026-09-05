@@ -27,6 +27,7 @@ from pathlib import Path
 
 from docx import Document
 
+from engine.assembly.hygiene import firm_identity, stamp_docx
 from engine.contracts import ContractError
 from engine.structure.docx_buyer import question_cell_map
 
@@ -234,6 +235,11 @@ def run_docx_writeback(pursuit, log, *, at: str, confirmed_by: str,
             intended.add(address)
             (document.tables[address[0]].rows[address[1]]
              .cells[address[2]]).text = row["after"]
+    # P3-15: the buyer's form keeps the buyer's author; the firm is the
+    # last modifier, and no generator string rides along.
+    stamp_docx(document, firm=firm_identity(pursuit.root.parent), at=at,
+               title=document.core_properties.title or "",
+               owned_by_firm=False)
     document.save(output)
     _assert_roundtrip(source, output, intended)
     facts_path = pursuit.write_artifact(

@@ -19,24 +19,36 @@ real trace it could never be trusted.
 import json
 from pathlib import Path
 
-from engine.evals.cases import load_cases
+from engine.evals.cases import load_cases, rate
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "evals" / "trajectory" / "cases.json"
 TRACES_DIR = ROOT / "evals" / "trajectory" / "traces"
 LIVE_RUNS = ROOT / "docs" / "milestones" / "p8-live-run" / "runs"
 
+# P2-36 (P26b-3): floors are the committed counts — 8 cases, and the
+# CI slice drafts 8 sections.
+MINIMUM_N = {"cases": 8, "drafted_sections": 8}
+
 
 def load_trace(name: str) -> list[dict]:
     """A trace is either a committed planted fixture or one of the P8
-    live run logs — real traffic, so a clean assertion means something."""
-    planted = TRACES_DIR / name
-    if planted.exists():
-        return [json.loads(line) for line in
-                planted.read_text(encoding="utf-8").splitlines() if line.strip()]
-    live = LIVE_RUNS / name
-    return [json.loads(line) for line in
-            live.read_text(encoding="utf-8").splitlines() if line.strip()]
+    live run logs — real traffic, so a clean assertion means something.
+
+    M-20 (P26b-3): the name is a case-supplied string; it resolves INSIDE
+    one of the two directories or refuses, and a name found in neither
+    is a typed refusal naming both — never a silent fall-through to a
+    path in docs/milestones/."""
+    from engine.contracts import within
+
+    for directory in (TRACES_DIR, LIVE_RUNS):
+        path = within(directory, name)
+        if path.exists():
+            return [json.loads(line) for line in
+                    path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()]
+    raise FileNotFoundError(
+        f"trace {name!r} is in neither {TRACES_DIR} nor {LIVE_RUNS}")
 
 
 def _kb_lines(records):
@@ -89,7 +101,13 @@ def check_assertion(records: list[dict], assertion: dict) -> tuple[bool, str]:
         calls = [r for r in records if r.get("record_type") == "agent_call"]
         if not calls:
             return False, "no agent_call records — cost is unmeasurable here"
-        total = sum(r.get("cost_usd", 0.0) for r in calls)
+        # M-21 (P26b-3): a call that carries no cost_usd is not free — it
+        # is unmeasurable, the same verdict as no calls at all.
+        unpriced = [r.get("seq") for r in calls if "cost_usd" not in r]
+        if unpriced:
+            return False, (f"agent_call records {unpriced} carry no cost_usd "
+                           "— cost is unmeasurable here")
+        total = sum(r["cost_usd"] for r in calls)
         if round(total, 6) <= value:
             return True, f"${total:.4f} <= ${value}"
         return False, f"${total:.4f} > ${value}"
@@ -142,11 +160,15 @@ def slice_call_pattern(workdir: Path | None = None) -> dict:
             (root / "drafts" / "annotated-draft.json").read_text("utf-8"))
         drafted = [s for s in annotated["sections"]
                    if s.get("draft_status") == "drafted"]
-        n = max(1, len(drafted))
-        return {"status": "ok", "drafted_sections": len(drafted),
+        n = len(drafted)
+        return {"status": "ok", "drafted_sections": n,
                 "agent_calls": calls, "cost_usd": round(cost, 6),
-                "cost_per_section": round(cost / n, 6),
-                "tool_calls_per_section": round(calls / n, 4)}
+                "cost_per_section": rate(
+                    cost, n, floor=MINIMUM_N["drafted_sections"],
+                    lane="trajectory", of="drafted sections", digits=6),
+                "tool_calls_per_section": rate(
+                    calls, n, floor=MINIMUM_N["drafted_sections"],
+                    lane="trajectory", of="drafted sections")}
 
 
 def evaluate_trajectory_set(path: Path = CASES_PATH) -> dict:
@@ -177,7 +199,9 @@ def evaluate_trajectory_set(path: Path = CASES_PATH) -> dict:
         "n_cases": len(cases),
         "n_violation_cases": sum(1 for c in cases
                                  if c["expected"].get("must_flag")),
-        "pass_rate": round(passed / len(cases), 4) if cases else 1.0,
+        "pass_rate": rate(passed, len(cases), floor=MINIMUM_N["cases"],
+                          lane="trajectory", of="cases"),
+        "minimum_n": dict(MINIMUM_N),
         "violations_detected": sorted(detected),
         "failures": sorted(failures),
     }

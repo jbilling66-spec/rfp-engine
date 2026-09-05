@@ -19,6 +19,7 @@ from engine.kb.purge import (
 )
 from engine.kb.retrieve import (
     SearchResult,
+    DeprecatedCard,
     UseRestrictedCard,
     card_search,
     descend,
@@ -37,6 +38,7 @@ __all__ = [
     "RestrictedStore",
     "SearchResult",
     "SourceDoc",
+    "DeprecatedCard",
     "UseRestrictedCard",
     "apply_placeholders",
     "card_search",

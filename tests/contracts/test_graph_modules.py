@@ -158,7 +158,7 @@ def _caller_sites() -> list[tuple[str, str, str]]:
 
 def test_caller_seam_table_matches_detected_call_sites():
     detected = _caller_sites()
-    assert len(detected) == 18, f"seam site count moved: {len(detected)} (expected 18)"
+    assert len(detected) == 19, f"seam site count moved: {len(detected)} (expected 19)"
     assert sum(1 for _, _, attr in detected if attr == "call_for") == 1
     doc_rows = _table_with_header("file")
     doc_sites = sorted(

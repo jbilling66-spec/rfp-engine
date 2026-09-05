@@ -47,6 +47,13 @@ uv pip install --require-hashes -r requirements.lock
 uv pip install --no-deps -e .
 ```
 
+Then name the firm: put `{"name": "<the firm's name as it should appear
+as a document author>"}` in `pursuits/web/firm.json` (the workspace
+root, beside the pursuits — never in the checkout's `config/`, which
+ships in the public mirror). Every buyer-facing document is stamped
+with it; while it is missing, documents go out with a blank author and
+the downloads record says `unconfigured` (P3-15).
+
 Then prove the copy: `make check` must be green before the first pursuit.
 The suite is offline and spends nothing — "Zero spend by default." is the
 standing law, and the pilot does not change it: the handoff seam consumes

@@ -17,6 +17,7 @@ import hashlib
 from docx import Document
 
 from engine.assembly.bindings import owed_pends as _owed_pends
+from engine.assembly.hygiene import firm_identity, stamp_docx
 from engine.contracts import ContractError
 
 SUBMISSION_NAME = "exports/submission/response.docx"
@@ -99,6 +100,9 @@ def render_submission(pursuit, log, *, at: str) -> str:
             doc.add_paragraph(answer["prose"])
     path = pursuit.root / SUBMISSION_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
+    # P3-15: the firm's metadata, never python-docx's default core.xml.
+    stamp_docx(doc, firm=firm_identity(pursuit.root.parent), at=at,
+               title=_title(brief), owned_by_firm=True)
     doc.save(path)
     log.emit("artifact", stage="write_back", artifact={
         "kind": "export", "path": str(path),
@@ -147,6 +151,8 @@ def render_review(pursuit, log, *, at: str) -> str:
                 f"{finding.get('message', '')[:160]}", style="List Bullet")
     path = pursuit.root / REVIEW_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
+    stamp_docx(doc, firm=firm_identity(pursuit.root.parent), at=at,
+               title=f"{_title(brief)} (internal review)", owned_by_firm=True)
     doc.save(path)
     log.emit("artifact", stage="write_back", artifact={
         "kind": "export", "path": str(path),

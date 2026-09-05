@@ -1,0 +1,63 @@
+{
+ "false_gap_cases": [
+  "mapper_exs_003",
+  "mapper_hyp_005",
+  "mapper_inv_002",
+  "mapper_pmo_003",
+  "mapper_prc_003",
+  "mapper_rpt_003"
+ ],
+ "false_gap_rate": 0.0789,
+ "grounded_gap_cases": [
+  "mapper_gap_002",
+  "mapper_gap_003",
+  "mapper_gap_004",
+  "mapper_gap_005",
+  "mapper_gap_006",
+  "mapper_gap_008",
+  "mapper_gap_009",
+  "mapper_gap_010",
+  "mapper_gap_012",
+  "mapper_gap_015",
+  "mapper_gap_017",
+  "mapper_gap_018",
+  "mapper_gap_019",
+  "mapper_gap_020",
+  "mapper_gap_021",
+  "mapper_gap_022",
+  "mapper_gap_024"
+ ],
+ "minimum_n": {
+  "answerable": 76,
+  "gap_cases": 24
+ },
+ "missed_cases": [
+  "mapper_com_002",
+  "mapper_com_003",
+  "mapper_exs_003",
+  "mapper_hl7_001",
+  "mapper_hyp_004",
+  "mapper_hyp_005",
+  "mapper_inv_002",
+  "mapper_inv_003",
+  "mapper_itg_001",
+  "mapper_itg_002",
+  "mapper_pmo_003",
+  "mapper_pmo_004",
+  "mapper_prc_001",
+  "mapper_prc_002",
+  "mapper_prc_003",
+  "mapper_rpt_002",
+  "mapper_rpt_003",
+  "mapper_rsk_004",
+  "mapper_sec_002",
+  "mapper_str_003"
+ ],
+ "n_answerable": 76,
+ "n_cases": 100,
+ "n_gap_cases": 24,
+ "recall_at_5": 0.7368,
+ "searchable_cards": 23,
+ "suite": "mapper_retrieval",
+ "true_gap_recall": 0.2917
+}

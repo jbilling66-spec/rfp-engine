@@ -161,6 +161,17 @@ Once a pursuit has a validated draft, the pursuit screen shows
   contact), the pricing grid (**Add row** for each milestone), the case
   block, the payment line. Press **Save values**; the next write-back
   lands them.
+- A buyer's workbook comes back byte-for-byte plus the answers: only
+  the answered cells are written into the buyer's own file, so their
+  charts, comments, validations, images and every formula's stored
+  value are exactly as they sent them, and the write-back refuses
+  rather than hand back anything else. Every document that goes out
+  carries your firm's name as its author or last modifier (set once on
+  the work side in `firm.json`; left blank, never the software's name,
+  until it is set) and the downloads record names what each file
+  carries at the part level — tracked changes, comment parts, media.
+  The firm's own template refuses the fill while it still carries
+  tracked changes or comments: accept them in Word first.
 
 A firm-template response is a working copy first: it lists under the
 internal heading, with the template's own instructions already stripped,

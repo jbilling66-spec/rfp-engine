@@ -7,6 +7,7 @@ from engine.contracts.atomic import (  # noqa: F401
 from engine.contracts.jsonfile import read_json  # noqa: F401
 from engine.contracts.jsonl import read_jsonl, torn_tail_offset  # noqa: F401
 from engine.contracts.locks import path_lock  # noqa: F401
+from engine.contracts.paths import within  # noqa: F401
 from engine.contracts.text import check_prose  # noqa: F401
 from engine.contracts.gate_key import (  # noqa: F401
     request_digest,

@@ -291,3 +291,25 @@ def test_deprecated_withheld_and_recorded(tmp_path):
     assert sorted(line["kb"]["excluded"]) == ["kb_open000001", "kb_restr00001"]
     assert line["kb"]["catalog_size"] == 0, "withheld before idf"
     assert store.card_exists("kb_open000001"), "withheld, never deleted"
+
+
+def test_targeted_open_refuses_a_deprecated_card(tmp_path):
+    """B117 §6's limit, closed: a frozen plan that selected a card before
+    a steward deprecated it still names it — the open door now refuses
+    with the same shape D2 uses (a subclass, so every catch site
+    withholds it and names why), and the refusal is on the trace."""
+    from engine.kb.retrieve import DeprecatedCard
+
+    store = _tiny_store(tmp_path)
+    store.update_card_front("kb_open000001", deprecated={
+        "at": "2026-09-04T10:00:00Z", "by": "steward",
+        "proposal_id": "prop_0123456789ab"})
+    log = _log(store, "run_0001")
+    with pytest.raises(UseRestrictedCard) as caught:
+        targeted_open(store, "kb_open000001", log=log, stage="drafting",
+                      agent="section_drafter", query="payroll")
+    assert isinstance(caught.value, DeprecatedCard)
+    assert "deprecated" in str(caught.value)
+    line = read_run(store.root / "runs" / "run_0001" / "run.jsonl")[-1]
+    assert line["kb"]["excluded"] == ["kb_open000001"]
+    assert line["kb"]["cards_opened"] == []

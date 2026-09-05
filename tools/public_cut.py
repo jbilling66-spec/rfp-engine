@@ -285,7 +285,14 @@ def release_commit(staging: Path, target: str,
     p14 fiction rule): the list is emptied after each release."""
     author, base_env, env = release_identity()
     if release_dir is None:
-        release_dir = Path(tempfile.mkdtemp(prefix="rfp-public-release-"))
+        # M-32 (P26c close): the clone lives BESIDE the staging dir, never
+        # in the system temp root — the orchestration tests run release
+        # mode on every gate and left one clone per run behind (150 in
+        # three days). Under pytest the staging dir is under tmp_path,
+        # so the clone is now cleaned with it; a live run keeps the
+        # clone where the owner's push steps name it.
+        release_dir = Path(tempfile.mkdtemp(prefix="rfp-public-release-",
+                                            dir=str(Path(staging).parent)))
     run(*_NEUTRAL, "clone", "-q", target, str(release_dir), cwd=ROOT,
         env=base_env)
     published = set(run("git", "ls-files", cwd=release_dir,
