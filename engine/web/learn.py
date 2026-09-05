@@ -128,7 +128,11 @@ def answered_gaps(pursuit) -> list[dict]:
     return gaps
 
 
-def _route_gaps(pursuit, kb_root: Path, *, at: str, by: str, clean) -> list[str]:
+def _route_gaps(pursuit, kb_root: Path, *, at: str, by: str, clean,
+                verify) -> tuple[list[str], list[dict]]:
+    """-> (opened proposal ids, blocked gaps [{gap_id, locations}]) —
+    P1-46: a gap answer that still carries a residue after cleaning
+    opens nothing and is reported by location."""
     from engine.flywheel.proposals import ProposalStore
     from engine.kb.curation import propose_gap_answer_card
 
@@ -138,29 +142,56 @@ def _route_gaps(pursuit, kb_root: Path, *, at: str, by: str, clean) -> list[str]
                if p["source"].get("pursuit_id") == pursuit_id
                and p["source"].get("gap_id")}
     opened = []
+    blocked = []
     for gap in answered_gaps(pursuit):
         if gap.get("gap_id") in already:
             continue
+        cleaned = {"answer": clean(gap["answer"]),
+                   "question_to_human": clean(gap.get("question_to_human", ""))}
+        residue = sorted({f.location for f in verify(
+            {k: v for k, v in cleaned.items() if v})})
+        if residue:
+            blocked.append({"gap_id": gap.get("gap_id"), "locations": residue})
+            continue
         opened.append(propose_gap_answer_card(
-            kb_root,
-            gap={**gap, "answer": clean(gap["answer"]),
-                 "question_to_human": clean(gap.get("question_to_human", ""))},
-            pursuit_id=pursuit_id,
+            kb_root, gap={**gap, **cleaned}, pursuit_id=pursuit_id,
             operator=gap.get("answered_by") or by, at=at))
         already.add(gap.get("gap_id"))
-    return opened
+    return opened, blocked
+
+
+def _cleaners(identifiers: dict[str, str]):
+    """The pair every learn door uses (P28, P1-46): `clean` substitutes
+    the buyer's identifiers AND the structured classes code detects in
+    the text itself (an email in a comment is placeholdered even when no
+    buyer name is known); `verify` is the ingestion scanner over the
+    cleaned strings — the same gate a firm document passes."""
+    from engine.kb.anonymize import (apply_placeholders, detect_structured,
+                                     merge_identifiers, scan)
+
+    def clean(text):
+        return apply_placeholders(
+            text, merge_identifiers(detect_structured(text), identifiers))
+
+    def verify(texts):
+        return scan(texts, identifiers)
+
+    return clean, verify
 
 
 def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
                       at: str, by: str = "") -> dict:
     """-> {"routed": [event_id], "proposals": [proposal_id],
-           "gap_proposals": [proposal_id], "signals_written": [kb_id]}
+           "gap_proposals": [proposal_id], "signals_written": [kb_id],
+           "blocked": [{"event_id"|"gap_id", "locations"}]}
        — or {"skipped": why}. `by` is the accepting operator: the human
-       a gap proposal names when the answer itself recorded no one."""
+       a gap proposal names when the answer itself recorded no one.
+       `blocked` (P28, P1-46) names every piece of feedback that still
+       carried an identifier residue after cleaning — nothing of it was
+       written; locations only."""
     from engine.contracts import path_lock
-    from engine.flywheel.routing import route_feedback
+    from engine.flywheel.routing import BLOCKED_PREFIX, route_feedback
     from engine.flywheel.survival import write_card_signals
-    from engine.kb.anonymize import apply_placeholders
     from engine.kb.store import KBStore
     from engine.metrics.resolver import Corpus
     from engine.validation.voice import prohibited_terms
@@ -179,10 +210,7 @@ def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
     pursuit = PursuitDir(workspace, pursuit_id)
     lane = EventsLane(pursuit)
     store = KBStore(kb_root)
-    identifiers = buyer_identifiers(workspace, pursuit)
-
-    def clean(text):
-        return apply_placeholders(text, identifiers) if identifiers else text
+    clean, verify = _cleaners(buyer_identifiers(workspace, pursuit))
 
     corpus = Corpus(workspace)
     records = corpus.runs()
@@ -190,11 +218,11 @@ def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
         revised = route_feedback(
             lane.read(), store, at=at, voice_terms=prohibited_terms(),
             cited=cited_by_section(records, pursuit_id),
-            waivers=waived_claims(pursuit), anonymize=clean)
+            waivers=waived_claims(pursuit), anonymize=clean, verify=verify)
         for line in revised:
             lane.append_revised(line)
-        gap_proposals = _route_gaps(pursuit, kb_root, at=at, by=by,
-                                    clean=clean)
+        gap_proposals, blocked_gaps = _route_gaps(
+            pursuit, kb_root, at=at, by=by, clean=clean, verify=verify)
         written = write_card_signals(store, records, corpus.events())
     proposals = sorted({
         pid
@@ -202,9 +230,16 @@ def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
         if line["flywheel_routing"]["action_taken"].startswith("proposal:")
         for pid in line["flywheel_routing"]["action_taken"]
         .split(":", 1)[1].split(",")})
+    blocked = [
+        {"event_id": line["event_id"],
+         "locations": line["flywheel_routing"]["action_taken"]
+         [len(BLOCKED_PREFIX):].split(",")}
+        for line in revised
+        if line["flywheel_routing"]["action_taken"].startswith(BLOCKED_PREFIX)
+    ] + blocked_gaps
     return {"routed": [line["event_id"] for line in revised],
             "proposals": proposals, "gap_proposals": gap_proposals,
-            "signals_written": written}
+            "signals_written": written, "blocked": blocked}
 
 
 def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
@@ -225,7 +260,6 @@ def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
                                            read_hand_fill)
     from engine.contracts import path_lock
     from engine.flywheel.proposals import ProposalStore
-    from engine.kb.anonymize import apply_placeholders
     from engine.workspace import PursuitDir
 
     workspace = Path(workspace)
@@ -240,10 +274,7 @@ def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
                 "skipped": {HAND_FILL_NAME: "no hand-completion record"}}
     frozen = pursuit.read_frozen("pursuit_plan")
     container = pursuit.read_artifact(frozen.get("slots_ref", "slots.json"))
-    identifiers = buyer_identifiers(workspace, pursuit)
-
-    def clean(text):
-        return apply_placeholders(text, identifiers) if identifiers else text
+    clean, verify = _cleaners(buyer_identifiers(workspace, pursuit))
 
     cases = {slot["slot_id"] for slot in case_block_slots(container)}
     proposals: list[str] = []
@@ -260,6 +291,13 @@ def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
             skipped[slot_id] = "no values entered"
             continue
         body = clean(case_block_text(slot, value))
+        residue = sorted({f.location for f in verify({"body": body})})
+        if residue:
+            # P1-46: a hand-typed case block that still names a party
+            # after cleaning opens nothing — named, never silently kept.
+            skipped[slot_id] = ("identifier residue at "
+                                + ", ".join(residue) + " — not proposed")
+            continue
         title = (slot.get("path") or slot.get("question_text")
                  or slot_id).strip()
         source = {"door": "flywheel", "pursuit_id": pursuit_id,

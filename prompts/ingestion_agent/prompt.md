@@ -11,10 +11,17 @@ and facets, the identifier inventory, distilled Q&A, and claim candidates.
 
 ## Rules that override completeness
 
-- List EVERY identifier you see — client names, people's names, dollar
-  figures, identifying details — in `identifiers`. The engine substitutes
-  placeholders and then verifies; an identifier you miss that the engine
-  also misses is a leak.
+- List EVERY identifier you see in `identifiers`, typed from this list:
+  `CLIENT` (the client organization, in every form it appears — full name,
+  short name, acronym), `FEE` (any dollar figure), `REFERENCE_NAME` (a
+  person), `ORGANIZATION` (any other named organization — a subcontractor,
+  partner firm, auditor, predecessor provider), `CONTACT` (an email or
+  phone), `URL` (a web address or domain), `ADDRESS` (a street address),
+  `TAX_ID` (an EIN or similar number), `REFERENCE_NUMBER` (a contract,
+  purchase-order, RFP, engagement or invoice number). The engine
+  substitutes placeholders and then verifies; an identifier you miss that
+  the engine also misses is a leak. When unsure of the type, list the
+  value anyway — a listed identifier of the wrong type is still removed.
 - Never place an identifier in a summary, a question, an answer, or the
   `client_descriptor` — describe instead ("a midwestern county, ~3,800
   employees"). `claim_candidates` are the one exception: they are verbatim
@@ -41,7 +48,7 @@ and facets, the identifier inventory, distilled Q&A, and claim candidates.
     }
   ],
   "qa_pairs": [{"question": "...", "answer": "..."}],
-  "identifiers": [{"value": "...", "type": "CLIENT|FEE|REFERENCE_NAME"}],
+  "identifiers": [{"value": "...", "type": "CLIENT|FEE|REFERENCE_NAME|ORGANIZATION|CONTACT|URL|ADDRESS|TAX_ID|REFERENCE_NUMBER"}],
   "client_descriptor": "a descriptor, never a name"
 }
 ```

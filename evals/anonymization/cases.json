@@ -739,5 +739,705 @@
     "suite": "anonymization_set",
     "target": "ingestion_agent",
     "tier": "component"
+  },
+  {
+    "case_id": "anon_023",
+    "expected": {
+      "labels": [
+        "Thistledown Cooperative Bank",
+        "$640,000"
+      ],
+      "must_not_contain": [
+        "Thistledown"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL possessive-only: the client is named only in possessive form.",
+      "files": [
+        "docs/anon_023.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_024",
+    "expected": {
+      "labels": [
+        "Marrowfield Public Schools",
+        "$1,180,000"
+      ],
+      "must_not_contain": [
+        "Marrowfield"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL casing: the client is named only in ALL CAPS.",
+      "files": [
+        "docs/anon_024.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_025",
+    "expected": {
+      "labels": [
+        "Ironvale Aggregates",
+        "$775,000"
+      ],
+      "must_not_contain": [
+        "Ironvale"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL legal-suffix variants: ', Inc.' and ' Inc' after the client name.",
+      "files": [
+        "docs/anon_025.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_026",
+    "expected": {
+      "labels": [
+        "Quillhaven Housing Authority",
+        "$520,000"
+      ],
+      "must_not_contain": [
+        "Quillhaven",
+        "QHA"
+      ],
+      "status": "blocked"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL acronym: the client's initials appear alone after the full name; neither reader lists them.",
+      "files": [
+        "docs/anon_026.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_027",
+    "expected": {
+      "labels": [
+        "Sablecrest Pharmaceuticals",
+        "Marisol Quintero"
+      ],
+      "must_not_contain": [
+        "Sablecrest",
+        "Marisol"
+      ],
+      "status": "blocked"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL first-name-only: a reference contact later appears by first name alone (regression pin: the distinctive-token scan blocks).",
+      "files": [
+        "docs/anon_027.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_028",
+    "expected": {
+      "labels": [
+        "Dunmore Transit Authority",
+        "Yvette Delacroix"
+      ],
+      "must_not_contain": [
+        "Dunmore",
+        "Delacroix"
+      ],
+      "status": "blocked"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL title+surname: 'Ms. Delacroix' after the contact's full name (regression pin: the distinctive-token scan blocks).",
+      "files": [
+        "docs/anon_028.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_029",
+    "expected": {
+      "labels": [
+        "Wrenfield Community College",
+        "Elias Thornbury"
+      ],
+      "must_not_contain": [
+        "Wrenfield",
+        "Thornbury"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL truncated proposal: the first reader lists the contact's name one letter short; the reviewer lists it whole and the union substitutes it.",
+      "files": [
+        "docs/anon_029.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_030",
+    "expected": {
+      "labels": [
+        "Oakhollow Credit Union",
+        "Ren\u00e9e Okonkwo-Adebayo"
+      ],
+      "must_not_contain": [
+        "Oakhollow",
+        "Ren\u00e9e"
+      ],
+      "status": "blocked"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL diacritics: a contact's accented first name appears alone; the scan's tokens are Unicode letters.",
+      "files": [
+        "docs/anon_030.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_031",
+    "expected": {
+      "labels": [
+        "Pellmark Foods",
+        "Tomasz Wi\u015bniewski"
+      ],
+      "must_not_contain": [
+        "Pellmark",
+        "Wi\u015bniewski"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL decomposed Unicode: the body writes the contact's name in NFD while the answer key is NFC.",
+      "files": [
+        "docs/anon_031.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_032",
+    "expected": {
+      "labels": [
+        "Bramblewick County",
+        "$910,000"
+      ],
+      "must_not_contain": [
+        "Bramblewick"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL invisible characters: a soft hyphen and a zero-width space split the client's name in the body.",
+      "files": [
+        "docs/anon_032.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_033",
+    "expected": {
+      "labels": [
+        "Silverline Aviation Services",
+        "$1,330,000",
+        "Vantorre Engineering"
+      ],
+      "must_not_contain": [
+        "Silverline",
+        "Vantorre"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL third party: a subcontractor the first reader missed; the reviewer lists it as ORGANIZATION.",
+      "files": [
+        "docs/anon_033.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_034",
+    "expected": {
+      "labels": [
+        "Hazelmoor Water District",
+        "$445,000"
+      ],
+      "must_not_contain": [
+        "Hazelmoor",
+        "445,000"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL missed fee: the first reader omits the fee; the reviewer lists it and the union substitutes it.",
+      "files": [
+        "docs/anon_034.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_035",
+    "expected": {
+      "labels": [
+        "Sablecrest Pharmaceuticals"
+      ],
+      "must_not_contain": [
+        "Sablecrest",
+        "sablecrest.example"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL URL and bare domain carrying the client's token: detected by code and substituted, never merely blocked.",
+      "files": [
+        "docs/anon_035.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_036",
+    "expected": {
+      "labels": [
+        "Kestrel Ridge Hospital"
+      ],
+      "must_not_contain": [
+        "Kestrel",
+        "Harrowgate",
+        "47-1234567",
+        "214-8890",
+        "214.8890"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL structured identifiers: a street address, an EIN and a phone in two formats \u2014 detected by code and substituted.",
+      "files": [
+        "docs/anon_036.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_037",
+    "expected": {
+      "labels": [
+        "Marrowfield Public Schools"
+      ],
+      "must_not_contain": [
+        "Marrowfield",
+        "48812-A",
+        "C-2024-0117",
+        "2025-014"
+      ],
+      "status": "ingested"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL reference numbers: a purchase-order, contract and RFP number \u2014 detected by code and substituted.",
+      "files": [
+        "docs/anon_037.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_038",
+    "expected": {
+      "labels": [
+        "Oakhollow Credit Union",
+        "$3,400,000"
+      ],
+      "must_not_contain": [
+        "Oakhollow",
+        "3.4MM",
+        "3,400K"
+      ],
+      "status": "blocked"
+    },
+    "held_out": true,
+    "input": {
+      "description": "ADVERSARIAL fee restatements in MM and K forms that neither reader lists; the scan's variants block.",
+      "files": [
+        "docs/anon_038.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_039",
+    "expected": {
+      "labels": [
+        "Ironvale Aggregates",
+        "$775,000"
+      ],
+      "must_not_contain": [
+        "Ironvale",
+        "775K"
+      ],
+      "status": "ingested"
+    },
+    "held_out": true,
+    "input": {
+      "description": "ADVERSARIAL fee restatement the reviewer lists (the first reader does not): the union substitutes it.",
+      "files": [
+        "docs/anon_039.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_040",
+    "expected": {
+      "labels": [
+        "Thistledown Cooperative Bank",
+        "$1,240,000"
+      ],
+      "must_not_contain": [
+        "Thistledown",
+        "$1.2M"
+      ],
+      "status": "blocked"
+    },
+    "held_out": true,
+    "input": {
+      "description": "ADVERSARIAL one-decimal rounding of the fee that neither reader lists; the scan's rounded variant blocks.",
+      "files": [
+        "docs/anon_040.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_041",
+    "expected": {
+      "labels": [
+        "Kestrel Ridge Hospital"
+      ],
+      "must_not_contain": [
+        "Kestrel"
+      ],
+      "status": "ingested"
+    },
+    "held_out": true,
+    "input": {
+      "description": "Runtime-built DOCX: the client is named ONLY in the page footer (P2-27's read); regression pin for reader coverage.",
+      "files": [
+        "anon_041.docx"
+      ],
+      "generator": "engine.extraction.corpus:build_footer_case_docx"
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_042",
+    "expected": {
+      "labels": [
+        "Quillhaven Housing Authority",
+        "$4,150,000"
+      ],
+      "must_not_contain": [
+        "Quillhaven",
+        "4,150,000"
+      ],
+      "status": "ingested"
+    },
+    "held_out": true,
+    "input": {
+      "description": "Runtime-built DOCX: the fee appears ONLY inside a table cell; regression pin for reader coverage.",
+      "files": [
+        "anon_042.docx"
+      ],
+      "generator": "engine.extraction.corpus:build_table_case_docx"
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-05",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
   }
 ]

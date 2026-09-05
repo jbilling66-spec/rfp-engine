@@ -9,6 +9,8 @@ from engine.kb.curation import orphans_view
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 
+from tests.kb.fixtures.corpus import REVIEWER_NONE
+
 CLIENT = "Foxfire Analytics"
 
 ALPHA = ("Our approach pairs a fixed-scope discovery with weekly "
@@ -49,7 +51,7 @@ def _wire(n_chunks: int) -> str:
 def _ingest(store, text: str, n_chunks: int, run: str):
     log = RunLogger(store.root, run, "kb")
     caller = TracedCaller(
-        FakeCaller({"ingestion_agent": _wire(n_chunks)}), log)
+        FakeCaller({"ingestion_agent": _wire(n_chunks), **REVIEWER_NONE}), log)
     doc = SourceDoc(
         doc_id="tw_doc", text=text, source_client=CLIENT,
         source_pursuit="pur_tw_2026", outcome="won", date="2026-08-01",

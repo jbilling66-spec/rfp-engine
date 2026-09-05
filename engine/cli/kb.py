@@ -3,9 +3,11 @@ where-used | provenance.
 
 `seed` builds the committed synthetic store from the fixture corpus via the
 scripted FakeCaller — a dev command that needs the repo checkout (the
-fixtures live under tests/). `ingest` is the production door; offline it
-requires a wire-response file to stand in for the model (the live caller
-arrives P8, RFP_LIVE-gated).
+fixtures live under tests/). `ingest` is the production door: `--live`
+(P28, P1-45) runs both readers through the traced live caller — refused by
+construction without RFP_LIVE=1, a key and a priced table, under a
+per-document spend budget; offline it takes two wire-response files
+standing in for the two readers.
 """
 
 import json
@@ -42,15 +44,71 @@ def _cmd_kb_seed(args) -> int:
     return 0 if all(r.status == "ingested" for r in reports) else 1
 
 
+def _live_ingest_caller(budget_usd: float):
+    """P1-45 (P28): the production door's live caller — LiveCaller refuses
+    construction without RFP_LIVE=1, a key and a priced table (B30(e));
+    nothing is constructed or minted before that check. The budget bounds
+    ONE document's two reads — a runaway guard, not a price."""
+    from engine.llm import (LiveCaller, SpendBudget, TracedCaller,
+                            load_env_file, model_prices)
+
+    load_env_file(_REPO_ROOT / ".env")  # the one sanctioned .env read (B34(22))
+    live_caller = LiveCaller()  # refusals are named, and spend nothing
+    prices = model_prices()["prices"]
+    budget = SpendBudget(total_usd=budget_usd, max_calls=8)
+
+    def make_caller(log):
+        return TracedCaller(live_caller, log, prices=prices, budget=budget)
+
+    return make_caller
+
+
+def _scripted_ingest_caller(args):
+    """Offline: two readers, two replies — both are the operator's."""
+    from engine.llm import FakeCaller, TracedCaller
+
+    if not args.wire:
+        print("REFUSED: offline ingestion needs --wire and --reviewer-wire "
+              "(scripted replies for the two readers), or --live",
+              file=sys.stderr)
+        return None
+    if not args.reviewer_wire:
+        print("REFUSED: --reviewer-wire is required alongside --wire — the "
+              "anonymization reviewer (the second reader) needs its own "
+              "scripted reply offline", file=sys.stderr)
+        return None
+    wire_text = Path(args.wire).read_text(encoding="utf-8")
+    review_text = Path(args.reviewer_wire).read_text(encoding="utf-8")
+
+    def make_caller(log):
+        return TracedCaller(FakeCaller({"ingestion_agent": wire_text,
+                                        "anonymization_reviewer": review_text}),
+                            log)
+
+    return make_caller
+
+
 def _cmd_kb_ingest(args) -> int:
     from engine.kb import SourceDoc, ingest_document
     from engine.kb.read import read_source
-    from engine.llm import FakeCaller, TracedCaller
 
+    if args.live:
+        if args.reviewer_wire:
+            print("REFUSED: --reviewer-wire is an offline flag; --live runs "
+                  "both readers through the live caller", file=sys.stderr)
+            return 1
+        try:
+            make_caller = _live_ingest_caller(args.budget_usd)
+        except Exception as exc:  # noqa: BLE001 — the refusal is the message
+            print(f"ingest --live refused: {exc}", file=sys.stderr)
+            return 1
+    else:
+        make_caller = _scripted_ingest_caller(args)
+        if make_caller is None:
+            return 1
     store = _store(args)
     log = _new_log(store)
-    wire_text = Path(args.wire).read_text(encoding="utf-8")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": wire_text}), log)
+    caller = make_caller(log)
     source = read_source(Path(args.file))  # python-docx primary here (B57)
     doc = SourceDoc(
         doc_id=Path(args.file).stem,
@@ -190,8 +248,19 @@ def register(sub) -> None:
 
     ingest = _p("ingest", _cmd_kb_ingest, "ingest one firm-authored document")
     ingest.add_argument("--file", required=True)
-    ingest.add_argument("--wire", required=True,
-                        help="scripted wire-JSON response (live caller lands P8)")
+    reader = ingest.add_mutually_exclusive_group()
+    reader.add_argument("--wire", default=None,
+                        help="scripted wire-JSON reply for the ingestion agent "
+                             "(offline; pair with --reviewer-wire)")
+    reader.add_argument("--live", action="store_true",
+                        help="P1-45: run both readers through the live caller "
+                             "(requires RFP_LIVE=1; refuses otherwise)")
+    ingest.add_argument("--reviewer-wire", default=None,
+                        help="scripted wire-JSON reply for the anonymization "
+                             "reviewer (P28: the second reader; offline only)")
+    ingest.add_argument("--budget-usd", type=float, default=5.0,
+                        help="--live: the spend ceiling for this one document "
+                             "(a runaway guard; two fast-tier reads cost cents)")
     ingest.add_argument("--client", required=True)
     ingest.add_argument("--pursuit", required=True)
     ingest.add_argument("--outcome", default="unknown")

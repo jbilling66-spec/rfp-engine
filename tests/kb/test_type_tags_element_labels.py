@@ -11,7 +11,7 @@ from engine.kb import KBStore, ingest_document
 from engine.kb.ingest import TYPE_TAGS
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
-from tests.kb.fixtures.corpus import SOURCE_DOCS, WIRE
+from tests.kb.fixtures.corpus import REVIEWER_NONE, SOURCE_DOCS, WIRE
 
 
 def test_vocabularies_are_disjoint():
@@ -32,7 +32,7 @@ def test_wire_proposing_element_labels_is_cleared_and_reported(tmp_path):
 
     store = KBStore(tmp_path / "kb")
     log = RunLogger(store.root, "run_0001", "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": poisoned}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": poisoned, **REVIEWER_NONE}), log)
     report = ingest_document(store, caller, log, doc)
 
     assert report.status == "ingested"

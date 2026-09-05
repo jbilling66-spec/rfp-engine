@@ -38,6 +38,7 @@
         "must_flag": { "type": "boolean", "description": "The engine is required to raise a gap/flag rather than produce prose." },
         "must_not_contain": { "type": "array", "items": { "type": "string" }, "description": "Strings whose presence in output is an automatic fail — leaked client names, fees, reference contacts." },
         "media": { "type": "object", "additionalProperties": false, "properties": { "must_flag": { "type": "boolean", "description": "C11: the ingest report must carry the media flag for this document (an embedded logo/signature image is identity the text scan cannot see)." } } },
+        "status": { "type": "string", "enum": ["ingested", "blocked"], "description": "P28: the ingest status this case expects. A block passes the leakage check by construction (the gate held); a case that declares `ingested` pins DELIVERY too — the pipeline must anonymize and write, not refuse." },
         "reference_output": { "type": "string", "description": "Path to the human-submitted or golden output for similarity scoring." },
         "trajectory_assertions": {
           "type": "array",

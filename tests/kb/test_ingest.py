@@ -17,6 +17,7 @@ from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger, assert_seq_gapless, read_run
 
 from tests.kb.fixtures.corpus import (
+    REVIEWER_NONE,
     PLANTED,
     SCRIPT,
     SOURCE_DOCS,
@@ -138,7 +139,7 @@ def test_out_of_vocab_facets_cleared_not_dropped(tmp_path):
     log = RunLogger(store.root, "run_0001", "kb")
     wire = json.loads(WIRE["resp_01"])
     wire["chunk_annotations"][0]["section_types"] = ["Methodology Overview"]
-    caller = TracedCaller(FakeCaller({"ingestion_agent": json.dumps(wire)}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": json.dumps(wire), **REVIEWER_NONE}), log)
     report = ingest_document(store, caller, log, SOURCE_DOCS[0])
     assert report.status == "ingested"
     assert {"where": "chunk 0", "facet": "section_types",
@@ -155,7 +156,7 @@ def test_residual_identifier_variant_blocks_ingestion(tmp_path):
     every write, and leave no L1 model behind."""
     store = KBStore(tmp_path / "kb")
     log = RunLogger(store.root, "run_0001", "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": WIRE["resp_01"]}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": WIRE["resp_01"], **REVIEWER_NONE}), log)
     doc = replace(SOURCE_DOCS[0],
                   text=SOURCE_DOCS[0].text
                   + "\nMeridian's team praised the cutover.")

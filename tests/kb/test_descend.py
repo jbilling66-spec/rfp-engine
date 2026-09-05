@@ -13,6 +13,8 @@ from engine.kb.retrieve import descend
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger, read_run
 
+from tests.kb.fixtures.corpus import REVIEWER_NONE
+
 DOC = """# DOC:nav_doc
 
 ## Approach
@@ -47,7 +49,7 @@ def _wire(n: int) -> str:
 def seeded(tmp_path):
     store = KBStore(tmp_path / "kb")
     log = RunLogger(store.root, "run_0001", "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(4)}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(4), **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="nav_doc", text=DOC, source_client="Foxfire",
                     source_pursuit="pur_nav", outcome="won",
                     date="2026-08-01", authored_by="firm",

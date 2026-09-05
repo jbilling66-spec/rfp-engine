@@ -30,6 +30,9 @@ from engine.extraction.fingerprint import stack_fingerprint
 from engine.kb.anonymize import (
     PLACEHOLDER_TYPES,
     apply_placeholders,
+    detect_structured,
+    merge_identifiers,
+    normalize_text,
     scan,
     scan_passed,
 )
@@ -55,6 +58,12 @@ from engine.kb.store import KBStore
 
 ROOT = Path(__file__).resolve().parents[2]
 _PROMPT_PATH = ROOT / "prompts" / "ingestion_agent" / "prompt.md"
+# P28 (P1-4): the second reader — independent lineage, starved to the
+# numbered text and the taxonomy; its list is unioned with the first
+# reader's before substitution, so both must miss for a residue to
+# reach the scan.
+REVIEWER_AGENT = "anonymization_reviewer"
+_REVIEW_PROMPT_PATH = ROOT / "prompts" / REVIEWER_AGENT / "prompt.md"
 
 # Pre-production facet vocabulary. TODO(spec-gap): vocabulary source of truth — these
 # constants serve P2; the retrieval trigger lexicon question (ROADMAP
@@ -76,7 +85,9 @@ SECTION_TYPES = frozenset(
 
 _OUTCOME_RANK = {"won": 0, "shortlisted": 1, "lost": 2, "unknown": 3, "n/a": 4}
 
-_PLACEHOLDER_TOKEN = re.compile(r"\[(?:CLIENT|FEE|REFERENCE_NAME|REDACTED)\]")
+# Every placeholder the taxonomy can mint (P28: derived, never a second list).
+_PLACEHOLDER_TOKEN = re.compile(
+    "|".join(re.escape(token) for token in PLACEHOLDER_TYPES.values()))
 
 
 @dataclass
@@ -120,6 +131,9 @@ class IngestReport:
     reconciliation: dict | None = None  # C9: four-bucket summary on re-ingest
     proposals: list[str] = field(default_factory=list)  # C15: claim promotions
     chunk_sizes: list[int] = field(default_factory=list)  # C19: R5 diagnostic
+    # P28: the two readers' agreement, as COUNTS only (never values — the
+    # run-log rule): first, reviewer, reviewer_only, first_only, structured.
+    cross_check: dict = field(default_factory=dict)
 
 
 def build_annotation_prompt(doc_id: str, chunks, elements) -> str:
@@ -198,17 +212,8 @@ def parse_wire_v2(text: str, doc_id: str,
         qa_pairs.append({"question": str(qa["question"]),
                          "answer": str(qa["answer"])})
 
-    identifiers = {}
-    for ident in raw.get("identifiers", []):
-        value = str(ident.get("value", "")).strip()
-        itype = str(ident.get("type", ""))
-        if not value:
-            continue
-        if itype not in PLACEHOLDER_TYPES:
-            cleared.append({"where": "identifiers", "facet": "type",
-                            "value": itype})
-            itype = "REDACTED"
-        identifiers[value] = itype
+    identifiers = _parse_identifiers(raw.get("identifiers", []), cleared,
+                                     where="identifiers")
 
     wire = {
         "annotations": annotations,
@@ -217,6 +222,59 @@ def parse_wire_v2(text: str, doc_id: str,
         "client_descriptor": str(raw.get("client_descriptor", "")),
     }
     return wire, cleared
+
+
+def _parse_identifiers(entries, cleared: list[dict], *, where: str) -> dict:
+    """value -> type with the whitelist discipline both readers share: an
+    empty value is dropped, an unknown type is cleared (reported under
+    `where`) and falls to REDACTED — the value is still removed."""
+    identifiers = {}
+    for ident in entries:
+        if not isinstance(ident, dict):
+            continue
+        value = str(ident.get("value", "")).strip()
+        itype = str(ident.get("type", ""))
+        if not value:
+            continue
+        if itype not in PLACEHOLDER_TYPES:
+            cleared.append({"where": where, "facet": "type", "value": itype})
+            itype = "REDACTED"
+        identifiers[value] = itype
+    return identifiers
+
+
+def build_review_prompt(doc_id: str, elements) -> str:
+    """The second reader's prompt (P28): the document's element texts,
+    numbered, and the identifier types — nothing the first reader saw
+    beyond the text itself (no chunking, no vocabulary, no descriptor).
+    The '# DOC:' marker leads so scripted callers key off it."""
+    lines = [f"# DOC:{doc_id}", ""]
+    for index, element in enumerate(elements):
+        if element.text:
+            lines.append(f"[{index}] {element.text}")
+    lines.append("")
+    lines.append("Identifier types: " + ", ".join(
+        t for t in PLACEHOLDER_TYPES if t != "REDACTED"))
+    return "\n".join(lines)
+
+
+def parse_reviewer_wire(text: str, doc_id: str) -> tuple[dict, list[dict]]:
+    """The reviewer's wire: {"identifiers": [{"value", "type"}]} and
+    nothing else is read. Not JSON, or no identifiers list, is wire drift
+    named after the agent — never an empty review."""
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"{doc_id}: {REVIEWER_AGENT} wire is not valid JSON: {e}") from e
+    if not isinstance(raw, dict) or not isinstance(raw.get("identifiers"),
+                                                   list):
+        raise ValueError(
+            f"{doc_id}: {REVIEWER_AGENT} wire lacks an identifiers list")
+    cleared: list[dict] = []
+    identifiers = _parse_identifiers(raw["identifiers"], cleared,
+                                     where="reviewer identifiers")
+    return identifiers, cleared
 
 
 def _clip_summary(summary: str) -> str:
@@ -465,12 +523,37 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     wire, report.cleared_facets = parse_wire_v2(
         result.text, doc.doc_id, len(raw_chunks))
 
-    # 4. Identifier index: model-extracted ∪ metadata-known. The source
-    # client is ALWAYS in it — the scan must not depend on the model
+    # 3b. The second reader (P28, P1-4 — the owner's call: a production
+    # control on every document). Independent lineage, starved to the
+    # numbered text and the taxonomy; it never sees the first reader's
+    # list. Its wire is parsed with the same whitelist.
+    review = caller.call(REVIEWER_AGENT, tier="fast",
+                         prompt=build_review_prompt(doc.doc_id, raw_elements),
+                         system=_REVIEW_PROMPT_PATH.read_text(encoding="utf-8"),
+                         stage="ingestion")
+    reviewed, cleared_by_review = parse_reviewer_wire(review.text, doc.doc_id)
+    report.cleared_facets += cleared_by_review
+
+    # 4. Identifier index: code-detected ∪ first reader ∪ second reader ∪
+    # metadata-known, later layers taking precedence and the fallback
+    # never downgrading a typed entry (P28, B121 §5). Structured
+    # identifiers — contact details, URLs, addresses, tax ids, reference
+    # numbers — are found by code BEFORE any model's list is trusted, so
+    # they are substituted rather than merely blocked. The source client
+    # is ALWAYS in it — the scan must not depend on either reader
     # reporting the one identifier we already know.
-    identifiers = dict(wire["identifiers"])
-    identifiers.update(doc.known_identifiers)
+    structured = detect_structured(
+        "\n".join(e.text for e in raw_elements if e.text))
+    identifiers = merge_identifiers(structured, wire["identifiers"], reviewed,
+                                    doc.known_identifiers)
     identifiers.setdefault(doc.source_client, "CLIENT")
+    first = {normalize_text(k).strip() for k in wire["identifiers"]}
+    second = {normalize_text(k).strip() for k in reviewed}
+    report.cross_check = {
+        "first": len(first), "reviewer": len(second),
+        "reviewer_only": len(second - first), "first_only": len(first - second),
+        "structured": len(structured),
+    }
 
     # 5. Anonymize BETWEEN parse and persist (R7): placeholders over
     # every element, then the model and chunks are rebuilt anonymized —

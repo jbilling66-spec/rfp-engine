@@ -503,3 +503,53 @@ def build_corpus(workdir: Path) -> dict[str, Path]:
         workdir / "encrypted-twin.pdf", paths["multicolumn-twin.pdf"]
     )
     return paths
+
+
+def build_footer_case_docx(path: Path) -> Path:
+    """P28 anonymization eval case: the client is named ONLY in the page
+    footer — P2-27's header/footer read is what carries it to the scan."""
+    import docx
+
+    doc = docx.Document()
+    doc.add_paragraph(
+        "<!-- client: Kestrel Ridge Hospital | descriptor: a community "
+        "hospital, ~1,600 employees | pursuit: pur_anon_041 | outcome: won "
+        "| date: 2025-06-01 -->"
+    )
+    doc.add_heading("Hypercare Approach", level=2)
+    doc.add_paragraph(
+        "Our hypercare team staffs the command center for thirty days after "
+        "go-live, with daily defect triage and a documented exit checklist."
+    )
+    doc.sections[0].footer.paragraphs[0].text = (
+        "Prepared for Kestrel Ridge Hospital — confidential")
+    path.write_bytes(_pinned_docx_bytes(doc))
+    return path
+
+
+def build_table_case_docx(path: Path) -> Path:
+    """P28 anonymization eval case: the fee appears ONLY inside a table
+    cell — the docx reader's table walk is what carries it to the scan."""
+    import docx
+
+    doc = docx.Document()
+    doc.add_paragraph(
+        # the meta comment is a paragraph ELEMENT in a docx (the markdown
+        # reader drops it), so its descriptor must not carry a token of
+        # the client's name — the scan reads it like any other paragraph
+        "<!-- client: Quillhaven Housing Authority | descriptor: a mid-size "
+        "public agency, ~310 employees | pursuit: pur_anon_042 | "
+        "outcome: won | date: 2025-06-01 | fee: $4,150,000 -->"
+    )
+    doc.add_heading("Commercial Summary", level=2)
+    doc.add_paragraph(
+        "Quillhaven Housing Authority's engagement terms are summarized "
+        "below.")
+    table = doc.add_table(rows=2, cols=2)
+    table.style = "Table Grid"
+    table.rows[0].cells[0].text = "Item"
+    table.rows[0].cells[1].text = "Amount"
+    table.rows[1].cells[0].text = "Fixed fee"
+    table.rows[1].cells[1].text = "$4,150,000"
+    path.write_bytes(_pinned_docx_bytes(doc))
+    return path

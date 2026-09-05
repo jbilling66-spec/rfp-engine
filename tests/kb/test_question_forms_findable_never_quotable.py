@@ -21,6 +21,8 @@ from engine.llm import FakeCaller, TracedCaller
 from engine.llm.frames import wrap_kb_card
 from engine.runlog import RunLogger
 
+from tests.kb.fixtures.corpus import REVIEWER_NONE
+
 TOKEN = "zorbification"  # appears NOWHERE except the planted form
 
 
@@ -50,7 +52,7 @@ def _elements():
 def _ingest(tmp_path, questioner=None):
     store = KBStore(tmp_path / "kb")
     log = RunLogger(store.root, "run_0001", "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire()}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(), **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="qf_doc", text=DOC, source_client="Foxfire",
                     source_pursuit="pur_qf", outcome="won",
                     date="2026-08-01", authored_by="firm",

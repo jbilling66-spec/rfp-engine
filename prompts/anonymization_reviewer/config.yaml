@@ -1,0 +1,9 @@
+# Fast tier; the second reader of every ingested document (P28, P1-4 —
+# the owner's call 2026-09-05: a production control at ingestion, not an
+# eval-only measurement). Starved by design: the numbered text and the
+# identifier types, never the first reader's list, the facets or a
+# descriptor. Independent lineage from the ingestion agent: written
+# refute-first, deliberately not derived from its prompt — the point is
+# that the two readers fail differently.
+tier: fast
+tools: []

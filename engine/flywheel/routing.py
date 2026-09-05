@@ -94,7 +94,7 @@ def route_edits(events: list[dict], store, *, at: str,
 
 def route_feedback(events: list[dict], store, *, at: str, voice_terms=(),
                    cited: dict | None = None, waivers: dict | None = None,
-                   anonymize=None) -> list[dict]:
+                   anonymize=None, verify=None) -> list[dict]:
     """Route every unprocessed piece of HUMAN feedback and open a
     proposal for each (P26c, P1-44 — the owner's call at B115 §10: what
     the human said or built is carried forward, in the human's own
@@ -117,7 +117,13 @@ def route_feedback(events: list[dict], store, *, at: str, voice_terms=(),
 
     Every string a proposal carries passes through `anonymize` (identity
     by default; the accept door passes the pursuit's buyer identifiers
-    → placeholders, so pursuit prose never lands on a firm card raw).
+    → placeholders, so pursuit prose never lands on a firm card raw) and
+    then through `verify` (P28, P1-46: the ingestion scanner over the
+    cleaned strings, `{location: text} -> [Finding]`; none by default).
+    A proposal whose strings still carry a residue is NOT opened — the
+    event is revised `blocked: identifier residue at <locations>` and the
+    accept door reports it. Locations only, never the text (the run-log
+    rule).
 
     Returns the revised event lines to append. Already-processed events
     are skipped, so running the learner twice over the same record
@@ -129,6 +135,7 @@ def route_feedback(events: list[dict], store, *, at: str, voice_terms=(),
     cited = cited or {}
     waivers = waivers or {}
     clean = anonymize or (lambda text: text)
+    check = verify or (lambda texts: [])
     revised = []
     for event in events:
         kind = event.get("kind")
@@ -138,14 +145,34 @@ def route_feedback(events: list[dict], store, *, at: str, voice_terms=(),
         if kind == "edit":
             revised.append(_route_edit(event, store, proposals, at=at,
                                        voice_terms=voice_terms,
-                                       cited=cited, clean=clean))
+                                       cited=cited, clean=clean, check=check))
         elif kind == "comment":
             revised.append(_route_comment(event, proposals, at=at,
-                                          clean=clean))
+                                          clean=clean, check=check))
         else:
             revised.append(_route_waiver(event, proposals, at=at,
-                                         waivers=waivers, clean=clean))
+                                         waivers=waivers, clean=clean,
+                                         check=check))
     return revised
+
+
+BLOCKED_PREFIX = "blocked: identifier residue at "
+
+
+def residue_locations(check, diff: dict) -> list[str]:
+    """The diff's string fields that still carry an identifier residue
+    after cleaning, by location (`field.key`) — empty when the proposal
+    may open."""
+    texts = {f"{field}.{key}": str(value)
+             for field, change in diff.items() if isinstance(change, dict)
+             for key, value in change.items() if value}
+    return sorted({finding.location for finding in check(texts)})
+
+
+def _blocked(event, *, target: str, locations: list[str], at: str) -> dict:
+    return revised_event(event, target=target,
+                         action_taken=BLOCKED_PREFIX + ",".join(locations),
+                         at=at)
 
 
 def _source(event: dict) -> dict:
@@ -162,7 +189,8 @@ def _clean_or_none(clean, value):
     return None if value is None else clean(value)
 
 
-def _route_edit(event, store, proposals, *, at, voice_terms, cited, clean):
+def _route_edit(event, store, proposals, *, at, voice_terms, cited, clean,
+                check):
     reason = infer_edit_reason(event, voice_terms=voice_terms)
     target = route_of(reason)
     if target == "none":
@@ -172,6 +200,9 @@ def _route_edit(event, store, proposals, *, at, voice_terms, cited, clean):
     kind = _KIND_FOR_TARGET[target]
     text = {"before": _clean_or_none(clean, event.get("before")),
             "after": _clean_or_none(clean, event.get("after"))}
+    residue = residue_locations(check, {"text": text})
+    if residue:
+        return _blocked(event, target=target, locations=residue, at=at)
     note = (f"A reviewer edit classified {reason!r} suggests the "
             f"{target.replace('_', ' ')} is out of date here.")
     # the cards this section actually drew on — the lesson lands on each
@@ -194,7 +225,7 @@ def _route_edit(event, store, proposals, *, at, voice_terms, cited, clean):
                          action_taken="proposal:" + ",".join(opened), at=at)
 
 
-def _route_comment(event, proposals, *, at, clean):
+def _route_comment(event, proposals, *, at, clean, check):
     text = event.get("comment_text")
     if not text:
         return revised_event(event, target="none",
@@ -213,6 +244,9 @@ def _route_comment(event, proposals, *, at, clean):
     diff = {"comment": {"after": clean(text)}}
     if event.get("agent_reply"):
         diff["agent_reply"] = {"after": clean(event["agent_reply"])}
+    residue = residue_locations(check, diff)
+    if residue:
+        return _blocked(event, target=target, locations=residue, at=at)
     where = (f" on section {event['section_id']}"
              if event.get("section_id") else "")
     note = (f"A reviewer comment{where}"
@@ -227,7 +261,7 @@ def _route_comment(event, proposals, *, at, clean):
                          at=at)
 
 
-def _route_waiver(event, proposals, *, at, waivers, clean):
+def _route_waiver(event, proposals, *, at, waivers, clean, check):
     matched = list(waivers.get((event.get("actor"), event.get("at"))) or ())
     if event.get("section_id"):
         matched = [c for c in matched
@@ -239,6 +273,10 @@ def _route_waiver(event, proposals, *, at, waivers, clean):
     for claim in matched:
         diff = {"waiver_reason": {"after": clean(claim.get("waiver_reason") or "")},
                 "claim": {"after": clean(claim.get("text") or "")}}
+        residue = residue_locations(check, diff)
+        if residue:
+            return _blocked(event, target="validation_tuning",
+                            locations=residue, at=at)
         note = (f"A tier-{claim.get('tier')} block on section "
                 f"{claim.get('section_id')} was waived — the reason is "
                 f"validation-tuning evidence in the waiver's own words.")

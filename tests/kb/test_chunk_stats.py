@@ -10,7 +10,7 @@ from engine.kb.curation import chunk_size_distribution
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 
-from tests.kb.fixtures.corpus import ingest_corpus
+from tests.kb.fixtures.corpus import REVIEWER_NONE, ingest_corpus
 
 
 def test_distribution_observable_from_the_committed_corpus(tmp_path):
@@ -35,7 +35,7 @@ def test_giant_chunk_is_visible_not_clipped(tmp_path):
          "section_types": [], "type_tags": []}],
         "qa_pairs": [], "identifiers": [],
         "client_descriptor": "an org"})
-    caller = TracedCaller(FakeCaller({"ingestion_agent": wire}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": wire, **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="giant", text=f"# DOC:giant\n\n## Everything\n\n"
                     f"{giant_body}\n",
                     source_client="Foxfire", source_pursuit="pur_g",

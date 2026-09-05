@@ -295,9 +295,17 @@ def _wire(doc_id: str) -> str:
 
 WIRE = {doc_id: _wire(doc_id) for doc_id in _META}
 
+# P28: the second reader's double for tests that prove something other
+# than the cross-check — a reviewer that finds nothing. A test double, not
+# a production path: the real reviewer is scripted from the answer key in
+# engine.kb.evalset.default_script and proven in
+# tests/kb/test_anonymization_cross_check.py.
+REVIEWER_NONE = {"anonymization_reviewer": json.dumps({"identifiers": []})}
+
 SCRIPT = {
     "ingestion_agent":
-        lambda prompt: WIRE[re.search(r"# DOC:(\w+)", prompt).group(1)]
+        lambda prompt: WIRE[re.search(r"# DOC:(\w+)", prompt).group(1)],
+    **REVIEWER_NONE,
 }
 
 SOURCE_DOCS = [

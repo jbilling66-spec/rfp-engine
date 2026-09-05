@@ -96,6 +96,52 @@ def run_rebaseline_cli(args) -> int:
     return 0
 
 
+def run_anonymization_live_cli(args) -> int:
+    """P28 (P1-4): measure the LIVE readers over the anonymization corpus
+    and record the result (docs/uat/a1-anonymization-live.md — A1's
+    acceptance line). Gated like the re-baseline arm: LiveCaller refuses
+    construction without RFP_LIVE=1, a key and prices; one SpendBudget
+    bounds the whole run; the harness refuses a factory that is not the
+    live one; a scripted result is never recorded."""
+    from engine.kb.evalset import (CASES_PATH, AnonymizationLiveRefused,
+                                   live_caller_factory, record_live_result,
+                                   run_anonymization_set)
+    from engine.llm import (LiveCaller, SpendBudget, TracedCaller,  # noqa: F401
+                            effective_config, load_env_file, model_prices)
+    from engine.runlog import config_digest
+
+    root = Path(__file__).resolve().parents[2]
+    load_env_file(root / ".env")  # the one sanctioned .env read (B34(22))
+    try:
+        live_caller = LiveCaller()  # refusals are named, and spend nothing
+    except Exception as exc:  # noqa: BLE001 — the refusal is the message
+        print(f"anonymization --live refused: {exc}")
+        return 1
+    at = args.at or _now_iso()
+    workspace = Path(args.workspace) if args.workspace else (
+        root / "pursuits" / "eval-live" / "anonymization")
+    workspace.mkdir(parents=True, exist_ok=True)
+    factory = live_caller_factory(live_caller, prices=model_prices()["prices"],
+                                  budget=SpendBudget())
+    try:
+        result = run_anonymization_set(CASES_PATH, workspace,
+                                       caller_factory=factory, live=True)
+        path = record_live_result(result, cases_path=CASES_PATH, at=at,
+                                  workspace=str(workspace),
+                                  config_digest=config_digest(
+                                      effective_config()))
+    except AnonymizationLiveRefused as exc:
+        print(f"REFUSED: {exc}")
+        return 1
+    print(f"live anonymization run: {'PASS' if result.ok else 'FAIL'} — "
+          f"{result.n_cases} cases, {result.n_blocked} blocked, "
+          f"{len(result.failures)} failures")
+    for line in result.failures:
+        print(f"  {line}")
+    print(f"live record: {path}")
+    return 0 if result.ok else 1
+
+
 def run_eval_cli(args) -> int:
     from engine.metrics.resolver import UnknownMetric
     from engine.metrics.views import validate_views
@@ -103,9 +149,12 @@ def run_eval_cli(args) -> int:
 
     if args.rebaseline:
         return run_rebaseline_cli(args)
+    if args.live and args.suite == "anonymization":
+        return run_anonymization_live_cli(args)
     if args.live:
-        print("REFUSED: --live only applies to --rebaseline. The default "
-              "eval run is offline by construction and spends nothing.")
+        print("REFUSED: --live only applies to --rebaseline or to "
+              "--suite anonymization. The default eval run is offline by "
+              "construction and spends nothing.")
         return 1
 
     # "unknown metric_id fails build" (R6): no CI pipeline exists, so the
@@ -212,8 +261,10 @@ def register(sub) -> None:
                         help="the override's written reason (E7)")
     parser.add_argument("--live", action="store_true",
                         help="RFP_LIVE=1 flavor: the live model, real "
-                             "spend. Only meaningful with --rebaseline")
+                             "spend. Only meaningful with --rebaseline or "
+                             "--suite anonymization (P28: records the live "
+                             "readers' measure)")
     parser.add_argument("--workspace", default=None,
-                        help="where the re-baseline run logs are written "
-                             "(default pursuits/eval-live/)")
+                        help="where the live run logs are written (default "
+                             "pursuits/eval-live/...)")
     parser.set_defaults(fn=run_eval_cli)

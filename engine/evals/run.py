@@ -209,28 +209,37 @@ def injection_lane() -> dict:
 def anonymization_lane() -> dict:
     """Anonymization suite through the REAL ingestion pipeline into a
     throwaway store (E4/R13: boolean, never a rate). Offline this proves
-    the pipeline and its code gates under the scripted segmenter; the
-    live model's own extraction measured PASS at P8 (B35: 0 leaks / 20)."""
+    the pipeline and its code gates under the scripted readers; the live
+    readers' own measure is the recorded live run (P28), reported fresh
+    or not_measured by name."""
     from engine.evals.cases import VacuousMeasure
-    from engine.kb.evalset import MINIMUM_N, evaluate_anonymization_set
+    from engine.kb.evalset import (MINIMUM_N, live_measure,
+                                   run_anonymization_set)
 
     cases_path = ROOT / "evals" / "anonymization" / "cases.json"
-    n_cases = len(json.loads(cases_path.read_text(encoding="utf-8")))
     try:
         with tempfile.TemporaryDirectory() as workdir:
-            ok, failures = evaluate_anonymization_set(cases_path,
-                                                      Path(workdir))
+            result = run_anonymization_set(cases_path, Path(workdir))
     except VacuousMeasure as refusal:
         return _vacuous(refusal, basis="deterministic", blocking=True,
                         bar=ANONYMIZATION_BAR)
     return {"basis": "deterministic", "blocking": True,
             "bar": dict(ANONYMIZATION_BAR),
-            "measures": {"recall": 1.0 if ok else 0.0,
-                         "failures": failures, "n_cases": n_cases,
-                         "minimum_n": dict(MINIMUM_N)},
-            "detail": ("code gates + scripted segmenter offline; live "
-                       "extraction PASS recorded at P8 (B35: 0 leaks / 20 "
-                       "cases)")}
+            "measures": {"recall": 1.0 if result.ok else 0.0,
+                         "failures": result.failures,
+                         "n_cases": result.n_cases,
+                         # P28: a block passes leakage by construction —
+                         # the record says how many cases were delivered
+                         # anonymized and how many the gate refused.
+                         "n_blocked": result.n_blocked,
+                         "blocked": result.blocked,
+                         "minimum_n": dict(MINIMUM_N),
+                         # P28: the live readers' own measure, from the
+                         # record the live arm writes — or the reason
+                         # there is none. Non-blocking until A1.
+                         "live": live_measure(cases_path)},
+            "detail": ("code gates + scripted readers offline; the live "
+                       "readers' measure rides measures.live (A1's line)")}
 
 
 INTAKE_BAR = {"weight_recall": 0.95, "target_coverage": 1.0}

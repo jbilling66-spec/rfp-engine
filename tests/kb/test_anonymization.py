@@ -152,7 +152,9 @@ def test_harness_catches_a_leak_in_the_canonical_model_only(tmp_path):
 
 def test_eval_cases_validate_and_held_out_quota():
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
-    assert len(cases) == 22  # 20 text (P2) + 2 runtime-built media (C11)
+    # 20 text (P2) + 2 runtime-built media (C11) + 20 adversarial (P28:
+    # 18 text + 2 runtime-built docx)
+    assert len(cases) == 42
     for case in cases:
         validate("eval_case", case)
         assert case["suite"] == "anonymization_set"
@@ -161,6 +163,12 @@ def test_eval_cases_validate_and_held_out_quota():
                                    "bar": 1.0, "blocking": True}
     held_out = sum(1 for c in cases if c.get("held_out"))
     assert held_out >= math.ceil(len(cases) * 0.2)
+    # P28: every adversarial case names its class and pins its delivery
+    # outcome, so a refusal never reads as an anonymized write.
+    for case in cases:
+        if case["case_id"] > "anon_022":
+            assert case["expected"].get("status") in ("ingested", "blocked"), (
+                f"{case['case_id']} declares no delivery status")
     # M-26 (P26b-3): every case asserts something — a label, a needle or
     # a media flag. The harness names a case that does not; this pins
     # the committed corpus so the harness never has to.
@@ -194,8 +202,8 @@ def test_a_case_that_asserts_nothing_fails_the_eval(tmp_path):
     hollow[0] = dict(hollow[0], expected={})
     hollow_path = tmp_path / "suite" / "cases.json"
     hollow_path.write_text(json.dumps(hollow), encoding="utf-8")
-    # 20 text cases is below the committed floor of 22 — refused typed.
-    with pytest.raises(VacuousMeasure, match="anonymization: cases has n=20"):
+    # 38 text cases is below the committed floor of 42 — refused typed.
+    with pytest.raises(VacuousMeasure, match="anonymization: cases has n=38"):
         evaluate_anonymization_set(hollow_path, tmp_path / "work")
     # With the floor lifted for the unit, the hollow case is named.
     import engine.kb.evalset as evalset
@@ -237,16 +245,22 @@ def test_sabotaged_extraction_caught_by_eval_not_code_scan(tmp_path):
     scan only knows indexed identifiers) — the labeled eval set is the
     control that still catches it. This asymmetry is why the suite exists."""
     def fee_dropping_factory(meta):
-        honest = default_script(meta)["ingestion_agent"]
+        # P28: BOTH readers stop reporting fees — the union repairs a
+        # single reader's miss (the cross-check twin in
+        # test_anonymization_cross_check.py), so the asymmetry this test
+        # proves needs both to fail.
+        honest = default_script(meta)
 
-        def drops_fees(prompt: str) -> str:
-            wire = json.loads(honest(prompt))
-            wire["identifiers"] = [
-                i for i in wire["identifiers"] if i["type"] != "FEE"
-            ]
-            return json.dumps(wire)
+        def drops_fees(reader):
+            def respond(prompt: str) -> str:
+                wire = json.loads(honest[reader](prompt))
+                wire["identifiers"] = [
+                    i for i in wire["identifiers"] if i["type"] != "FEE"
+                ]
+                return json.dumps(wire)
+            return respond
 
-        return {"ingestion_agent": drops_fees}
+        return {reader: drops_fees(reader) for reader in honest}
 
     result, failures = evaluate_anonymization_set(
         CASES_PATH, tmp_path, script_factory=fee_dropping_factory)

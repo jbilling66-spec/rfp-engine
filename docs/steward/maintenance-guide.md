@@ -37,6 +37,50 @@ re-baseline writes, so an edited number is refused by name; and the
 mapper re-measure reads its baseline from the shipped, drift-tested
 `evals/mapper/recorded.json` and refuses `live=True` without `RFP_LIVE=1` and a traced live caller.
 
+## Ingesting a firm document
+
+`python -m engine kb ingest --file <doc> --client <name> --pursuit <id>
+--date <YYYY-MM-DD> --live` reads one firm-authored document into the
+KB (P28). Two readers see it: the ingestion agent, which annotates the
+chunks and lists the identifiers it finds, and the anonymization
+reviewer, a second reader of independent lineage that lists identifiers
+only and never sees the first list. Code adds what a regex can find
+before either is trusted — emails, phones, web addresses, street
+addresses, EIN/SSN-shaped numbers, contract/PO/RFP/invoice numbers — and
+the union is substituted with typed placeholders: `[CLIENT]`, `[FEE]`,
+`[REFERENCE_NAME]`, `[ORGANIZATION]`, `[CONTACT]`, `[URL]`, `[ADDRESS]`,
+`[TAX_ID]`, `[REFERENCE_NUMBER]`; a type the readers name that the table
+lacks falls to `[REDACTED]` and is reported. Then the scan runs over
+everything that would persist: an identifier's distinctive words,
+acronym, possessive, wrapped form, a fee's K/MM/rounded restatements,
+and every structured class unconditionally. One hit and the document is
+BLOCKED — no card, no canonical model, the raw file retained behind the
+access log for the audit human the report names; the command prints the
+residue's location and matched text to your terminal (never to a
+record). A block is a finding to act on, not a number to watch.
+
+`--live` refuses without `RFP_LIVE=1`, a key and a priced table, and
+spends nothing until all three hold; `--budget-usd` (default 5) bounds
+the one document's two reads. Offline the same door takes `--wire` and
+`--reviewer-wire`, scripted replies for the two readers — the suite's
+path, never the production one.
+
+The taxonomy above is the domain's as of P28 (the owner's call); A1's
+real-material review may add a class — that review is the closer named
+at the `TODO(spec-gap)` in `engine/kb/anonymize.py`, and the register
+records what arrived. The eval corpus (`evals/anonymization/`, 42 cases)
+carries an adversarial case per mechanism; the release record's
+anonymization lane reports `n_blocked` (how many synthetic cases the
+gate refused rather than delivered) and `measures.live` — the recorded
+measure of the LIVE readers, fresh only while the corpus fingerprint
+matches, `not_measured` with the reason otherwise. That record is A1's
+acceptance line; `docs/uat/a1-anonymization-live.md` is the run.
+
+The flywheel passes the same scanner: a reviewer edit, comment, waiver,
+answered gap or hand-typed case block that still names a party after
+placeholdering is not proposed — the accept and writeback responses list
+it under `blocked` by location (P1-46).
+
 ## Spending money
 
 The default caller is fake and free, everywhere, always. Live model

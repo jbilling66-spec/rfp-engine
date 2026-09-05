@@ -13,6 +13,8 @@ from engine.validation.claims import fact_catalog
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 
+from tests.kb.fixtures.corpus import REVIEWER_NONE
+
 CLIENT = "Foxfire Analytics"
 CLAIM = ("We completed forty ERP go-lives for Foxfire Analytics at a "
          "combined fee of $9,400,000.")
@@ -42,7 +44,7 @@ def _wire() -> str:
 
 def _ingest(store, run="run_0001"):
     log = RunLogger(store.root, run, "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire()}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(), **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="claim_doc", text=DOC, source_client=CLIENT,
                     source_pursuit="pur_claim_2026", outcome="won",
                     date="2026-08-01", authored_by="firm",
@@ -87,7 +89,7 @@ def test_blocked_ingest_mints_no_proposal(tmp_path):
     anywhere blocks EVERYTHING, proposals included."""
     store = KBStore(tmp_path / "kb")
     log = RunLogger(store.root, "run_0001", "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire()}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(), **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="claim_doc",
                     text=DOC + "\nFoxfire's team praised the cutover.\n",
                     source_client=CLIENT, source_pursuit="pur_claim_2026",

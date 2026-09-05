@@ -8,7 +8,7 @@ import json
 from engine.kb import KBStore, card_search, purge_client
 from engine.runlog import RunLogger
 
-from tests.kb.fixtures.corpus import PLANTED, ingest_corpus
+from tests.kb.fixtures.corpus import REVIEWER_NONE, PLANTED, ingest_corpus
 
 PROV_X = {"source_pursuit": "pur_x", "source_client": "Client X",
           "date": "2025-01-01", "ingested_by": "ingestion_agent"}
@@ -179,7 +179,7 @@ def test_blocked_ingest_l0_is_reachable_by_its_clients_purge(tmp_path):
     wire = json.dumps({"chunk_annotations": [], "qa_pairs": [],
                        "identifiers": [],
                        "client_descriptor": "an org"})
-    caller = TracedCaller(FakeCaller({"ingestion_agent": wire}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": wire, **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="leaky", text="# DOC:leaky\n\n## S\n\n"
                     "Zephyrline's team praised the cutover.\n",
                     source_client="Zephyrline Logistics",

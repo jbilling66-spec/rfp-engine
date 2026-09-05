@@ -138,7 +138,7 @@ All LLM judgment flows through one boundary, `engine/llm`:
 
 **Call sites** (the drift test AST-detects these: a `call`/`call_for` invocation
 carrying `tier=` with a literal or module-constant agent name, across `engine/`
-excluding `engine/llm/` itself — 19 sites: 18 `TracedCaller.call` + 1 raw
+excluding `engine/llm/` itself — 20 sites: 19 `TracedCaller.call` + 1 raw
 `call_for`):
 
 | file | agent | door | sites |
@@ -148,6 +148,7 @@ excluding `engine/llm/` itself — 19 sites: 18 `TracedCaller.call` + 1 raw
 | engine/evals/remeasure.py | questioner | call | 1 |
 | engine/intake/brief.py | intake_analyst | call | 1 |
 | engine/intake/brief.py | intake_questioner | call | 1 |
+| engine/kb/ingest.py | anonymization_reviewer | call | 1 |
 | engine/kb/ingest.py | ingestion_agent | call | 1 |
 | engine/planning/outline.py | outline_architect | call | 1 |
 | engine/research/findings.py | external_researcher | call | 1 |

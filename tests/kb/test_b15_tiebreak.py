@@ -9,6 +9,8 @@ from engine.kb.ingest import _survivor_is_candidate
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 
+from tests.kb.fixtures.corpus import REVIEWER_NONE
+
 BODY = ("The migration factory converts legacy balances wave by wave "
         "with penny-level reconciliation against the source ledger.")
 # A substitution variant, NOT an extension: one term swapped, so the
@@ -42,7 +44,7 @@ def _wire(n: int) -> str:
 
 def _ingest(store, doc_id, body, outcome, run):
     log = RunLogger(store.root, run, "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(1)}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(1), **REVIEWER_NONE}), log)
     doc = SourceDoc(
         doc_id=doc_id, text=f"# DOC:{doc_id}\n\n## Data Migration\n\n{body}\n",
         source_client="Foxfire", source_pursuit=f"pur_{doc_id}",

@@ -26,6 +26,8 @@ from engine.validation.claims import fact_catalog
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 
+from tests.kb.fixtures.corpus import REVIEWER_NONE
+
 
 def _smuggle_generated_description_fact_card(store: KBStore) -> str:
     """Write a card file DIRECTLY, bypassing store.write_card and its
@@ -125,7 +127,7 @@ def _elements(figure_class: str):
 def _ingest(tmp_path, figure_class, describer=None):
     store = KBStore(tmp_path / "kb")
     log = RunLogger(store.root, "run_0001", "kb")
-    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire()}), log)
+    caller = TracedCaller(FakeCaller({"ingestion_agent": _wire(), **REVIEWER_NONE}), log)
     doc = SourceDoc(doc_id="fig_doc", text=DOC, source_client="Foxfire",
                     source_pursuit="pur_fig", outcome="won",
                     date="2026-08-01", authored_by="firm",
