@@ -12,5 +12,5 @@ def test_version_carries_no_retired_vocabulary():
 
 
 def test_version_shape():
-    assert VERSION == "0.9.1"  # P29a close: the pilot-2.9 / v0.9.1 line
+    assert VERSION == "0.9.2"  # P29b close: the pilot-2.10 / v0.9.2 line
     assert engine_version().startswith(VERSION)

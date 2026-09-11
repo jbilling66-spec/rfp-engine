@@ -41,6 +41,14 @@ def build_store(root) -> KBStore:
          "sensitivity": "restricted"},
         "Restricted body.", PROV, {})
     store.write_card(
+        {"kb_id": "kb_depr00001", "layer": "corpus", "doc_kind": "past_response",
+         "title": "Retired cutover pattern", "summary": "Superseded approach.",
+         "owner": "Delivery Lead"},
+        "Deprecated body.", PROV, {})
+    store.update_card_front("kb_depr00001", deprecated={  # P2-60: a D2 twin
+        "at": "2026-09-04T10:00:00Z", "by": "steward",
+        "proposal_id": "prop_0123456789ab"})
+    store.write_card(
         {"kb_id": "kb_fact00001", "layer": "fact_sheet", "doc_kind": "fact",
          "title": "Certified staff count", "summary": "Verified headcount.",
          "owner": "Compliance Lead", "verified_date": "2026-01-01"},

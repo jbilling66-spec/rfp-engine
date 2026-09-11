@@ -1,5 +1,6 @@
 from engine.contracts.atomic import (  # noqa: F401
     append_fsync,
+    archive_aside,
     write_bytes_atomic,
     write_json_atomic,
     write_text_atomic,

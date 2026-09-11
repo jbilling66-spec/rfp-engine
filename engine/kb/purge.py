@@ -57,6 +57,10 @@ class PurgeAccounting:
     held_cards: list[str] = field(default_factory=list)
     held_models: list[str] = field(default_factory=list)
     held_sources: list[str] = field(default_factory=list)
+    # P29b b6: the lineage cascade (P1-52) and the orphan disposition
+    # (P2-59, the owner's call B130 §1c) are accounted like every layer
+    voided_proposals: list[str] = field(default_factory=list)
+    l0_orphans_removed: list[str] = field(default_factory=list)
     sweep_clean: bool = False
 
 
@@ -119,12 +123,61 @@ def post_purge_sweep(store: KBStore, purged_identifiers: list[str],
                     strings.extend(str(v) for v in change.values()
                                    if v is not None)
             texts[f"proposal:{proposal['proposal_id']}"] = " ".join(strings)
+            # P1-52 (P29b b6): lineage, not strings — a proposal a steward
+            # could still accept that cites a purged card is a survivor
+            if proposal.get("status") == "proposed":
+                cited = set(_derived_targets(proposal))
+                findings += [
+                    f"proposal:{proposal['proposal_id']}: cites purged "
+                    f"card {kb_id}"
+                    for kb_id in sorted(cited & set(purged_kb_ids))]
         findings += list(scan(texts, purged_identifiers))
         findings += [
             f"{kb_id}: purged card still exists"
             for kb_id in purged_kb_ids if lane_store.card_exists(kb_id)
         ]
     return findings
+
+
+def _derived_targets(proposal: dict) -> list[str]:
+    change = (proposal.get("diff") or {}).get("derived_from") or {}
+    return list(change.get("after") or []) if isinstance(change, dict) else []
+
+
+def _void_derived_proposals(store: KBStore, purged_kb_ids: set[str], *,
+                            actor: str, at: str) -> list[str]:
+    """P1-52 (P29b b6): the closure follows `derived_from` INTO the
+    proposal store. Every claim candidate the ingest opens is a new_card
+    proposal derived from its chunk card; after the card is purged the
+    proposal sat `proposed`, and a steward's accept re-minted the purged
+    client's material into the firm KB with no source_client — a second
+    purge found nothing. Each such proposal is voided (the one void
+    primitive, P29a a3) with one curation-log line naming the cascade;
+    neither the note nor the log line names the client."""
+    from engine.flywheel.proposals import ProposalStore
+    from engine.kb.curation import append_curation_log
+
+    proposals = ProposalStore(store.root)
+    voided: list[str] = []
+    for proposal in proposals.list(status="proposed"):
+        hit = sorted(set(_derived_targets(proposal)) & purged_kb_ids)
+        if not hit:
+            continue
+        proposals.void(proposal["proposal_id"], by=f"purge:{actor}", at=at,
+                       note=("voided by a client purge — derived from purged "
+                             f"card(s) {', '.join(hit)} (P1-52)"))
+        voided.append(proposal["proposal_id"])
+    if voided:
+        append_curation_log(
+            store, at=at, by=f"purge:{actor}", voided=voided,
+            reason=(f"purge cascade: {len(voided)} proposal(s) derived from "
+                    "purged cards voided (P1-52)"))
+    return voided
+
+
+def _clock() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _lane_stores(pursuits_root: Path | None) -> list[KBStore]:
@@ -184,7 +237,8 @@ def _accounting_path(store: KBStore, client: str) -> Path:
 
 
 def purge_client(store: KBStore, client: str, *, actor: str,
-                 pursuits_root: Path | None = None) -> PurgeReport:
+                 pursuits_root: Path | None = None,
+                 at: str | None = None) -> PurgeReport:
     """The firm-KB purge runs as one critical section under the root's
     lock (P1-40): a steward's merge landing mid-purge would write a
     card the closure never saw."""
@@ -195,8 +249,10 @@ def purge_client(store: KBStore, client: str, *, actor: str,
 
 
 def _purge_client_locked(store: KBStore, client: str, *, actor: str,
-                         pursuits_root: Path | None = None) -> PurgeReport:
+                         pursuits_root: Path | None = None,
+                         at: str | None = None) -> PurgeReport:
     report = PurgeReport(client=client)
+    at = at or _clock()
     accounting = PurgeAccounting(client=client)
     closure, purged_identifiers = _closure(store, client, actor=actor)
 
@@ -241,6 +297,18 @@ def _purge_client_locked(store: KBStore, client: str, *, actor: str,
         if store.restricted.source_exists(cd, actor=actor, purpose="purge"):
             store.restricted.delete_source(cd)
             accounting.l0_sources.append(cd)
+
+    # P2-59 (P29b b6, the owner's call B130 §1c): a retained source with
+    # no meta — the write_source crash window — has no client, no card
+    # and no lineage, so no client-scoped walk could ever name it; it is
+    # removed on EVERY purge and named here, never left as a hand step.
+    for cd in store.restricted.orphan_source_ids(actor=actor, purpose="purge"):
+        store.restricted.delete_source(cd)
+        accounting.l0_orphans_removed.append(cd)
+
+    # P1-52: the lineage cascade into the proposal store (see the helper).
+    accounting.voided_proposals = _void_derived_proposals(
+        store, set(report.purged), actor=actor, at=at)
 
     # Derived draft content across pursuit workspaces.
     _sweep_drafts(pursuits_root, set(report.purged), accounting)

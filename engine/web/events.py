@@ -19,11 +19,11 @@ Vocabularies are read FROM the schema at import — one copy per rule
 """
 
 import json
-import os
 import threading
 from pathlib import Path
 
-from engine.contracts import check_prose, validate
+from engine.contracts import (append_fsync, check_prose, read_jsonl,
+                              validate)
 from engine.contracts.validate import SCHEMAS_DIR
 
 _SCHEMA = json.loads(
@@ -59,6 +59,7 @@ class EventsLane:
         self.pursuit = pursuit
         self.events_path = pursuit.root / "events" / "events.jsonl"
         self.pending_name = "events/pending.json"
+        self.torn: str | None = None  # P2-57: the last read's torn-tail report
 
     # -- the record --------------------------------------------------------
 
@@ -68,11 +69,11 @@ class EventsLane:
         resolver and this door agree)."""
         from engine.metrics.walker import last_wins
 
-        if not self.events_path.exists():
-            return []
-        return last_wins([json.loads(line) for line in
-                          self.events_path.read_text(
-                              encoding="utf-8").splitlines()])
+        # P2-57 (P29b): the fold B106 §1 claimed — a torn FINAL line is
+        # reported on the lane and repaired at the next append under the
+        # lane's lock; a torn earlier line is corruption and raises by name
+        records, self.torn = read_jsonl(self.events_path)
+        return last_wins(records)
 
     def append_revised(self, event: dict) -> dict:
         """D30's append-only revision (P1-41): a copy of an EXISTING
@@ -88,10 +89,8 @@ class EventsLane:
                     "revised line revises an existing record")
             validate("feedback_event", event)
             self.events_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.events_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(event, sort_keys=True) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            append_fsync(self.events_path, json.dumps(event, sort_keys=True),
+                         repair_torn=True)  # P2-57: repaired under the lock
         return event
 
     def current_revision(self) -> int:
@@ -120,10 +119,8 @@ class EventsLane:
             event.update({k: v for k, v in fields.items() if v is not None})
             validate("feedback_event", event)
             self.events_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.events_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(event, sort_keys=True) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            append_fsync(self.events_path, json.dumps(event, sort_keys=True),
+                         repair_torn=True)  # P2-57: repaired under the lock
         return event
 
     def finalized_by_cid(self) -> dict[str, dict]:

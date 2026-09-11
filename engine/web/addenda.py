@@ -32,6 +32,17 @@ _STOP = frozenset(
     "shall-be required requirements".split())
 
 
+# P3-21 (P29b b3): the lane's own record names inside an addendum folder
+# — the meta and the replan archives. An upload under one of them
+# replaced the lane's record while `meta.json` attested a stored file.
+RESERVED = frozenset({"meta.json"})
+
+
+def reserved_name(filename: str) -> bool:
+    return (not filename or filename in RESERVED
+            or filename.endswith(".superseded.json"))
+
+
 class AddendumError(ValueError):
     pass
 
@@ -66,8 +77,15 @@ class AddendumLane:
               actor: str, slots_by_id: dict | None) -> dict:
         if not body:
             raise AddendumError("empty addendum upload")
-        existing = sorted(p.name for p in self.root.glob("addm_*"))
-        aid = f"addm_{len(existing) + 1:02d}"
+        if reserved_name(filename):
+            raise AddendumError(f"reserved filename {filename!r} — the "
+                                "addendum lane's own record, never an upload")
+        # P3-21 same touch: the id is max+1 (the P1-20/P1-22 rule), not a
+        # count; the lane has no lock, so `mkdir` without exist_ok stays
+        # the loud collision guard (a stated limit)
+        existing = [int(p.name[5:]) for p in self.root.glob("addm_*")
+                    if p.name[5:].isdigit()]
+        aid = f"addm_{max(existing, default=0) + 1:02d}"
         folder = self.root / aid
         folder.mkdir(parents=True)
         write_bytes_atomic(folder / filename, body)  # P0-6

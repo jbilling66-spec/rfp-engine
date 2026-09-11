@@ -111,6 +111,20 @@ class PursuitDir:
     def read_artifact(self, name: str) -> dict:
         return json.loads(self._under_root(name).read_text(encoding="utf-8"))
 
+    def read_artifact_tolerant(self, name: str) -> tuple[dict | None, str]:
+        """`(obj, "")`, or `(None, reason)` naming the file when it is
+        absent or unreadable — the read-side pattern (P2-62, P29b b4;
+        `validation/annotate.py`'s "unreadable == absent, honestly"). The
+        caller decides what an unreadable record means for ITS artifact:
+        rebuild a derived one, refuse over one that holds human work."""
+        path = self._under_root(name)
+        if not path.exists():
+            return None, f"{name} is absent"
+        try:
+            return json.loads(path.read_text(encoding="utf-8")), ""
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+            return None, f"{name} unreadable ({exc.__class__.__name__})"
+
     def write_bytes(self, name: str, data: bytes) -> Path:
         """Atomic bytes under the root (P0-6): the research-pack copy and
         any other opaque record the workspace holds. Frozen names refused."""

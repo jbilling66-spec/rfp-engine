@@ -246,3 +246,52 @@ def test_recompose_overwrites_the_current_state(tmp_path):
     assert second["at"] == "2026-08-29T13:00:00Z"
     by_lane = {d["lane"]: d for d in second["deliverables"]}
     assert by_lane["docx_writeback"]["status"] == "produced"
+
+
+def test_an_output_the_facts_did_not_prove_reads_drifted(tmp_path):
+    """P2-56 (P29b b9): a facts record and a file both on disk used to
+    read `produced` with a freshly computed digest — the facts carried
+    no digest to compare against, so bytes no proof stood behind were
+    vouched for. The facts now record `output_sha256` at proof time and
+    the composer reports `drifted` on a mismatch, never to the buyer."""
+    pursuit = _docx_pursuit(tmp_path)
+    facts = run_docx_writeback(pursuit, _log(pursuit), at=AT,
+                               confirmed_by="pat.lee")
+    output = pursuit.root / "exports" / "writeback" / "qform-twin.docx"
+    assert facts["output_sha256"] == hashlib.sha256(
+        output.read_bytes()).hexdigest()
+    output.write_bytes(output.read_bytes() + b"\n")  # bytes nobody proved
+    bundle = compose_bundle(pursuit, _log(pursuit), at=AT,
+                            composed_by="pat.lee")
+    validate("submission_bundle", bundle)
+    entry = {d["lane"]: d for d in bundle["deliverables"]}["docx_writeback"]
+    assert entry["status"] == "drifted"
+    assert "no proof stands behind" in entry["reason"]
+    assert entry["sha256"] == hashlib.sha256(output.read_bytes()).hexdigest()
+    assert entry["facts_path"] == "exports/docx-writeback-facts.json"
+    assert "hygiene" not in entry
+
+
+def test_a_refused_proof_leaves_no_output_and_the_export_says_absent(
+        tmp_path, monkeypatch):
+    """The audit's scenario: confirm 1 good; confirm 2's proof fails —
+    the unproven output used to stay on disk and the next /export
+    recorded it as produced against confirm 1's facts."""
+    import engine.assembly.docx_writeback as lane
+    pursuit = _docx_pursuit(tmp_path)
+    run_docx_writeback(pursuit, _log(pursuit), at=AT, confirmed_by="pat.lee")
+    output = pursuit.root / "exports" / "writeback" / "qform-twin.docx"
+    assert output.exists()
+
+    def boom(*args, **kwargs):
+        raise ContractError("simulated drift outside the intended cells")
+
+    monkeypatch.setattr(lane, "_assert_roundtrip", boom)
+    with pytest.raises(ContractError, match="simulated drift"):
+        run_docx_writeback(pursuit, _log(pursuit), at=AT,
+                           confirmed_by="pat.lee")
+    assert not output.exists()
+    bundle = compose_bundle(pursuit, _log(pursuit), at=AT,
+                            composed_by="pat.lee")
+    entry = {d["lane"]: d for d in bundle["deliverables"]}["docx_writeback"]
+    assert entry["status"] == "absent" and "sha256" not in entry

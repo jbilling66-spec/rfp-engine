@@ -47,6 +47,10 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 # The one pursuit-id shape (v1 P9-B3 lesson: ONE copy of the regex).
 PURSUIT_ID = re.compile(r"^pur_[a-z0-9][a-z0-9_-]{0,40}$")
 RESERVED_IDS = {"pur_support"}  # D21: the advisor's lane must stay unmixable
+# P3-21 (P29b b3): the inbox lane's own record — an upload under this name
+# replaced the declared roles with document bytes. `ramble.md` and
+# `research-pack.md` are operator INPUTS through this door, not records.
+INBOX_RESERVED = frozenset({"roles.json"})
 
 
 def _default_make_caller(log):
@@ -287,6 +291,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         clean = Path(filename).name  # traversal defense
         if not clean or clean != filename:
             raise HTTPException(422, "plain filenames only")
+        if clean in INBOX_RESERVED:
+            raise HTTPException(422, f"reserved filename {clean!r} — the "
+                                     "inbox's own record, never an upload")
         if role is not None and role not in ("core", "supplemental",
                                              "target"):
             raise HTTPException(
@@ -684,6 +691,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.post("/api/kb/proposals/merge")
     def kb_merge(payload: dict, who: str = Depends(operator)):
+        from engine.flywheel.proposals import ProposalStateError
         from engine.kb.curation import CurationRefused, merge_batch
         ids = field(payload, "proposal_ids", "list", default=[])
         if not ids:
@@ -694,6 +702,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         try:
             return merge_batch(_kb_store(), ids, operator=who,
                                at=_at(payload), fills=fills)
+        except ProposalStateError as refusal:  # P3-22: the /decide leg's map
+            raise HTTPException(status_code=409, detail=str(refusal))
         except CurationRefused as refusal:
             raise HTTPException(status_code=409, detail=str(refusal))
         except ContractError as exc:  # M-30: a bad proposal file, by name
@@ -764,8 +774,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         if not (pursuit.root / "plan.json").exists():
             raise HTTPException(400, "no plan yet — an addendum's impact "
                                      "scan reads the pursuit plan")
+        clean = Path(filename).name  # P3-21: the inbox door's posture —
+        if not clean or clean != filename:  # a refusal, never a collapse
+            raise HTTPException(422, "plain filenames only")
         try:
-            return lane.store(filename=Path(filename).name, body=body,
+            return lane.store(filename=clean, body=body,
                               at=_at(None), actor=who,
                               slots_by_id=slots_by_id)
         except AddendumError as exc:
@@ -863,7 +876,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             # own words, the same ones the download door refuses with
             "refused": sorted(
                 ({"name": d["name"], "reason": d.get("reason", "refused")}
-                 for d in deliverables if d["status"] == "refused"),
+                 for d in deliverables
+                 if d["status"] in ("refused", "drifted")),  # P2-56
                 key=lambda d: d["name"]),
         }
 
@@ -874,9 +888,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         bundle = _bundle_record(root)
         if bundle:
             for entry in bundle["deliverables"]:
-                if entry["name"] == clean and entry["status"] == "refused":
+                if entry["name"] == clean and \
+                        entry["status"] in ("refused", "drifted"):
                     # P26a item 1 (P1-27): a withheld buyer copy names
-                    # what remains — never a bare 404 over a real record
+                    # what remains — never a bare 404 over a real record;
+                    # P2-56: a drifted one names the digests the same way
                     raise HTTPException(409, entry.get("reason", "refused"))
                 if entry["name"] == clean and entry["status"] == "produced":
                     path = root / entry["path"]  # served by the RECORD's
@@ -1130,12 +1146,15 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/pursuits/{pursuit_id}/share/{link_id}/revoke")
     def revoke_share(pursuit_id: str, link_id: str, payload: dict,
                      who: str = Depends(operator)):
-        with _mutate(pursuit_id):  # P0-13's residual gap (B104): serialized
-            try:
-                out = _share_lane(pursuit_id).revoke(
-                    link_id=link_id, by=who, at=_at(payload))
-            except ShareDenied as exc:
-                raise HTTPException(exc.status, exc.reason)
+        # P2-58 (P29b): NOT under _mutate — its busy-409 would refuse the
+        # kill switch for a job's whole run, and a guard-only variant would
+        # block for it; the lane's own lock is the serialization revoke
+        # needs (P0-13's mint discipline kept, B104 §5 amended).
+        try:
+            out = _share_lane(pursuit_id).revoke(
+                link_id=link_id, by=who, at=_at(payload))
+        except ShareDenied as exc:
+            raise HTTPException(exc.status, exc.reason)
         return {k: v for k, v in out.items() if k != "token"}
 
     def _resolve_share(token: str, at: str, action: str) -> tuple:
@@ -1145,8 +1164,14 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             if not (root / "share" / "links.jsonl").exists():
                 continue
             lane = ShareLane(PursuitDir(workspace, root.name))
-            if any(r.get("token") == token
-                   for r in lane._folded().values()):
+            try:
+                folded = lane._folded()
+            except ContractError:
+                # P2-57 (P29b): one pursuit's corrupt links lane is THAT
+                # pursuit's problem — its guests 404 (named on its board
+                # row); every other pursuit's guests are unaffected
+                continue
+            if any(r.get("token") == token for r in folded.values()):
                 return lane, lane.resolve(token, at=at, action=action)
         raise ShareDenied(404, "unknown share link")
 

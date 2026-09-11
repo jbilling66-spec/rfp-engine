@@ -45,13 +45,15 @@ class PingLane:
     def __init__(self, pursuit):
         self.pursuit = pursuit
         self.path = pursuit.root / "pings" / "pings.jsonl"
+        self.torn: str | None = None  # P2-57: reported, no longer discarded
 
     def _append(self, line: dict) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        append_fsync(self.path, json.dumps(line, sort_keys=True))  # M-31
+        append_fsync(self.path, json.dumps(line, sort_keys=True),
+                     repair_torn=True)  # M-31; P2-57: repaired at the append
 
     def _folded(self) -> dict[str, dict]:
-        records, _torn = read_jsonl(self.path)  # P1-17: a torn tail tolerated
+        records, self.torn = read_jsonl(self.path)  # P1-17: a torn tail tolerated
         out: dict[str, dict] = {}
         for line in records:
             out[line["ping_id"]] = {**out.get(line["ping_id"], {}), **line}

@@ -65,13 +65,33 @@ def test_open_card_earns_citation_right(ctx):
     assert _read_lines(ctx.log)[-1]["kb"]["step"] == "targeted_open"
 
 
-def test_use_restricted_card_refused_with_the_refusal_on_the_trace(ctx):
-    with pytest.raises(ToolRefused):
-        execute_tool(ctx, "open_card", {"kb_id": "kb_restr0001"})
-    assert "kb_restr0001" not in ctx.opened_cards
+@pytest.mark.parametrize("door,step", [("open_card", "targeted_open"),
+                                       ("card_detail", "card_detail")])
+@pytest.mark.parametrize("kb_id,reason", [("kb_restr0001", "use_restriction"),
+                                          ("kb_depr00001", "deprecated")])
+def test_withheld_cards_are_refused_at_both_doors_with_the_trace(
+        ctx, door, step, kb_id, reason):
+    """D2 and a steward's deprecation at BOTH read doors (P2-60, P29b
+    b7): `card_detail` used to hand the model the full body, emit no
+    kb_retrieval line, and grant citation right."""
+    with pytest.raises(ToolRefused, match=kb_id):
+        execute_tool(ctx, door, {"kb_id": kb_id})
+    assert kb_id not in ctx.opened_cards
     line = _read_lines(ctx.log)[-1]
     assert line["record_type"] == "kb_retrieval"
-    assert line["kb"]["excluded"] == ["kb_restr0001"]
+    assert line["kb"]["step"] == step
+    assert line["kb"]["excluded"] == [kb_id]
+    assert line["kb"]["empty_result"] is True
+
+
+def test_card_detail_earns_citation_right_with_its_own_trace_line(ctx):
+    _, result = execute_tool(ctx, "card_detail", {"kb_id": "kb_hyper0001"})
+    assert "Hypercare runs two weeks" in result
+    assert "kb_hyper0001" in ctx.opened_cards
+    line = _read_lines(ctx.log)[-1]
+    assert line["record_type"] == "kb_retrieval"
+    assert line["kb"]["step"] == "card_detail"
+    assert line["kb"]["cards_opened"] == ["kb_hyper0001"]
 
 
 def test_read_doc_earns_citation_right(ctx):

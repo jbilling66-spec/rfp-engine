@@ -364,6 +364,15 @@ def _check_new_card(store, proposal: dict, fill: dict) -> tuple[dict, str, list]
         raise CurationRefused(
             f"{proposal['proposal_id']}: a new_card proposal without a "
             f"body mints nothing")
+    missing = [kb_id for kb_id in derived_from if not store.card_exists(kb_id)]
+    if missing:
+        # P1-52 (P29b b6): a purged source is never re-minted through the
+        # proposal that cited it — the lineage the purge cascade follows
+        # must exist for the card the accept would write
+        raise CurationRefused(
+            f"{proposal['proposal_id']}: derived_from names card(s) that "
+            f"do not exist ({', '.join(missing)}) — the source was purged "
+            f"or never minted; nothing derives from a missing record")
     # P29a (P1-49): `anonymization.status` is DERIVED, not asserted — the
     # structured classes are scanned here, unconditionally; the buyer's
     # names were cleaned at the door that opened the proposal (stated
@@ -531,7 +540,16 @@ def _merge_batch_locked(store, proposal_ids: list[str], *, operator: str,
     proposals = ProposalStore(store.root)
     fills = fills or {}
     staged: list[tuple[str, dict, dict, dict, dict | None]] = []
+    seen: set[str] = set()
     for pid in proposal_ids:
+        if pid in seen:
+            # P3-22 (P29b b7): the batch's input contract — a repeated id
+            # applied twice, then the second decide raised and the log
+            # recorded a fully-applied merge as aborted
+            raise CurationRefused(
+                f"{pid} appears more than once in one batch — a proposal "
+                f"is applied once; nothing was applied")
+        seen.add(pid)
         proposal = proposals.read(pid)
         if proposal["status"] != "proposed":
             raise CurationRefused(

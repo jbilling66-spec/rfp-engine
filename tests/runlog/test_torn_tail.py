@@ -94,3 +94,54 @@ def test_a_clean_log_has_no_repair_line(tmp_path):
     resumed = _open(tmp_path, resume=True)
     assert len(read_run(log.path)) == n
     assert resumed.has_footer is False
+
+
+def _strip_final_newline(path):
+    data = path.read_bytes()
+    assert data.endswith(b"\n")
+    path.write_bytes(data[:-1])
+
+
+def test_a_complete_final_record_without_its_newline_is_repaired_not_torn(
+        tmp_path):
+    """P3-20 (P29b b1): the whole object persisted, the final byte
+    dropped — the reader sees no torn tail, and before this fix the
+    resumed writer appended straight after the closing brace, merging
+    two records into one line every later read refused as corruption.
+    The resume writes the newline first and records the repair."""
+    log = _open(tmp_path)
+    _start(log)
+    path = log.path
+    _strip_final_newline(path)
+    records, torn = read_run_report(path)
+    assert len(records) == 3 and torn is None  # parses; not torn
+    resumed = _open(tmp_path, resume=True)
+    assert path.read_bytes().endswith(b"\n")
+    repair = read_run(path)[-1]
+    assert repair["record_type"] == "error"
+    assert repair["error"]["code"] == "tail_newline_repaired"
+    assert repair["error"]["recoverable"] is True
+    resumed.run_end(status="completed")
+    records = read_run(path)  # every record on its own line
+    assert records[-1]["record_type"] == "run_end"
+    assert [r["seq"] for r in records] == list(range(len(records)))
+    assert records[-1]["run"]["totals"]["agent_calls"] == 2
+
+
+def test_a_footer_that_lost_its_newline_stays_the_last_record(tmp_path):
+    """The closed-run twin of the case above: the footer persisted, the
+    final byte dropped. The resume writes the newline and NOTHING after
+    it — a repair record behind the footer would make the runs list
+    read a completed run as unclosed."""
+    log = _open(tmp_path)
+    _start(log)
+    log.run_end(status="completed")
+    path = log.path
+    _strip_final_newline(path)
+    resumed = _open(tmp_path, resume=True)
+    assert resumed.has_footer is True
+    assert path.read_bytes().endswith(b"\n")
+    records = read_run(path)
+    assert records[-1]["record_type"] == "run_end"
+    assert not any(r.get("error", {}).get("code") == "tail_newline_repaired"
+                   for r in records)

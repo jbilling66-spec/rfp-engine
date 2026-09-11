@@ -52,7 +52,7 @@
       "additionalProperties": false,
       "properties": {
         "query": { "type": "string" },
-        "step": { "type": "string", "enum": ["card_search", "targeted_open", "cite", "path_descend"], "description": "cite (B31): one section-scoped line carrying the drafter's surviving cards_cited — the WP9 edit_survival join input. Not a tool invocation; the opens preceding it are. path_descend (P13/C10, WP13 R9): the within-document navigation move — siblings/parent/children of a card via its canonical model, one file read, no catalog scan." },
+        "step": { "type": "string", "enum": ["card_search", "targeted_open", "cite", "path_descend", "card_detail"], "description": "card_detail (P2-60, P29b): the assistant's second read door — one card with citations, staleness and notes; it withholds by the same predicate as targeted_open and names itself so the two doors are distinguishable on the trace. cite (B31): one section-scoped line carrying the drafter's surviving cards_cited — the WP9 edit_survival join input. Not a tool invocation; the opens preceding it are. path_descend (P13/C10, WP13 R9): the within-document navigation move — siblings/parent/children of a card via its canonical model, one file read, no catalog scan." },
         "cards_returned": { "type": "array", "items": { "type": "string" }, "description": "kb_ids surfaced by card search." },
         "cards_opened": { "type": "array", "items": { "type": "string" }, "description": "kb_ids actually opened — the subset that could have influenced output." },
         "cards_cited": { "type": "array", "items": { "type": "string" }, "description": "kb_ids the agent claims it used. Feeds edit_survival attribution when the reviewer later edits this text." },

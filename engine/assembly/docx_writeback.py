@@ -241,7 +241,12 @@ def run_docx_writeback(pursuit, log, *, at: str, confirmed_by: str,
                title=document.core_properties.title or "",
                owned_by_firm=False)
     document.save(output)
-    _assert_roundtrip(source, output, intended)
+    try:
+        _assert_roundtrip(source, output, intended)
+    except BaseException:
+        output.unlink(missing_ok=True)  # P2-56: unproven, never kept
+        raise
+    facts["output_sha256"] = hashlib.sha256(output.read_bytes()).hexdigest()
     facts_path = pursuit.write_artifact(
         "writeback_facts", facts,
         name=binding["facts_name"] if binding else FACTS_NAME)

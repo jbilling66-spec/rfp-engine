@@ -161,3 +161,34 @@ def test_no_bundle_means_an_empty_buyer_list(split):
         "/api/pursuits/pur_split/writeback/preview").status_code == 200
     listing = client.get("/api/pursuits/pur_split/downloads").json()
     assert listing["to_the_buyer"] == []
+
+
+def test_a_drifted_deliverable_is_named_and_never_served(split):
+    """P2-56 (P29b b9) at the web doors: bytes no proof stood behind
+    are not a buyer deliverable — the listing names the drift under
+    `refused` with the record's reason and the download door refuses
+    with it (never a bare 404 over a real record, the P1-27 posture)."""
+    client, pursuit = split
+    r = client.post("/api/pursuits/pur_split/writeback/confirm", json={})
+    assert r.status_code == 200, r.text
+    output = pursuit.root / "exports" / "writeback" / "qform-twin.docx"
+    output.write_bytes(output.read_bytes() + b"\n")  # nobody proved these
+    # recompose the record the way every exit door does (the composer's
+    # drifted verdict is proven in tests/assembly/test_bundle.py; this
+    # test is the two WEB doors over that record)
+    from engine.assembly.bundle import compose_bundle
+    from engine.llm import effective_config
+    from engine.runlog import RunLogger
+    from engine.version import engine_version
+    log = RunLogger(pursuit.root, pursuit.new_run_id(), pursuit.pursuit_id)
+    log.run_start(mode="dry_run", engine_version=engine_version(),
+                  config=effective_config(), kb_snapshot="kb@empty")
+    compose_bundle(pursuit, log, at=FIXED_AT, composed_by="test")
+    log.run_end(status="completed")
+    listing = client.get("/api/pursuits/pur_split/downloads").json()
+    assert "qform-twin.docx" not in listing["to_the_buyer"]
+    drifted = next(d for d in listing["refused"]
+                   if d["name"] == "qform-twin.docx")
+    assert "no proof stands behind" in drifted["reason"]
+    r = client.get("/api/pursuits/pur_split/download/qform-twin.docx")
+    assert r.status_code == 409 and "no proof" in r.json()["detail"]

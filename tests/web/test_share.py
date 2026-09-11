@@ -271,3 +271,36 @@ def test_link_ids_mint_from_the_lane_max_not_a_count(tmp_path):
     made = lane.create(created_by="me", label="new", expires_at=EXPIRES,
                        at=FIXED_AT)
     assert made["link_id"] == "sl_04"
+
+
+def test_revoke_lands_during_a_running_job(shared):
+    """P2-58 (P29b b2): the P9 kill switch used to sit under `_mutate`,
+    whose first act is a 409 while any job holds the pursuit — for a
+    whole advance or revise the link stayed live. Revoke is serialized
+    by the lane's own lock and never waits on the job lane."""
+    import threading
+
+    client, pursuit, _, _ = shared
+    pid = pursuit.pursuit_id
+    link = client.post(f"/api/pursuits/{pid}/share", json={
+        "label": "during a job", "expires_at": EXPIRES}).json()
+    assert client.get(
+        f"/share/{link['token']}?at={FIXED_AT}").status_code == 200
+    release = threading.Event()
+    runner = client.app.state.runner
+
+    def slow(job):
+        release.wait(timeout=30)
+        return "done", "slow done"
+
+    job = runner.submit(kind="advance", pursuit_id=pid, by="test",
+                        at=FIXED_AT, target=slow)
+    try:
+        r = client.post(
+            f"/api/pursuits/{pid}/share/{link['link_id']}/revoke", json={})
+        assert r.status_code == 200, r.json()
+        assert client.get(
+            f"/share/{link['token']}?at={FIXED_AT}").status_code == 410
+    finally:
+        release.set()
+    assert wait_job(client, job["id"])["state"] == "done"

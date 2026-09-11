@@ -15,7 +15,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from engine.contracts import ContractError
+from engine.contracts import ContractError, read_jsonl
 from engine.runlog import read_run
 from engine.workspace.pursuit import latest_run_id_in
 from engine.workspace import PursuitDir
@@ -41,6 +41,27 @@ def _read_json(path: Path, corrupt: list | None = None) -> dict | None:
         corrupt.append(f"{path.name}: {exc.__class__.__name__} — see the "
                        "recovery runbook")
         return None
+
+
+_LANES = ("events/events.jsonl", "share/links.jsonl", "pings/pings.jsonl")
+
+
+def _lanes(root: Path, row: dict, corrupt: list) -> None:
+    """P2-57 (P29b): the append-only lanes name themselves on the row —
+    a torn FINAL line as `torn` (repaired at the lane's next write), a
+    torn earlier line as `corrupt` (evidence, the runbook's stop)."""
+    for lane in _LANES:
+        path = root / lane
+        if not path.exists():
+            continue
+        try:
+            _records, torn = read_jsonl(path)
+        except ContractError as exc:
+            corrupt.append(f"{lane}: {exc.__class__.__name__} — see the "
+                           "recovery runbook")
+            continue
+        if torn:
+            row.setdefault("torn", []).append(torn)
 
 
 def _sha256(path: Path) -> str | None:
@@ -163,6 +184,7 @@ def board(workspace: Path) -> list[dict]:
             # P1-35: packaging is published only when the annotation is
             # CURRENT (the stage says so); a superseded one says nothing
             row["packaging"] = annotated.get("packaging")
+        _lanes(root, row, corrupt)
         if corrupt:
             row["corrupt"] = list(corrupt)
             row["stage"], row["next"] = "corrupt", (

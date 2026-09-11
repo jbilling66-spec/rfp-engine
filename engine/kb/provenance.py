@@ -128,8 +128,12 @@ class RestrictedStore:
         src_dir = self._source_dir()
         src_dir.mkdir(parents=True, exist_ok=True)
         path = src_dir / f"{doc_id}.src"
-        write_bytes_atomic(path, raw)  # P0-6: the one primitive
+        # P2-59 (P29b b6): the meta FIRST — a crash between the two writes
+        # leaves a meta with no bytes (harmless; delete_source tolerates
+        # it), never bytes with no meta, which no client-scoped walk could
+        # name and no purge could ever reach
         self._atomic_write(src_dir / f"{doc_id}.json", dict(meta))
+        write_bytes_atomic(path, raw)  # P0-6: the one primitive
 
     def source_exists(self, doc_id: str, *, actor: str, purpose: str) -> bool:
         """An existence oracle over retained client material is a read."""
@@ -166,6 +170,15 @@ class RestrictedStore:
         if not self._source_dir().is_dir():
             return []
         return sorted(p.stem for p in self._source_dir().glob("*.src"))
+
+    def orphan_source_ids(self, *, actor: str, purpose: str) -> list[str]:
+        """Every retained `.src` with no meta — the write_source crash
+        window before P2-59 flipped the order (P29b b6). Composed from
+        the two walks that already log (list_sources + source_read), so
+        the closed access-log contract gains nothing new."""
+        metas = self.source_metas(actor=actor, purpose=purpose)
+        return [cd for cd in self.list_source_ids(actor=actor, purpose=purpose)
+                if cd not in metas]
 
     def append_source(self, kb_id: str, provenance: dict,
                       identifiers: dict[str, str],

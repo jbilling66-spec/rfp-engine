@@ -514,7 +514,11 @@ def _render(template: Path, target: Path, facts, prose_by_section,
                title=title if buyer else f"{title} (working copy)",
                owned_by_firm=True)
     doc.save(str(target))
-    _assert_fill_roundtrip(template, target, intended)
+    try:
+        _assert_fill_roundtrip(template, target, intended)
+    except BaseException:
+        target.unlink(missing_ok=True)  # P2-56: unproven, never kept
+        raise
 
 
 def _fill_title(pursuit) -> str:
@@ -550,6 +554,12 @@ def run_template_fill(pursuit, log, *, confirmed_by: str, at: str) -> dict:
                 parsed, buyer=True, firm=firm, at=at, title=title)
     elif output.exists():
         output.unlink()  # a stale buyer copy never outlives its facts
+    # P2-56 (P29b b9): the digests the bundle compares the files against
+    facts["working_copy_sha256"] = hashlib.sha256(
+        working.read_bytes()).hexdigest()
+    if facts["buyer_copy_produced"]:
+        facts["output_sha256"] = hashlib.sha256(
+            output.read_bytes()).hexdigest()
 
     facts_path = pursuit.write_artifact("template_fill_facts", facts,
                                         name=FACTS_NAME)

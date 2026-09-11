@@ -19,7 +19,9 @@ from engine.kb.retrieve import (
     UseRestrictedCard,
     card_search,
     descend,
+    emit_kb_retrieval,
     targeted_open,
+    withheld_reason,
 )
 
 _AGENT = "steward_assistant"
@@ -149,14 +151,38 @@ def _t_cards_view(ctx, args):
 
 
 def _t_card_detail(ctx, args):
+    """One card with citations, staleness and notes. P2-60 (P29b b7):
+    the retrieval predicate applies at THIS door too — `card_detail`
+    the helper returns the body unconditionally because the steward's
+    curation screen and the deprecation door need it; the assistant
+    boundary is where D2 and a steward's deprecation are honoured, with
+    the same refusal and the same trace line as `open_card`, and
+    `opened_cards` (the earned-citation vocabulary) gains an id only
+    past the predicate."""
     from engine.kb.curation import card_detail
     a = _require(args, {"kb_id": (str, True)})
+    kb_id = a["kb_id"]
     try:
-        detail = card_detail(ctx.store, a["kb_id"],
+        detail = card_detail(ctx.store, kb_id,
                              records=ctx.records_provider(), at=ctx.at)
     except FileNotFoundError:
-        raise ToolRefused(f"no card {a['kb_id']!r}")
-    ctx.opened_cards.add(a["kb_id"])
+        raise ToolRefused(f"no card {kb_id!r}")
+    withheld = withheld_reason(detail["card"])
+    if withheld:
+        emit_kb_retrieval(
+            ctx.log, stage=_STAGE, agent=_AGENT,
+            query=f"assistant_detail:{kb_id}", step="card_detail",
+            cards_returned=[], excluded=[kb_id], empty_result=True)
+        if withheld == "deprecated":
+            raise ToolRefused(
+                f"{kb_id} was deprecated by a steward and may not be opened")
+        raise ToolRefused(
+            f"{kb_id} carries use_restriction (D2) and may not be opened")
+    emit_kb_retrieval(
+        ctx.log, stage=_STAGE, agent=_AGENT,
+        query=f"assistant_detail:{kb_id}", step="card_detail",
+        cards_returned=[kb_id], cards_opened=[kb_id])
+    ctx.opened_cards.add(kb_id)
     return _render(detail)
 
 

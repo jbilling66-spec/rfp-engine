@@ -241,3 +241,20 @@ def test_a_clean_batch_still_writes_exactly_one_line(tmp_path):
     assert line["proposal_ids"] == pids
     assert "aborted" not in line
     assert _log_lines(store) == [line]
+
+
+def test_a_repeated_id_in_one_batch_is_refused_before_anything_applies(
+        tmp_path):
+    """P3-22 (P29b b7): `[p, p]` used to apply p twice — the lesson
+    appended twice — then raise ProposalStateError on the second decide
+    and log a fully-applied merge as `aborted`; through the route, a 500."""
+    from engine.flywheel.proposals import ProposalStore
+    from engine.kb.curation import CurationRefused, merge_batch
+    store = _store(tmp_path / "kb")
+    pid = _three(store)[0]
+    with pytest.raises(CurationRefused, match="more than once"):
+        merge_batch(store, [pid, pid], operator="Sam", at=AT)
+    assert ProposalStore(store.root).read(pid)["status"] == "proposed"
+    card, _ = store.read_card(IDS[0])
+    assert card["summary"] == "Summary A."  # nothing applied
+    assert _log_lines(store) == []  # no line, not an `aborted` one

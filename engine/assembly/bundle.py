@@ -139,8 +139,23 @@ def _entry(pursuit, binding: dict, refusals: list[dict]) -> dict:
             return out
     if facts_path.is_file() and output_path.is_file():
         facts = pursuit.read_artifact(binding["facts_name"])
+        digest = _sha256(output_path)
+        proved = facts.get("output_sha256")
+        if digest != proved:
+            # P2-56 (P29b b9): a facts record and a file both exist but
+            # the bytes are not the ones the proof stood behind — a
+            # crash-window survivor or a stale copy; never to the buyer
+            out["status"] = "drifted"
+            out["sha256"] = digest
+            out["facts_path"] = binding["facts_name"]
+            out["revision_n"] = facts["revision_n"]
+            out["reason"] = (
+                f"the file on disk ({digest[:12]}) is not the one its facts "
+                f"proved ({proved[:12] if proved else 'no digest recorded'}"
+                ") — no proof stands behind these bytes; re-confirm")
+            return out
         out["status"] = "produced"
-        out["sha256"] = _sha256(output_path)
+        out["sha256"] = digest
         out["facts_path"] = binding["facts_name"]
         out["revision_n"] = facts["revision_n"]
         # P3-15: what the file carries at the part level, on the record.

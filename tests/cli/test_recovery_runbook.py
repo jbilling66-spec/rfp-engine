@@ -20,6 +20,10 @@ SUBSECTIONS = (
     "with a torn final line", "anywhere EARLIER", "without a footer",
     "jobs journal", "checkpoint", "annotated-draft.json", "brief.json",
     "knowledge base",
+    # P29b b10: the lanes, the kill switch, the reserved names, the draft
+    "events lane", "share links", "Revoking a share link",
+    "named like a lane's own record", "`drafts/draft.json` unreadable",
+    "corrupt-NNN",
 )
 
 

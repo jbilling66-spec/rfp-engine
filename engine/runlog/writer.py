@@ -19,6 +19,7 @@ from pathlib import Path
 
 from engine.contracts import (
     ContractError,
+    append_fsync,
     check_runlog_payloads,
     read_jsonl,
     torn_tail_offset,
@@ -111,8 +112,19 @@ class RunLogger:
         self._last_ts: str | None = None
         self.has_footer = False
         repaired = None
+        newline_repaired = False
         if self.path.exists():
             records, torn = read_run_report(self.path)
+            if torn is None and torn_tail_offset(self.path) is not None:
+                # P3-20 (P29b): the final record is complete but lost its
+                # newline — the reader parses it, so it is NOT torn; the
+                # resume writes the terminator (fsync'd) before its first
+                # append and records the repair, never a merged line.
+                with open(self.path, "ab") as f:
+                    f.write(b"\n")
+                    f.flush()
+                    os.fsync(f.fileno())
+                newline_repaired = True
             if torn is not None:
                 # P1-17: a crash mid-append left a torn final line. The
                 # resume truncates the file to the last COMPLETE line
@@ -137,6 +149,16 @@ class RunLogger:
                 "message": (f"{repaired} bytes of a torn final line dropped "
                             "on resume — the writer crashed mid-append; "
                             "every complete record before it stands")})
+        if newline_repaired and not self.has_footer:
+            # a closed run keeps its footer LAST (the runs list and the
+            # walker read the footer at records[-1]); its newline was the
+            # whole repair — no record was dropped, nothing to report
+            self.emit("error", error={
+                "code": "tail_newline_repaired", "recoverable": True,
+                "action_taken": "surfaced_to_human",
+                "message": ("the final record lacked its newline — written "
+                            "on resume before this line; every record "
+                            "before it stands, none was merged")})
 
     def _replay_totals(self, records: list[dict]) -> None:
         for rec in records:
@@ -180,10 +202,8 @@ class RunLogger:
             }
             validate("run_log", record)
             check_runlog_payloads(record)
-            with self.path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(record, separators=(",", ":")) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            # P29b (P3-20): the one appender, the one tail rule
+            append_fsync(self.path, json.dumps(record, separators=(",", ":")))
             self._seq += 1
             self._accumulate(record)
             return record["seq"]

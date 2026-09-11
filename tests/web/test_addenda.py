@@ -186,3 +186,42 @@ def test_replan_supersedes_archives_and_reopens_the_gate(tmp_path):
                         json={"lane": "submission"})
         assert "different frozen plan" not in r.text
         assert "does not match" not in r.text
+
+
+def test_the_addenda_door_refuses_the_lanes_own_record_names(amendable):
+    """P3-21 (P29b b3): an addendum named `meta.json` overwrote the
+    lane's own record — the buyer amendment's bytes gone while the record
+    said `scanned: true`; the replan archive names collide the same way.
+    Refused by name with the inbox door's posture; a plain filename is
+    still required rather than collapsed."""
+    client, pursuit = amendable
+    pid = pursuit.pursuit_id
+    before = client.get(f"/api/pursuits/{pid}/addenda").json()
+    for name in ("meta.json", "draft.superseded.json",
+                 "plan.frozen.superseded.json"):
+        r = client.post(f"/api/pursuits/{pid}/addenda?filename={name}",
+                        content=b"# amendment\n")
+        assert r.status_code == 422, (name, r.text)
+        assert "reserved filename" in r.json()["detail"]
+    r = client.post(f"/api/pursuits/{pid}/addenda?filename=..%2Fmeta.json",
+                    content=b"# amendment\n")
+    assert r.status_code == 422 and "plain filenames" in r.json()["detail"]
+    assert client.get(f"/api/pursuits/{pid}/addenda").json() == before
+    for meta_path in (pursuit.root / "addenda").glob("addm_*/meta.json"):
+        json.loads(meta_path.read_text(encoding="utf-8"))["addendum_id"]
+
+
+def test_addendum_ids_mint_from_the_lane_max_not_a_count(tmp_path):
+    """Same touch (the P1-20/P1-22 rule): `len+1` collided after a
+    deleted folder; the id is max+1."""
+    from engine.web.addenda import AddendumLane
+    from engine.workspace import PursuitDir
+    pursuit = PursuitDir(tmp_path, "pur_am")
+    (pursuit.root / "plan.json").write_text(json.dumps({
+        "pursuit_id": "pur_am", "sections": []}), encoding="utf-8")
+    lane = AddendumLane(pursuit)
+    for aid in ("addm_01", "addm_03"):
+        (lane.root / aid).mkdir(parents=True)
+    meta = lane.store(filename="a.md", body=b"# a\n", at=FIXED_AT,
+                      actor="t", slots_by_id=None)
+    assert meta["addendum_id"] == "addm_04"

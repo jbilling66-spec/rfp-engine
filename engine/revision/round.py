@@ -558,14 +558,35 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                 and item["section_id"] in entries
                 and item["section_id"] not in report.pended):
             dismissed_ids.append((item, _finalize(item, with_reply=False)))
+    # P1-53 (P29b b5): the record's inputs are CHECKPOINTED before the
+    # pending items are dropped. Nothing else on disk can rebuild them
+    # after a crash in the commit window: the finalized events carry
+    # neither the screen flags nor the dismissal, and their revision
+    # stamp is already the NEW round's (the envelope was rewritten
+    # above), so the old resume predicate — finalized events at the
+    # PRIOR revision — matched nothing for round 1 and the previous
+    # round's events for every later one. The checkpoint is the one
+    # carrier; a resume reads the first attempt's inputs from it.
+    if "record" not in ckpt:
+        ckpt["record"] = {
+            "consumed_event_ids": {
+                "internal": [e["event_id"] for i, e in consumed_ids
+                             if i.get("provenance", "internal")
+                             == "internal"],
+                "external": [e["event_id"] for i, e in consumed_ids
+                             if i.get("provenance") == "external"],
+            },
+            "dismissed_external_event_ids": [
+                e["event_id"] for _, e in dismissed_ids],
+            "external_screen_flags": [
+                {"event_id": e["event_id"], "pattern_id": f["pattern_id"],
+                 "excerpt": f["excerpt"]}
+                for i, e in consumed_ids
+                if i.get("provenance") == "external"
+                for f in i.get("screen_flags", [])],
+        }
+        pursuit.checkpoint(ckpt_key, ckpt)
     lane.drop_pending(consumed_cids | {i["cid"] for i, _ in dismissed_ids})
-    if resume_commit and not consumed_ids:
-        # the pending items were consumed and dropped before the crash;
-        # the finalized events (each carrying its cid) are the record of
-        # what this round consumed
-        consumed_ids = [(e, e) for e in already.values()
-                        if e.get("revision") == prior_n
-                        and e.get("kind") in ("comment", "edit")]
 
     # the round record (D6): code-validated, the artifact kind `revision`
     record = {
@@ -575,20 +596,7 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
         "to_revision": round_n,
         "at": at,
         "actor": actor,
-        "consumed_event_ids": {
-            "internal": [e["event_id"] for i, e in consumed_ids
-                         if i.get("provenance", "internal") == "internal"],
-            "external": [e["event_id"] for i, e in consumed_ids
-                         if i.get("provenance") == "external"],
-        },
-        "dismissed_external_event_ids": [
-            e["event_id"] for _, e in dismissed_ids],
-        "external_screen_flags": [
-            {"event_id": e["event_id"], "pattern_id": f["pattern_id"],
-             "excerpt": f["excerpt"]}
-            for i, e in consumed_ids
-            if i.get("provenance") == "external"
-            for f in i.get("screen_flags", [])],
+        **ckpt["record"],
         "sections": [{"section_id": sid, "outcome": r["outcome"],
                       "warnings": r.get("warnings", [])}
                      for sid, r in sorted(ckpt["sections"].items())],

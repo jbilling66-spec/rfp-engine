@@ -5,7 +5,7 @@ is unavailable (e.g. a deployed image without .git)."""
 import subprocess
 from pathlib import Path
 
-VERSION = "0.9.1"
+VERSION = "0.9.2"
 _ROOT = Path(__file__).resolve().parents[1]
 
 

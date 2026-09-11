@@ -43,7 +43,12 @@ _DOCX_COMMENT_PARTS = re.compile(
 _XLSX_COMMENT_PARTS = re.compile(
     r"^xl/(comments\d*\.xml|threadedComments/.*|persons/.*)$")
 _MEDIA_PARTS = re.compile(r"^(word|xl)/(media|charts|drawings)/")
-_DOCX_TEXT_PARTS = re.compile(r"^word/(document|header\d*|footer\d*)\.xml$")
+# P3-19 (P29b b9): footnotes, endnotes and the glossary document carry
+# tracked changes too — a firm template whose only <w:ins> sat in a
+# footnote passed the P3-15 door and shipped the mark in both copies
+_DOCX_TEXT_PARTS = re.compile(
+    r"^word/(document|header\d*|footer\d*|footnotes|endnotes"
+    r"|glossary/document)\.xml$")
 _CORE = "docProps/core.xml"
 
 

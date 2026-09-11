@@ -11,6 +11,7 @@ VML, a data validation, and a formula with a spliced cached value.
 
 import hashlib
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -189,3 +190,101 @@ def test_the_twin_comes_back_byte_for_byte_plus_the_answer(tmp_path):
     assert questions["B2"].comment is not None
     assert b"lastModifiedBy>Fixture Advisory LLP<" in out["docProps/core.xml"]
     assert source.read_bytes() == TWIN.read_bytes(), "the inbox original"
+
+
+# -- P2-55 (P29b b9): calcChain keyed on sheetId with a running i -----------
+
+_CC_CT = (b'<Override PartName="/xl/calcChain.xml" ContentType="application/'
+          b'vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>'
+          b'</Types>')
+_CC_REL = (b'<Relationship Id="rIdCalc" Type="http://schemas.openxmlformats.org/'
+           b'officeDocument/2006/relationships/calcChain" Target="calcChain.xml"/>'
+           b'</Relationships>')
+_CC_NS = b'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+
+
+def _chain_workbook(path: Path, entries: bytes) -> Path:
+    """Two sheets S (sheetId 1) and T (sheetId 3 — a middle sheet was
+    deleted once, the Excel-shaped case) plus an `xl/calcChain.xml`
+    wired in the way Excel writes it (part, rel, content type). Built at
+    runtime, never a golden."""
+    raw = path.with_name("raw-" + path.name)
+    wb = Workbook()
+    s = wb.active
+    s.title = "S"
+    s["A2"] = "bystander"
+    s["E2"] = "=A2"
+    t = wb.create_sheet("T")
+    t["D1"] = "=1+1"
+    t["E9"] = "=D1"
+    wb.save(raw)
+    chain = (b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+             b'<calcChain ' + _CC_NS + b'>' + entries + b'</calcChain>')
+    with zipfile.ZipFile(raw) as src, zipfile.ZipFile(path, "w") as dst:
+        for info in src.infolist():
+            data = src.read(info.filename)
+            if info.filename == "[Content_Types].xml":
+                data = data.replace(b"</Types>", _CC_CT)
+            elif info.filename == "xl/_rels/workbook.xml.rels":
+                data = data.replace(b"</Relationships>", _CC_REL)
+            elif info.filename == "xl/workbook.xml":
+                assert data.count(b'sheetId="2"') == 1
+                data = data.replace(b'sheetId="2"', b'sheetId="3"')
+            dst.writestr(info, data)
+        dst.writestr("xl/calcChain.xml", chain)
+    return path
+
+
+def _chain(path: Path) -> list[tuple[str, str | None]]:
+    from lxml import etree
+    with zipfile.ZipFile(path) as zf:
+        root = etree.fromstring(zf.read("xl/calcChain.xml"))
+    return [(e.get("r"), e.get("i")) for e in root]
+
+
+def test_calc_chain_entries_key_on_sheet_id_not_position(tmp_path):
+    """Case A of the audit's reproduction: T is at position 2 with
+    sheetId 3 — the position-keyed patch left T!D1's entry behind."""
+    source = _chain_workbook(tmp_path / "src.xlsx",
+                             b'<c r="E2" i="1"/><c r="D1" i="3"/>')
+    output = tmp_path / "out.xlsx"
+    writes = {("T", "D1"): "answered"}
+    write_cells(source, output, writes, firm=FIRM, at=AT)
+    assert _chain(output) == [("E2", "1")]
+    assert_roundtrip(source, output, set(writes))
+
+
+def test_an_implicit_i_inherits_the_previous_entry(tmp_path):
+    """Case B: Excel writes `i` only when the sheet changes; T!E9's
+    entry carries none and inherits 3 — the old default of 1 never
+    matched it."""
+    source = _chain_workbook(tmp_path / "src.xlsx",
+                             b'<c r="E2" i="1"/><c r="D1" i="3"/><c r="E9"/>')
+    output = tmp_path / "out.xlsx"
+    writes = {("T", "E9"): "answered"}
+    write_cells(source, output, writes, firm=FIRM, at=AT)
+    assert _chain(output) == [("E2", "1"), ("D1", "3")]
+    assert_roundtrip(source, output, set(writes))
+
+
+def test_a_removed_entry_hands_its_i_to_the_next_implicit_one(tmp_path):
+    """Removing T!D1 (which carried i=3) must not re-parent the implicit
+    T!E9 that followed it onto sheet 1."""
+    source = _chain_workbook(tmp_path / "src.xlsx",
+                             b'<c r="E2" i="1"/><c r="D1" i="3"/><c r="E9"/>')
+    output = tmp_path / "out.xlsx"
+    writes = {("T", "D1"): "answered"}
+    write_cells(source, output, writes, firm=FIRM, at=AT)
+    assert _chain(output) == [("E2", "1"), ("E9", "3")]
+    assert_roundtrip(source, output, set(writes))
+
+
+def test_the_proof_is_positive_about_calc_chain(tmp_path):
+    """A surviving chain entry for an intended cell fails the proof by
+    name — calcChain is excused from byte-equality, not from proof."""
+    source = _chain_workbook(tmp_path / "src.xlsx",
+                             b'<c r="E2" i="1"/><c r="D1" i="3"/>')
+    stale = tmp_path / "stale.xlsx"
+    shutil.copy2(source, stale)  # the chain untouched, as if unpatched
+    with pytest.raises(ContractError, match=r"calcChain entries .*T!D1"):
+        assert_roundtrip(source, stale, {("T", "D1")})

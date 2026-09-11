@@ -130,6 +130,17 @@ what is running, what is next, what is parked — overwritten at each
 session close. `lessons.md` is one screen of work-rule corrections.
 If the repo and a memory disagree, the repo wins.
 
+## What the assistant may open
+
+The assistant has two read doors onto a card — `open_card` and
+`card_detail` — and both honour the same withholding: a card under
+`use_restriction` (D2) or one a steward deprecated is refused at either
+door, with a `kb_retrieval` line on the run log naming the door it fired
+at (`targeted_open` or `card_detail`) and the card under `excluded`. Only a
+card that passed that predicate earns the right to be cited. Your own KB
+screen and the curation route keep the full view — withholding is a
+retrieval control, not a record edit.
+
 ## When something breaks
 
 Read the failing test's message first — the suite's errors are written

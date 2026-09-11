@@ -436,3 +436,22 @@ def test_a_fact_card_accepts_from_the_ui_with_fills(inbox):
     assert minted[0]["owner"] == "Sam Steward"
     assert minted[0]["verified_date"] == "2026-09-04"
     assert _proposals(client, status="proposed") == []
+
+
+def test_a_merge_of_a_decided_or_repeated_id_is_409_at_the_route(client):
+    """P3-22 (P29b b7): `kb_merge` caught CurationRefused and
+    ContractError only, so ProposalStateError — a plain ValueError —
+    escaped as a 500; the /decide reject leg already mapped it to 409.
+    A repeated id is refused by the batch itself, also 409."""
+    proposal = client.post("/api/kb/proposals", json={
+        "kb_id": "kb_alpha0001",
+        "changes": {"summary": "Merged twice?"}}).json()
+    pid = proposal["proposal_id"]
+    twice = client.post("/api/kb/proposals/merge",
+                        json={"proposal_ids": [pid, pid]})
+    assert twice.status_code == 409 and "more than once" in twice.json()["detail"]
+    assert client.post("/api/kb/proposals/merge",
+                       json={"proposal_ids": [pid]}).status_code == 200
+    again = client.post("/api/kb/proposals/merge",
+                        json={"proposal_ids": [pid]})
+    assert again.status_code == 409, again.text

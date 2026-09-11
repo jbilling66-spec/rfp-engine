@@ -132,14 +132,41 @@ never repairs it silently. What to do, by record:
   survives a restart is a hard kill; it costs nothing to leave — every
   metric counts only closed runs.
 - **The jobs journal (`jobs.jsonl`) with a torn final line.** Automatic at
-  the next server start; the line is dropped and the restart proceeds.
+  the next server start: the torn bytes are truncated (fsync'd) before the
+  journal is written again, and the restart proceeds; a complete final
+  record that merely lost its newline gets the newline, never a repair.
+  (Until 0.9.2 the restart appended onto the fragment and the SECOND
+  restart refused the journal as corrupt — that hand-truncate is gone.)
+- **The events lane (`events/events.jsonl`), share links
+  (`share/links.jsonl`) or pings (`pings/pings.jsonl`) with a torn final
+  line.** Automatic at the lane's next write: the torn bytes are truncated
+  under the lane's own lock before the new line lands. Until then the
+  board's row names the lane under `torn` — every read door tolerates it
+  (comments, outcomes, the revise round, the guest page). A torn or
+  invalid line anywhere EARLIER in one of these files is corruption: the
+  row says `corrupt` and names the file, and for `share/links.jsonl` that
+  pursuit's guests get 404 while every other pursuit's guests are
+  unaffected. Stop; the file is evidence.
+- **Revoking a share link while a job is running.** Works — revoke is the
+  kill switch and never waits on the job lane (until 0.9.2 it was refused
+  with 409 for the job's whole run).
+- **An upload named like a lane's own record.** Refused (422) by name:
+  `roles.json` at the inbox door; `meta.json` and any `*.superseded.json`
+  at the addenda door. The record is never overwritten by an upload.
 - **A checkpoint (`checkpoints/<stage>.json`) that will not parse.** Delete
   that one file; the stage re-runs from its predecessor's artifact on the
   next **Advance**. Never delete `*.frozen.json` — a frozen artifact is
   rewritten only by resubmitting its gate.
 - **`drafts/annotated-draft.json` unreadable.** The board's row says
-  `corrupt` and names the file; the next **Advance** re-runs validation and
-  rewrites it (the annotated draft is rebuilt, never patched).
+  `corrupt` and names the file; the next **Advance** moves the unreadable
+  bytes aside as `drafts/annotated-draft.json.corrupt-NNN` (nothing is
+  destroyed), re-runs validation and rewrites it (the annotated draft is
+  rebuilt, never patched), and records the repair as an `error` line
+  (`annotated_draft_unreadable`) in the validation run.
+- **`drafts/draft.json` unreadable.** Never rebuilt by the engine — it holds
+  the review rounds' human edits. The next **Advance** refuses by name
+  (the job reads `refused`, the file is untouched); the build side restores
+  it from `revisions/draft.revN.json`.
 - **`brief.json` or `plan.json` unreadable.** The board names the file. If
   a frozen copy exists (`brief.frozen.json`, `plan.frozen.json`) it is the
   authoritative record and the build side restores the live file from it;

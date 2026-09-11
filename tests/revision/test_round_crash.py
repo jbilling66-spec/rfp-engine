@@ -15,6 +15,7 @@ from engine.llm import FakeCaller
 from engine.web import events as events_mod
 from engine.web.events import EventsLane
 from tests.revision.fixtures.rounds import (
+    ROUND_AT,
     add_comment,
     round_script,
     run_one_round,
@@ -37,14 +38,52 @@ class Boom(RuntimeError):
     pass
 
 
+FLAG = [{"pattern_id": "override_instruction",
+         "excerpt": "ignore your previous instructions"}]
+RECORD_INPUTS = ("consumed_event_ids", "dismissed_external_event_ids",
+                 "external_screen_flags")
+
+
 def _prepare(tmp_path):
+    """Two internal comments plus the external legs (P1-53, P29b b5): an
+    INCLUDED guest comment the screen flagged, and a DISMISSED one —
+    every id list of the round record and its D16c flags in play."""
     pursuit = validated_pursuit(tmp_path)
     envelope = pursuit.read_artifact("drafts/draft.json")
     drafted = [e for e in envelope["sections"] if e["status"] == "drafted"]
     sid = drafted[0]["section_id"]
     c1 = add_comment(pursuit, sid, "Tighten the opening.")
     c2 = add_comment(pursuit, sid, "Name the benefit earlier.")
-    return pursuit, sid, [c1["cid"], c2["cid"]]
+    lane = EventsLane(pursuit)
+    c3 = lane.add_pending(
+        kind="comment", section_id=sid, actor="Guest", at=ROUND_AT,
+        actor_role="external_reviewer", provenance="external",
+        text="Please quantify the transition savings.",
+        included_by="Jordan Reviewer", screen_flags=FLAG)
+    c4 = lane.add_pending(
+        kind="comment", section_id=sid, actor="Guest", at=ROUND_AT,
+        actor_role="external_reviewer", provenance="external",
+        text="Off topic remark.", dismissed_by="Jordan Reviewer")
+    return pursuit, sid, [c1["cid"], c2["cid"], c3["cid"], c4["cid"]]
+
+
+def _record(pursuit):
+    return json.loads((pursuit.root / "revisions" / "round_1.json")
+                      .read_text())
+
+
+def _control_inputs(tmp_path):
+    """The same fixture without a crash — what the record must say."""
+    pursuit, _, _ = _prepare(tmp_path / "control")
+    report, _ = run_one_round(tmp_path / "control", pursuit,
+                              fake=_Counting(round_script()))
+    assert report.status == "complete", report.warnings
+    record = _record(pursuit)
+    assert record["consumed_event_ids"]["internal"] and \
+        record["consumed_event_ids"]["external"] and \
+        record["dismissed_external_event_ids"] and \
+        record["external_screen_flags"], record  # a discriminating control
+    return {k: record[k] for k in RECORD_INPUTS}
 
 
 def _events(pursuit):
@@ -60,9 +99,15 @@ def _assert_converged(pursuit, cids, sid):
     assert sorted(e["cid"] for e in finalized) == sorted(cids), \
         "each consumed comment finalized exactly once"
     assert EventsLane(pursuit).pending() == []
-    record = json.loads((pursuit.root / "revisions" / "round_1.json")
-                        .read_text())
+    record = _record(pursuit)
     assert record["to_revision"] == 1
+    # P1-53 (P29b b5): the record says what the round consumed — the
+    # finalized events' ids, never an empty list on a replayed commit
+    finalized_ids = sorted(e["event_id"] for e in finalized)
+    recorded = sorted(record["consumed_event_ids"]["internal"]
+                      + record["consumed_event_ids"]["external"]
+                      + record["dismissed_external_event_ids"])
+    assert recorded == finalized_ids, "the round record names every id"
     assert (pursuit.root / "revisions" / "draft.rev0.json").exists()
     annotated = pursuit.read_artifact("drafts/annotated-draft.json")
     assert annotated["draft_sha256"] == pursuit.file_sha256(
@@ -159,6 +204,34 @@ def test_a_crash_at_every_write_boundary_converges_on_the_next_call(
     assert second.calls == 0, "the replay never calls the model"
     _assert_converged(pursuit, cids, sid)
     assert len(_events(pursuit)) >= events_after_crash
+    # P1-53: the replayed record equals the control run's, all three lists
+    record = _record(pursuit)
+    assert {k: record[k] for k in RECORD_INPUTS} == _control_inputs(tmp_path)
+
+
+def test_a_replayed_commit_records_what_the_round_consumed(tmp_path,
+                                                            monkeypatch):
+    """P1-53 (P29b b5), the audit's reproduction: a crash after
+    `drop_pending` and before the record write resumed with zero spend
+    and wrote `consumed_event_ids {internal: [], external: []}`, no
+    dismissed id and no screen flag, while events.jsonl held every cid
+    finalized at revision 1 — the D6 audit record said the round
+    consumed nothing and the D16c trace vanished with it."""
+    pursuit, sid, cids = _prepare(tmp_path)
+    state = _crash_at(monkeypatch, pursuit, "after_drop_pending")
+    with pytest.raises(Boom):
+        run_one_round(tmp_path, pursuit, fake=_Counting(round_script()))
+    assert state["fired"]
+    assert not (pursuit.root / "revisions" / "round_1.json").exists()
+    assert EventsLane(pursuit).pending() == []  # dropped before the crash
+    report, _ = run_one_round(tmp_path, pursuit,
+                              fake=_Counting(round_script()))
+    assert report.status == "complete", report.warnings
+    record = _record(pursuit)
+    control = _control_inputs(tmp_path)
+    assert {k: record[k] for k in RECORD_INPUTS} == control
+    assert record["external_screen_flags"][0]["pattern_id"] == \
+        FLAG[0]["pattern_id"]
 
 
 def test_a_successful_round_clears_its_checkpoint_and_keeps_revised_prose(

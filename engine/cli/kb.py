@@ -199,7 +199,9 @@ def _cmd_kb_purge(args) -> int:
           f"{report.held or 'none'}")
     print(f"cascade: L0 {len(acct.get('l0_sources', []))} sources, "
           f"L1 {len(acct.get('l1_models', []))} models, "
-          f"drafts {len(acct.get('drafts', []))} artifacts "
+          f"drafts {len(acct.get('drafts', []))} artifacts, "
+          f"proposals voided {len(acct.get('voided_proposals', []))}, "
+          f"orphan sources removed {len(acct.get('l0_orphans_removed', []))} "
           f"(accounting: {report.accounting_path})")
     print(f"post-purge sweep: {'CLEAN' if report.swept_clean else 'FINDINGS'}")
     for finding in report.sweep_findings:

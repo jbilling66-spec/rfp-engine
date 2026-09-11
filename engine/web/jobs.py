@@ -29,12 +29,14 @@ cancel hook); the revise job becomes the first cancellable kind.
 
 import itertools
 import json
+import os
 import queue
 import threading
 from collections import defaultdict
 from pathlib import Path
 
-from engine.contracts import ContractError, append_fsync, read_jsonl
+from engine.contracts import (ContractError, append_fsync, read_jsonl,
+                              torn_tail_offset)
 from engine.llm.caller import CostCeilingExceeded
 from engine.llm.handoff import HandoffTimeout
 from engine.llm.live import LiveCallError
@@ -58,6 +60,7 @@ class JobRunner:
             threading.Lock)
         self._queue: queue.Queue = queue.Queue()
         self._ids = itertools.count(1)
+        self.journal_torn: str | None = None  # P1-17's report; P1-51 repairs
         self._rehydrate()
         self._worker = threading.Thread(target=self._work, daemon=True)
         self._worker.start()
@@ -75,6 +78,16 @@ class JobRunner:
         last: dict[str, dict] = {}
         records, torn = read_jsonl(self.journal_path)  # P1-17: a torn tail
         self.journal_torn = torn                        # is reported, not fatal
+        if torn is not None:
+            # P1-51 (P29b): truncate the fragment (fsync'd) BEFORE the
+            # first write — the writer.py discipline; appending onto it
+            # fused two lines into the shape the next restart refused
+            with self._registry_lock:
+                cut = torn_tail_offset(self.journal_path)
+                with open(self.journal_path, "r+b") as f:
+                    f.truncate(cut or 0)
+                    f.flush()
+                    os.fsync(f.fileno())
         for line in records:
             last[line["id"]] = line
         highest = 0

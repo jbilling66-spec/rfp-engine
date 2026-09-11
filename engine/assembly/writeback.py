@@ -163,7 +163,15 @@ def run_writeback(pursuit, log, *, at: str, confirmed_by: str,
               for row in facts["cells"] if row["decision"] == "written"}
     write_cells(source, output, writes,
                 firm=firm_identity(pursuit.root.parent), at=at)
-    assert_roundtrip(source, output, set(writes))
+    try:
+        assert_roundtrip(source, output, set(writes))
+    except BaseException:
+        # P2-56 (P29b b9): an output no proof stood behind never outlives
+        # its refusal — the next /export used to record it as produced
+        # against the previous confirm's facts
+        output.unlink(missing_ok=True)
+        raise
+    facts["output_sha256"] = hashlib.sha256(output.read_bytes()).hexdigest()
     facts_path = pursuit.write_artifact(
         "writeback_facts", facts,
         name=binding["facts_name"] if binding else FACTS_NAME)

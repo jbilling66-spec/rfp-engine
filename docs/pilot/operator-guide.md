@@ -151,7 +151,9 @@ Once a pursuit has a validated draft, the pursuit screen shows
   recomposes the record of what may go out.
 - The downloads list under two headings and only two: **To the buyer**
   and **Internal — do not send**. Anything withheld says why, in the
-  record's own words.
+  record's own words — including a file whose bytes no longer match the
+  proof its record carries (it stays withheld, both digests named, until
+  you confirm the write-back again).
 - **Preview write-back** shows exactly which cells of the buyer's own
   forms — or which sections of the firm's template — will be written and
   which are refused; nothing is written until you press

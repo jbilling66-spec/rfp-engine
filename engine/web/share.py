@@ -19,10 +19,11 @@ decide-and-log deviation from D23's "shared schema" sketch.
 """
 
 import json
-import os
 import secrets
 import threading
 from datetime import datetime, timedelta
+
+from engine.contracts import append_fsync, read_jsonl
 
 
 _MINT_LOCK = threading.Lock()  # P1-22: link ids mint under a process lock
@@ -51,20 +52,21 @@ class ShareLane:
         self.pursuit = pursuit
         self.links_path = pursuit.root / "share" / "links.jsonl"
         self.access_path = pursuit.root / "share" / "access.jsonl"
+        self.torn: str | None = None  # P2-57: the last fold's torn-tail report
 
     def _append(self, path, line: dict) -> None:
+        """Every caller holds _MINT_LOCK: the torn-tail repair and the
+        append are one critical section (P2-57, P29b)."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(line, sort_keys=True) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
+        append_fsync(path, json.dumps(line, sort_keys=True), repair_torn=True)
 
     def _folded(self) -> dict[str, dict]:
-        if not self.links_path.exists():
-            return {}
+        # P2-57 (P29b): the fold B106 §1 claimed — a torn FINAL line is
+        # reported here and repaired at the next append; a torn earlier
+        # line raises ContractError (corruption, named on the board row)
+        records, self.torn = read_jsonl(self.links_path)
         out: dict[str, dict] = {}
-        for raw in self.links_path.read_text(encoding="utf-8").splitlines():
-            line = json.loads(raw)
+        for line in records:
             out[line["link_id"]] = {**out.get(line["link_id"], {}), **line}
         return out
 
@@ -74,7 +76,8 @@ class ShareLane:
                 "granted": granted}
         if detail:
             line["detail"] = detail
-        self._append(self.access_path, line)
+        with _MINT_LOCK:
+            self._append(self.access_path, line)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -103,12 +106,17 @@ class ShareLane:
         return record
 
     def revoke(self, *, link_id: str, by: str, at: str) -> dict:
-        record = self._folded().get(link_id)
-        if record is None:
-            raise ShareDenied(404, f"unknown link {link_id!r}")
-        self._append(self.links_path,
-                     {"link_id": link_id, "revoked": True,
-                      "revoked_by": by, "revoked_at": at})
+        """The P9 kill switch. P2-58 (P29b): serialized by the lane's own
+        lock, never by the job lane — a revoke must land DURING a running
+        advance or revise, which is exactly when a guest should stop
+        reading; no job reads or writes share/."""
+        with _MINT_LOCK:
+            record = self._folded().get(link_id)
+            if record is None:
+                raise ShareDenied(404, f"unknown link {link_id!r}")
+            self._append(self.links_path,
+                         {"link_id": link_id, "revoked": True,
+                          "revoked_by": by, "revoked_at": at})
         return {**record, "revoked": True}
 
     def links(self) -> list[dict]:

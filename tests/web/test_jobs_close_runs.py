@@ -87,3 +87,57 @@ def test_rehydrate_closes_orphaned_runs_and_tolerates_a_torn_journal_tail(
     assert runner._jobs["job-0001"]["run_id"] == log.run_id
     records = read_run(pursuit.root / "runs" / log.run_id / "run.jsonl")
     assert records[-1]["run"]["status"] == "failed"
+
+
+def _torn_journal(ws):
+    journal = ws / "jobs.jsonl"
+    journal.write_text(json.dumps({
+        "id": "job-0001", "kind": "advance", "pursuit": "pur_orphan",
+        "by": "t", "state": "running", "message": "running",
+        "at": FIXED_AT}, sort_keys=True) + "\n" + '{"id": "job-0002", "ki')
+    return journal
+
+
+def test_a_torn_journal_tail_survives_a_second_restart(tmp_path):
+    """P1-51 (P29b b1): the first rehydrate tolerated the fragment and
+    then appended the orphan record ONTO it — a newline-terminated,
+    non-final merged line, the shape every later read refuses — so the
+    second server start died in `JobRunner.__init__`. The rehydrate
+    truncates the fragment (fsync'd) before its first write."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    _open_run(ws, "pur_orphan")
+    journal = _torn_journal(ws)
+    first = JobRunner(ws)
+    assert first.journal_torn is not None
+    lines = journal.read_text(encoding="utf-8").splitlines()
+    assert all(json.loads(line) for line in lines)  # every line a record
+    assert journal.read_bytes().endswith(b"\n")
+    second = JobRunner(ws)  # the second boot used to raise ContractError
+    assert second.journal_torn is None
+    assert second._jobs["job-0001"]["state"] == "orphaned"
+
+
+def test_a_torn_journal_tail_with_no_orphan_survives_a_submit_and_restart(
+        tmp_path):
+    """The no-orphan variant: nothing is re-journaled at rehydrate, so
+    the fragment used to wait for the next submit to fuse onto it."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    journal = ws / "jobs.jsonl"
+    journal.write_text(json.dumps({
+        "id": "job-0001", "kind": "advance", "pursuit": "pur_done",
+        "by": "t", "state": "done", "message": "done",
+        "at": FIXED_AT}, sort_keys=True) + "\n" + '{"id": "job-0002", "ki')
+    runner = JobRunner(ws)
+    assert runner.journal_torn is not None
+    job = runner.submit(kind="advance", pursuit_id="pur_x", by="t",
+                        at=FIXED_AT, target=lambda job: ("done", "ok"))
+    _wait(runner, job["id"])
+    again = JobRunner(ws)
+    assert again.journal_torn is None
+    assert again._jobs[job["id"]]["state"] == "done"
+
+
+def test_a_fresh_workspace_reports_no_torn_journal(tmp_path):
+    assert JobRunner(tmp_path / "ws").journal_torn is None

@@ -23,6 +23,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from engine.contracts import ContractError, archive_aside
 from engine.drafting import run_drafting
 from engine.intake.brief import run_intake
 from engine.intake.gate import approve_gate0
@@ -138,12 +139,26 @@ def _deposit_supplementals(pursuit, log) -> None:
                                  log=log, stage="intake")
 
 
+def _read_draft(pursuit) -> dict:
+    """`drafts/draft.json` holds the review rounds' human edits — NOT
+    regenerable, so an unreadable one is a typed refusal naming the file
+    and the runbook (P2-62, P29b b4): the job lane records `refused`,
+    nothing is rewritten, the bytes stay for the build side."""
+    envelope, reason = pursuit.read_artifact_tolerant("drafts/draft.json")
+    if envelope is None:
+        raise ContractError(
+            f"{reason} — the draft carries the review rounds' edits and "
+            "is never rebuilt by the engine; stop and see the recovery "
+            "runbook")
+    return envelope
+
+
 def _draft_awaiting_sections(pursuit) -> list[str]:
     """Sections owing content to an undisposed gap — at either grain: a
     whole section awaiting, or any answer slot inside a drafted section
     (a section drafts around its pends, but the pursuit still owes the
     pended slot to a human decision)."""
-    envelope = pursuit.read_artifact("drafts/draft.json")
+    envelope = _read_draft(pursuit)
     return [s["section_id"] for s in envelope.get("sections", [])
             if s.get("status") == "awaiting_disposition"
             or any(a.get("status") == "awaiting_disposition"
@@ -156,18 +171,36 @@ def draft_is_current(pursuit) -> bool:
     pursuit's old draft can never skip drafting."""
     if not (pursuit.root / "drafts" / "draft.json").exists():
         return False
-    envelope = pursuit.read_artifact("drafts/draft.json")
+    envelope = _read_draft(pursuit)
     return (envelope.get("status") == "complete"
             and envelope.get("plan_sha256")
             == pursuit.file_sha256("plan.frozen.json"))
 
 
-def validation_is_current(pursuit) -> bool:
+def validation_is_current(pursuit, *, notices: list | None = None) -> bool:
     """Validation's skip predicate (P25 item 8, P0-16): an annotated draft
-    bound to the LIVE envelope, which is itself bound to the LIVE freeze."""
-    if not (pursuit.root / "drafts" / "annotated-draft.json").exists():
+    bound to the LIVE envelope, which is itself bound to the LIVE freeze.
+
+    P2-62 (P29b b4): an UNREADABLE annotated draft is "not current" — the
+    runbook's promise ("rebuilt, never patched") held only for a missing
+    file. The unreadable bytes are archived aside first (nothing
+    destroyed) and the repair is named into `notices`, which the
+    validation stage emits as its first run-log record — no run log is
+    open where this predicate runs."""
+    path = pursuit.root / "drafts" / "annotated-draft.json"
+    if not path.exists():
         return False
-    annotated = pursuit.read_artifact("drafts/annotated-draft.json")
+    annotated, reason = pursuit.read_artifact_tolerant(
+        "drafts/annotated-draft.json")
+    if annotated is None:
+        archived = archive_aside(path)
+        if notices is not None:
+            notices.append((
+                "annotated_draft_unreadable",
+                f"{reason} — archived as drafts/{archived.name}; validation "
+                "re-runs and rebuilds it (the annotated draft is derived "
+                "from the draft and the freeze, never patched)"))
+        return False
     return (annotated.get("draft_sha256")
             == pursuit.file_sha256("drafts/draft.json")
             and annotated.get("plan_sha256")
@@ -349,9 +382,14 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
         stage.end()
         result.ran_stages.append("drafting")
 
-    if not validation_is_current(pursuit):
+    notices: list[tuple[str, str]] = []
+    if not validation_is_current(pursuit, notices=notices):
         stage = StageRun(pursuit, make_caller, mode, "validation",
                          kb_root=kb_root, extras=extras)
+        for code, message in notices:  # P2-62: the repair is on the record
+            stage.log.emit("error", stage="validation", error={
+                "code": code, "message": message, "recoverable": True,
+                "action_taken": "surfaced_to_human"})
         report = run_validation(pursuit, stage.caller, stage.log, stage.store,
                                 at=at)
         stage.end()

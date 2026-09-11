@@ -158,3 +158,27 @@ def test_download_door_refuses_a_bundle_path_outside_the_pursuit(offline_app):
                           "path": "../../escape.docx"}]}))
     r = client.get("/api/pursuits/pur_dl/download/x.docx")
     assert r.status_code == 403
+
+
+def test_the_inbox_refuses_its_own_record_name(offline_app):
+    """P3-21 (P29b b3): `roles.json` is the inbox's declared-roles record
+    (B67 §3); an upload under that name replaced it with document bytes
+    (500 with `?role=`, a silent swap without). Refused by name, the
+    record byte-identical, at both doors of the same route."""
+    sign_in(offline_app)
+    offline_app.post("/api/pursuits", json={"pursuit_id": "pur_res"})
+    ws = offline_app.app.state.workspace
+    ok = offline_app.put("/api/pursuits/pur_res/inbox/pkg.xlsx?role=core",
+                         content=b"bytes")
+    assert ok.status_code == 200 and ok.json()["role"] == "core"
+    roles_path = ws / "pur_res" / "inbox" / "roles.json"
+    before = roles_path.read_bytes()
+    for query in ("", "?role=core"):
+        r = offline_app.put(f"/api/pursuits/pur_res/inbox/roles.json{query}",
+                            content=b'{"evil.xlsx": "core"}')
+        assert r.status_code == 422, r.text
+        assert "reserved filename" in r.json()["detail"]
+        assert roles_path.read_bytes() == before
+    # the operator inputs that share the folder are NOT reserved
+    assert offline_app.put("/api/pursuits/pur_res/inbox/ramble.md",
+                           content=b"notes").status_code == 200

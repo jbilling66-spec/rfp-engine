@@ -73,13 +73,17 @@ def sheet_parts(zf: zipfile.ZipFile) -> dict[str, str]:
 
 
 def _sheet_index(zf: zipfile.ZipFile, sheet_name: str) -> int:
-    """The 1-based position calcChain's `i` attribute uses."""
+    """The `sheetId` calcChain's `i` attribute uses (ECMA-376 18.6.2).
+    P2-55 (P29b b9): this used to be the 1-based POSITION in
+    workbook.xml — equal to sheetId only until a sheet is deleted or
+    reordered, after which the patch left a stale entry for the cell it
+    had just made an inline string (Excel repairs the file on open)."""
     from lxml import etree
 
     workbook = etree.fromstring(zf.read("xl/workbook.xml"))
-    for index, sheet in enumerate(workbook.iter(_tag("sheet")), start=1):
+    for sheet in workbook.iter(_tag("sheet")):
         if sheet.get("name") == sheet_name:
-            return index
+            return int(sheet.get("sheetId"))
     raise ContractError(f"sheet {sheet_name!r} is not in the workbook")
 
 
@@ -138,15 +142,55 @@ def patch_sheet(xml: bytes, writes: dict[str, str]) -> tuple[bytes, list[str]]:
                            standalone=True), had_formula)
 
 
+def _chain_entries(root):
+    """(entry, sheetId) for every calcChain entry, the sheet resolved
+    the way Excel reads it: `i` is written only when the sheet changes,
+    an omitted `i` inherits the previous entry's (ECMA-376 18.6.2)."""
+    current = 1
+    for entry in root:
+        own = entry.get("i")
+        if own is not None:
+            current = int(own)
+        yield entry, current
+
+
 def _patch_calc_chain(xml: bytes, drop: set[tuple[int, str]]) -> bytes:
+    """Remove the chain entries of the cells the patch made inline
+    strings. P2-55 (P29b b9): the running `i` is carried forward, and
+    when a removed entry carried one, it is stamped onto the next
+    implicit entry — which inherited THAT `i` and would otherwise
+    re-parent to the entry before it."""
     from lxml import etree
 
     root = etree.fromstring(xml)
-    for entry in list(root):
-        if (int(entry.get("i", "1")), entry.get("r")) in drop:
+    owed: int | None = None
+    for entry, sheet_id in list(_chain_entries(root)):
+        own = entry.get("i")
+        if own is None and owed is not None:
+            entry.set("i", str(owed))
+        owed = None
+        if (sheet_id, entry.get("r")) in drop:
+            if own is not None:
+                owed = sheet_id
             root.remove(entry)
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8",
                           standalone=True)
+
+
+def _chain_survivors(zf: zipfile.ZipFile, intended: set[tuple[str, str]],
+                     ids: dict[str, int]) -> list[str]:
+    """P2-55: the positive proof — every intended cell's chain entry
+    must be gone from the output (a surviving one names a cell Excel
+    would try to recalculate and find an inline string)."""
+    from lxml import etree
+
+    if CALC_CHAIN not in zf.namelist():
+        return []
+    root = etree.fromstring(zf.read(CALC_CHAIN))
+    wanted = {(ids[sheet], coord): f"{sheet}!{coord}"
+              for sheet, coord in intended}
+    return sorted(wanted[key] for entry, sheet_id in _chain_entries(root)
+                  if (key := (sheet_id, entry.get("r"))) in wanted)
 
 
 def write_cells(source: Path, output: Path,
@@ -237,6 +281,16 @@ def assert_roundtrip(source: Path, output: Path,
                     f"xlsx write-back drifted part {name} outside every "
                     "intended cell — refusing to hand back a changed "
                     "workbook")
+        # P2-55 (P29b b9): calcChain is excused from byte-equality (the
+        # patch edits it) but not from proof — no surviving entry may
+        # name a cell that is now an inline string
+        ids = {sheet: _sheet_index(src, sheet) for sheet, _ in intended}
+        survivors = _chain_survivors(out, intended, ids)
+        if survivors:
+            raise ContractError(
+                "xlsx write-back left calcChain entries for cells it made "
+                f"inline strings ({', '.join(survivors)}) — Excel would "
+                "repair the file on open; refusing to hand it back")
     for sheet in sorted({sheet for sheet, _ in intended}):
         coords = {coord for s, coord in intended if s == sheet}
         src_model, src_cached = _cell_model(source, sheet)

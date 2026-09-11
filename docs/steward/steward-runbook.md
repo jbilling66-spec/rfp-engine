@@ -75,8 +75,10 @@ verified date — the row asks for them — because a fact nobody vouches
 for is not a fact. Deprecating a card that is still cited, or touching
 one under legal hold, refuses and names why. Nothing in the queue is
 ever deleted: a rejected proposal is evidence, and a proposal the
-system withdrew (`voided` — one the accept-time re-check found dirty)
-stays on the record with its reason. The one purge door you have is
+system withdrew (`voided` — one the accept-time re-check found dirty,
+or one derived from a card a client purge removed) stays on the record
+with its reason. A batch that names the same proposal twice refuses
+before anything applies. The one purge door you have is
 the client purge below; a pursuit-scoped purge of what a pursuit taught
 exists as library code with no door until the A6 organization screen.
 
@@ -96,7 +98,15 @@ cards, and any draft content that cited a purged card (the whole
 artifact goes; drafts are regenerable, quiet holes are not). The purge
 writes a full accounting and then sweeps the store to prove the name
 is gone; it raises rather than finish with anything unaccounted. Cards
-under legal hold are held, reported, and hold their parents.
+under legal hold are held, reported, and hold their parents. The purge
+also follows lineage INTO your queue: a proposal derived from a purged
+card is voided (named under `voided_proposals`, one curation-log line),
+so accepting it later can never re-mint the material — and a re-ingest
+of the same document meets that voided record rather than re-opening
+it. A retained source that has no meta record (a crash between the two
+writes that store one) belongs to no client and no card, so every purge
+removes it and names it under `l0_orphans_removed`; the sweep is never
+CLEAN over one.
 
 ## Health checks
 

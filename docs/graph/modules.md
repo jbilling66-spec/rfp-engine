@@ -123,7 +123,7 @@ is the pursuit-memory store. Both are drawn because the rule draws them.)*
 
 | foundation | imported by |
 |---|---|
-| contracts | assembly, drafting, extraction, flywheel, intake, kb, metrics, planning, research, revision, runlog, strategy, structure, validation, workspace |
+| contracts | assembly, drafting, extraction, flywheel, intake, kb, metrics, pipeline, planning, research, revision, runlog, strategy, structure, validation, workspace |
 | llm | drafting, intake, kb, pipeline, planning, research, revision, strategy |
 | runlog | kb, llm, pipeline |
 | workspace | intake, kb, pipeline, revision |

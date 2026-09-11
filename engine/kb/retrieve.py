@@ -216,10 +216,12 @@ def card_search(store: KBStore | Lanes, query: str, *, log, stage, agent,
     return result
 
 
-def _withheld_reason(card: dict) -> str | None:
+def withheld_reason(card: dict) -> str | None:
     """Why a card is withheld from navigation and search results: D2's
     use_restriction, or an accepted deprecation (P26c). The reason rides
-    the excluded row so a gap can explain itself."""
+    the excluded row so a gap can explain itself. Public since P29b b7
+    (P2-60): the assistant's card_detail door applies the same predicate
+    — one control, every door."""
     if card.get("use_restriction"):
         return "use_restriction"
     if card.get("deprecated"):
@@ -246,7 +248,7 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
     cd = card.get("canonical_doc_id")
     path = list(card.get("doc_path") or ())
     result = SearchResult()
-    withheld = _withheld_reason(card)
+    withheld = withheld_reason(card)
     if withheld:
         # M-28 (P26b-2): the ANCHOR answers to D2 too — a restricted card
         # used to be a usable navigation handle whose position and
@@ -288,7 +290,7 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
         if not store.card_exists(neighbor_id):
             continue  # absorbed or purged since the model was written
         neighbor, _ = store.read_card(neighbor_id)
-        withheld = _withheld_reason(neighbor)
+        withheld = withheld_reason(neighbor)
         if withheld:
             result.excluded.append({"kb_id": neighbor_id,
                                     "reason": withheld})
@@ -310,7 +312,7 @@ def targeted_open(store: KBStore, kb_id: str, *, log, stage, agent,
     the refusal is on the trace (D2). A Lanes bundle opens from the lane
     that minted the id (prefix dispatch, P17/C3)."""
     card, body = as_lanes(store).store_for(kb_id).read_card(kb_id)
-    withheld = _withheld_reason(card)
+    withheld = withheld_reason(card)
     if withheld:
         emit_kb_retrieval(
             log, stage=stage, agent=agent, query=query, step="targeted_open",

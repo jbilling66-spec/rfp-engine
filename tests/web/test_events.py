@@ -260,13 +260,22 @@ def test_event_ids_mint_from_the_lane_max_under_concurrency(tmp_path):
 def test_mutating_event_and_share_routes_serialize_under_the_guard():
     """Structural pin for P1-20/P1-22: the four routes that used to
     append outside the job lane take `_mutate` — the behavioural half
-    (serialized ids) is the lane test above."""
+    (serialized ids) is the lane test above. `revoke_share` is the
+    deliberate exception (P2-58, P29b b2): `_mutate`'s busy-409 refused
+    the kill switch for a job's whole run, and a guard-only variant
+    would block for it; the share lane's own lock is the serialization
+    revoke needs, so the route takes neither."""
     import inspect
 
     import engine.web.server as server
     src = inspect.getsource(server)
     for func in ("add_event", "record_outcome", "record_effort",
-                 "create_share", "revoke_share"):
+                 "create_share"):
         start = src.index(f"    def {func}(")
         end = src.index("\n    @app.", start)
         assert "with _mutate(pursuit_id):" in src[start:end], func
+    start = src.index("    def revoke_share(")
+    end = src.index("\n    @app.", start)
+    body = src[start:end]
+    assert "_mutate(" not in body and "runner.guard(" not in body, \
+        "revoke never waits on the job lane (P2-58)"
