@@ -92,3 +92,43 @@ def test_without_verify_the_door_behaves_as_before(tmp_path):
     revised = route_feedback([_edit("NRH runs 40 sites.", "NRH runs 14 sites.")],
                              store, at=AT)
     assert revised[0]["flywheel_routing"]["action_taken"].startswith("proposal:")
+
+
+# -- P29a (P3-23): the write-back door's RECORD of the same control ---------
+
+def test_writeback_residue_is_listed_under_blocked_by_location(tmp_path):
+    """The maintenance guide says BOTH flywheel responses list identifier
+    residue under `blocked` by location; the write-back response used to
+    fold it into `skipped` as prose, shape-identical to a benign skip."""
+    import json
+
+    from fastapi.testclient import TestClient
+
+    from engine.web.server import create_app
+    from tests.web.conftest import FIXED_AT, sign_in
+    from tests.web.test_template_fill_web import HAND, _plant
+
+    ws = tmp_path / "ws"
+    KBStore(ws / "kb")
+    app = create_app(ws, now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Fiona Filler")
+        client.post("/api/pursuits", json={"pursuit_id": "pur_res"})
+        pursuit = _plant(ws, "pur_res", all_prose=True)
+        (pursuit.root / "brief.json").write_text(json.dumps(
+            {"buyer": {"name": "Northwind Regional Health"}}), encoding="utf-8")
+        values = dict(HAND)
+        # a hand-typed case block: the acronym survives placeholdering
+        values["s-h10"] = [{"client": "NRH and its subcontractor",
+                            "scope": "Finance", "outcome": "Live"}]
+        put = client.put("/api/pursuits/pur_res/writeback/hand-fill",
+                         json={"values": values})
+        assert put.status_code == 200, put.text
+        confirmed = client.post("/api/pursuits/pur_res/writeback/confirm",
+                                json={})
+        assert confirmed.status_code == 200, confirmed.text
+        flywheel = confirmed.json()["flywheel"]
+    assert flywheel["proposals"] == []
+    assert flywheel["blocked"] == [{"slot_id": "s-h10", "locations": ["body"]}]
+    assert "s-h10" not in flywheel["skipped"]  # a block is not a benign skip
+    assert not any("residue" in v for v in flywheel["skipped"].values())

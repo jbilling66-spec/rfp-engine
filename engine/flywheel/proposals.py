@@ -132,6 +132,15 @@ class ProposalStore:
         Proposals are otherwise never deleted; a decision is the record."""
         self._path(pid).unlink()
 
+    def void(self, pid: str, *, by: str, at: str, note: str) -> dict:
+        """P29a (P1-49, P1-52): a proposal the SYSTEM withdraws — one
+        another door opened dirty (re-checked at accept), or one whose
+        lineage a purge removed. Not a steward's word (`rejected`) and
+        nothing supersedes it; the record stays, marked, so the
+        re-check and the purge cascade are auditable. Decided once, like
+        any decision; the caller writes the curation-log line."""
+        return self.decide(pid, decision="voided", by=by, at=at, note=note)
+
     def decide(self, pid: str, *, decision: str, by: str, at: str,
                note: str = "") -> dict:
         """Record a steward's disposition ON the proposal, so what was

@@ -388,7 +388,8 @@ def test_the_inbox_names_every_proposals_home(inbox):
         target="playbook", kind="playbook_note", at=FIXED_AT,
         diff={"comment": {"after": "Lead with the outcome."}})["proposal_id"]
     fact = propose_gap_answer_card(store.root, gap=GAP, pursuit_id="pur_x",
-                                   operator="Astrid", at=FIXED_AT)
+                                   operator="Astrid", at=FIXED_AT,
+                                   identifiers={})  # P29a: the index is required
     rows = {p["proposal_id"]: p for p in _proposals(client, status="proposed")}
     assert rows[field_]["home"]["kind"] == "card_field"
     assert rows[lesson]["home"]["kind"] == "card_lesson"
@@ -418,7 +419,8 @@ def test_a_fact_card_accepts_from_the_ui_with_fills(inbox):
 
     client, store = inbox
     fact = propose_gap_answer_card(store.root, gap=GAP, pursuit_id="pur_x",
-                                   operator="Astrid", at=FIXED_AT)
+                                   operator="Astrid", at=FIXED_AT,
+                                   identifiers={})  # P29a: the index is required
     url = f"/api/kb/proposals/{fact}/decide"
     r = client.post(url, json={"decision": "accepted"})
     assert r.status_code == 409 and "owner and" in r.json()["detail"]

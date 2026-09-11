@@ -113,6 +113,10 @@ class SourceDoc:
     # caller keeps working.
     elements: list | None = None
     source_bytes: bytes | None = None
+    # P29a (P1-47): the original filename, retained in the RESTRICTED meta
+    # only (behind the access log) — never in a card, a proposal, a run
+    # log or a reconciliation record.
+    source_name: str | None = None
 
 
 @dataclass
@@ -289,6 +293,40 @@ _EMPTY_ANNOTATION = {"summary": "", "section_types": [], "type_tags": [],
                      "claim_candidates": []}
 
 
+def _proposal_note(canonical_doc_id: str, chunk_index: int) -> str:
+    """P29a (P1-47): the claim-promotion note names the document by its
+    canonical id — composed BEFORE the gate so it is scanned like every
+    other persisted string, and written verbatim at step 8."""
+    return (f"Claim candidate from {canonical_doc_id} chunk {chunk_index}. "
+            "A steward must supply owner and verified_date at acceptance.")
+
+
+def persisted_texts(model, claim_texts: dict, candidates: list,
+                    notes: dict[int, str]) -> dict[str, str]:
+    """P29a (P1-47/P1-48): the ONE enumeration of every string the ingest
+    persists, keyed by location — the gate scans exactly this set, so a
+    new persisted field is added here or it is not written. Elements
+    (`<cd>:element:<i>`), claim texts (`claim:<i>:<j>`), each candidate
+    card's title/summary/body and question forms (`<kb_id>:form:<n>`),
+    and each proposal note (`proposal:note:<i>`)."""
+    texts: dict[str, str] = {}
+    for i, element in enumerate(model.elements):
+        if element.text:
+            texts[f"{model.doc_id}:element:{i}"] = element.text
+    for (i, j), claim_text in claim_texts.items():
+        texts[f"claim:{i}:{j}"] = claim_text
+    for cand in candidates:
+        kb_id = cand["card"]["kb_id"]
+        texts[f"{kb_id}:title"] = cand["card"]["title"]
+        texts[f"{kb_id}:summary"] = cand["card"]["summary"]
+        texts[f"{kb_id}:body"] = cand["body"]
+        for n, form in enumerate(cand["card"].get("question_forms") or ()):
+            texts[f"{kb_id}:form:{n}"] = form
+    for i, note in notes.items():
+        texts[f"proposal:note:{i}"] = note
+    return texts
+
+
 def _card_shell(doc: SourceDoc, kb_id: str, title: str, summary: str,
                 doc_kind: str, canonical_doc_id: str,
                 identity: dict, *texts: str) -> dict:
@@ -390,6 +428,10 @@ def _candidates(doc: SourceDoc, model: CanonicalDoc, wire: dict,
             # only when the questioner spoke (writers-omit — the
             # committed corpus stays byte-identical under questioner=None).
             card["question_forms"] = [_anon(q) for q in forms]
+            # P29a (P1-48): a form is a persisted string like any other —
+            # its placeholders are counted and (below) it is scanned.
+            card["anonymization"]["placeholders_used"] = _placeholders_used(
+                title, body, summary, *card["question_forms"])
         card["doc_path"] = list(chunk.doc_path)
         card["chunk_span"] = {"chars": chunk.chars, "elements": end - start}
         if chunk.pages:
@@ -449,12 +491,18 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     the mapper eval's pinned rates hold (B75§4a); live generation lands
     at the combined UAT/A1 session with the funded re-measure."""
     report = IngestReport(doc_id=doc.doc_id, status="ingested")
+    source_bytes = (doc.source_bytes if doc.source_bytes is not None
+                    else doc.text.encode("utf-8"))
+    # P29a (P1-47): every persisted line names the document by its
+    # canonical (content) id — the caller's doc_id is a filename stem at
+    # the CLI door and never reaches a firm-store record.
+    canonical_id = doc_id_for(source_bytes)
 
     # 1. Refusal gate: firm-authored sources only (S4/T3).
     if doc.authored_by != "firm":
         log.emit("error", stage="ingestion", error={
             "code": "buyer_authored_source",
-            "message": f"{doc.doc_id}: corpus ingestion accepts firm-authored "
+            "message": f"{canonical_id}: corpus ingestion accepts firm-authored "
                        "sources only; buyer text never enters the KB (S4/T3)",
             "recoverable": True,
             "action_taken": "surfaced_to_human",
@@ -492,9 +540,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     raw_elements = (doc.elements if doc.elements is not None
                     else elements_from_markdown(doc.text))
     raw_chunks = chunk_elements(raw_elements)
-    source_bytes = (doc.source_bytes if doc.source_bytes is not None
-                    else doc.text.encode("utf-8"))
-    doc_id = doc_id_for(source_bytes)
+    doc_id = canonical_id
     source_hash = source_hash_for(source_bytes)
 
     # 2b. Retain the L0 artifact behind the restricted boundary (R2/B59:
@@ -508,6 +554,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     absorbed = store.restricted.absorbed_owners(actor=actor, purpose="ingest")
     store.restricted.write_source(doc_id, source_bytes, {
         "doc_id": doc.doc_id, "source_hash": source_hash,
+        **({"original_name": doc.source_name} if doc.source_name else {}),
         # C16: the client linkage lives in the RESTRICTED meta so a
         # blocked ingest's retained L0 — which mints no cards and so
         # has no provenance record — is still reachable by its
@@ -654,26 +701,22 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
         if "chunk_index" in cand:
             model.chunks[cand["chunk_index"]].kb_id = cand["card"]["kb_id"]
 
-    # 6. The gate: scan the canonical model text AND every card string
-    # AND every drafted proposal text. An identifier surviving in a
-    # non-carded element is a block too — L1 is retrievable-adjacent and
-    # persists; a proposal file is steward-visible and persists.
+    # 6. The gate: scan EVERY string this ingest will persist — the
+    # canonical model text, every card string (question forms included),
+    # every claim text and every proposal note — through the one helper
+    # that enumerates them (P29a, P1-47/P1-48: a curated list missed the
+    # note and the forms; the set is now built from the writers). An
+    # identifier surviving in a non-carded element is a block too — L1 is
+    # retrievable-adjacent and persists; a proposal file is
+    # steward-visible and persists.
     claim_texts: dict[tuple[int, int], str] = {}
     for i in sorted(wire["annotations"]):
         for j, claim in enumerate(wire["annotations"][i]["claim_candidates"]):
             claim_texts[(i, j)] = apply_placeholders(claim, identifiers)
-    texts = {}
-    for i, element in enumerate(model.elements):
-        if element.text:
-            texts[f"{model.doc_id}:element:{i}"] = element.text
-    for (i, j), claim_text in claim_texts.items():
-        texts[f"claim:{i}:{j}"] = claim_text
-    for cand in candidates:
-        kb_id = cand["card"]["kb_id"]
-        texts[f"{kb_id}:title"] = cand["card"]["title"]
-        texts[f"{kb_id}:summary"] = cand["card"]["summary"]
-        texts[f"{kb_id}:body"] = cand["body"]
-    report.findings = scan(texts, identifiers)
+    notes = {i: _proposal_note(model.doc_id, i)
+             for (i, _j) in claim_texts}
+    report.findings = scan(
+        persisted_texts(model, claim_texts, candidates, notes), identifiers)
     if not scan_passed(report.findings):
         report.status = "blocked"
         report.route_to = (store.restricted.humans("audit") or [None])[0]
@@ -840,9 +883,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
                         "pursuit_id": doc.source_pursuit},
                 target="fact_sheet", kind="new_card",
                 at=f"{doc.date}T00:00:00Z", diff=diff,
-                note=(f"Claim candidate from {doc.doc_id} chunk {i}. "
-                      "A steward must supply owner and verified_date "
-                      "at acceptance."))
+                note=_proposal_note(model.doc_id, i))  # scanned at step 6
             if proposal["proposal_id"] not in report.proposals:
                 report.proposals.append(proposal["proposal_id"])
 

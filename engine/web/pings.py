@@ -156,6 +156,7 @@ class PingLane:
             gap["answered_by"] = actor
             gap["answered_at"] = at
         proposal = None
+        blocked: list[dict] = []
         if propose_card:
             # P17/C11 (B72§5's deferral closed): the gate_0 gap→card
             # link extended to the ping lane — OPT-IN, through the
@@ -163,11 +164,20 @@ class PingLane:
             # (B69§7). Same lane-agnostic spawner gate_0 uses.
             from pathlib import Path as _Path
 
-            from engine.kb.curation import propose_gap_answer_card
-            proposal = propose_gap_answer_card(
-                _Path(kb_root), gap={**gap, "gap_id": record["gap_id"]},
-                pursuit_id=self.pursuit.pursuit_id,
-                operator=actor, at=at)
+            from engine.kb.curation import GapResidue, propose_gap_answer_card
+            from engine.workspace.buyer import buyer_identifiers
+            try:
+                proposal = propose_gap_answer_card(
+                    _Path(kb_root), gap={**gap, "gap_id": record["gap_id"]},
+                    pursuit_id=self.pursuit.pursuit_id,
+                    operator=actor, at=at,
+                    identifiers=buyer_identifiers(self.pursuit.root.parent,
+                                                  self.pursuit))
+            except GapResidue as exc:
+                # P29a (P1-49): the answer stands on the ping record; the
+                # card is refused by location and the response says so.
+                blocked = [{"gap_id": record["gap_id"],
+                            "locations": exc.locations}]
         log.emit("gap", stage="review_loop", gap={
             "gap_id": record["gap_id"],
             "reason": gap.get("reason", "kb_empty") if lane == "intake"
@@ -180,6 +190,8 @@ class PingLane:
         out = {**record, **update}
         if proposal:
             out["proposal"] = proposal  # steward inbox, not corpus
+        if blocked:
+            out["blocked"] = blocked
         return out
 
     def open_gap(self, log, plan: dict, *, section_id: str, question: str,

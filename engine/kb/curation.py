@@ -14,6 +14,7 @@ the only approve door was a terminal command. Mint and approve ship on
 the same surface, in the same slice.
 """
 
+import json
 from pathlib import Path
 
 from engine.contracts import ContractError, append_fsync, path_lock
@@ -236,8 +237,42 @@ def propose_deprecation(store, kb_id: str, *, operator: str, at: str,
         note=note or f"Deprecation proposed by {operator}.")
 
 
+class GapResidue(CurationRefused):
+    """P29a (P1-49): a gap answer (or its question) still names a party
+    after cleaning — refused by LOCATION, never by text."""
+
+    def __init__(self, gap_id, locations):
+        self.gap_id = gap_id
+        self.locations = list(locations)
+        super().__init__(f"gap {gap_id!r}: identifier residue at "
+                         f"{', '.join(self.locations)} — not proposed")
+
+
+def append_curation_log(store, *, at: str, by: str, proposal_ids=(),
+                        voided=(), reason: str | None = None,
+                        snapshot_before: str | None = None,
+                        aborted: str | None = None) -> dict:
+    """P29a: the ONE writer of curation-log.jsonl — a merge batch's line
+    (proposal_ids + the snapshots, `aborted` when the apply pass died)
+    and the system's void line (`voided` + `reason`) share it."""
+    line = {"at": at, "by": by, "proposal_ids": list(proposal_ids),
+            "snapshot_before": snapshot_before or store.snapshot(),
+            "snapshot_after": store.snapshot()}
+    if voided:
+        line["voided"] = list(voided)
+    if reason:
+        line["reason"] = reason
+    if aborted is not None:
+        line["aborted"] = aborted
+    log = store.root / "curation-log.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    append_fsync(log, json.dumps(line, sort_keys=True))  # P0-6
+    return line
+
+
 def propose_gap_answer_card(kb_root, *, gap: dict, pursuit_id: str,
-                            operator: str, at: str) -> str:
+                            operator: str, at: str,
+                            identifiers: dict[str, str]) -> str:
     """P15/C10 (B69 §7, B70(1)): an ANSWERED intake gap may spawn a
     new_card proposal through the steward door — the missing link
     between "a human answered a question" and "the corpus learns", so
@@ -253,10 +288,26 @@ def propose_gap_answer_card(kb_root, *, gap: dict, pursuit_id: str,
         raise CurationRefused(
             f"gap {gap.get('gap_id')!r} is not answered — only an "
             f"answered gap proposes a card")
-    question = gap["question_to_human"]
+    # P29a (P1-49): the ONE door every caller passes — Gate 0's opt-in,
+    # the ping lane's opt-in and the accept-time route — cleans the
+    # question (model-generated from the buyer package, so it routinely
+    # names the buyer) and the answer against the buyer's identifiers
+    # plus the structured classes code detects, then scans the result; a
+    # residue refuses by location and nothing is written. The index is
+    # REQUIRED: a caller with nothing known passes {} and the structured
+    # classes still apply.
+    from engine.kb.anonymize import cleaners
+
+    clean, verify = cleaners(identifiers)
+    question = clean(gap["question_to_human"])
+    answer = clean(gap["answer"])
+    residue = sorted({f.location for f in verify(
+        {"question_to_human": question, "answer": answer})})
+    if residue:
+        raise GapResidue(gap.get("gap_id"), residue)
     diff = {
         "title": {"after": question[:80]},
-        "body": {"after": f"Q: {question}\nA: {gap['answer']}"},
+        "body": {"after": f"Q: {question}\nA: {answer}"},
         "layer": {"after": "fact_sheet"},
         "grain": {"after": "atom"},
         "content_origin": {"after": "source_text"},
@@ -313,6 +364,19 @@ def _check_new_card(store, proposal: dict, fill: dict) -> tuple[dict, str, list]
         raise CurationRefused(
             f"{proposal['proposal_id']}: a new_card proposal without a "
             f"body mints nothing")
+    # P29a (P1-49): `anonymization.status` is DERIVED, not asserted — the
+    # structured classes are scanned here, unconditionally; the buyer's
+    # names were cleaned at the door that opened the proposal (stated
+    # limit: a bare buyer name is invisible to this accept-side scan).
+    from engine.kb.anonymize import scan
+
+    title = fields.get("title", body.splitlines()[0][:80])
+    residue = sorted({f.location for f in scan({"title": title, "body": body}, [])})
+    if residue:
+        raise CurationRefused(
+            f"{proposal['proposal_id']}: identifier residue at "
+            f"{', '.join(residue)} — a card is minted only from a scanned "
+            f"body (P1-49)")
     card = {
         "kb_id": kb_id_for(body),
         "layer": fields.get("layer", "fact_sheet"),
@@ -528,12 +592,8 @@ def _merge_batch_locked(store, proposal_ids: list[str], *, operator: str,
         aborted = f"{type(exc).__name__}: {exc}"
         raise
     finally:
-        line = {"at": at, "by": operator, "proposal_ids": accepted,
-                "snapshot_before": snapshot_before,
-                "snapshot_after": store.snapshot()}
-        if aborted is not None:
-            line["aborted"] = aborted
-        log = store.root / "curation-log.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        append_fsync(log, json.dumps(line, sort_keys=True))  # P0-6
+        line = append_curation_log(store, at=at, by=operator,
+                                   proposal_ids=accepted,
+                                   snapshot_before=snapshot_before,
+                                   aborted=aborted)
     return line

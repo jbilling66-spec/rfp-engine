@@ -10,15 +10,30 @@ each run records the snapshot it drafted against.
 ## Bringing a document in
 
 `python -m engine kb ingest --file <doc> --client <name>
---pursuit <id> --date <YYYY-MM-DD> --wire <wire.json>` reads a
-firm-authored document (docx is the primary path), splits it into
-heading-shaped chunks, and mints cards with content-anchored ids.
-Until real-data onboarding opens (A1), the model's annotation pass is
-supplied as a scripted `--wire` file; the live call is the same seam.
+--pursuit <id> --date <YYYY-MM-DD> --live` reads a firm-authored
+document (docx is the primary path), splits it into heading-shaped
+chunks, and mints cards with content-anchored ids. Two model readers
+see it — the ingestion agent, which annotates the chunks and lists the
+identifiers it finds, and a second, independently written anonymization
+reviewer that lists identifiers only — and code finds the structured
+ones (emails, phones, web addresses, street addresses, tax ids,
+contract and PO numbers) before either reader is trusted. The union is
+substituted with typed placeholders. `--live` refuses without
+`RFP_LIVE=1`, a key and a priced table, and spends nothing until all
+three hold; offline, the suite's path takes `--wire` and
+`--reviewer-wire`, scripted replies for the two readers. The store
+never records the file's name — the document is keyed by a content id
+and a neutral handle, and the filename lives only in the restricted
+meta behind the access log (a file named after the client used to reach
+the proposal queue by its name; P29a). The maintenance guide's
+"Ingesting a firm document" section carries the taxonomy, what a block
+means, and the live measure A1 records.
 
 Two gates stand between the file and the store. The anonymization gate
 scans every element, card, and drafted proposal against the client's
-identifiers — one finding blocks the **entire** ingest, nothing
+identifiers in every form the scan knows (distinctive words, acronym,
+possessive, restated fees) and against every structured class
+unconditionally — one finding blocks the **entire** ingest, nothing
 persists, and the findings route to a restricted audit queue. The
 claim gate never writes facts: claim-like statements found in the text
 become **proposals** for fact-sheet atoms, and each one waits for a
@@ -59,8 +74,11 @@ Accepting a fact-sheet card **refuses** until you supply its owner and
 verified date — the row asks for them — because a fact nobody vouches
 for is not a fact. Deprecating a card that is still cited, or touching
 one under legal hold, refuses and names why. Nothing in the queue is
-ever deleted: a rejected proposal is evidence. Purging a pursuit removes
-what that pursuit taught — its proposals and the lessons they landed.
+ever deleted: a rejected proposal is evidence, and a proposal the
+system withdrew (`voided` — one the accept-time re-check found dirty)
+stays on the record with its reason. The one purge door you have is
+the client purge below; a pursuit-scoped purge of what a pursuit taught
+exists as library code with no door until the A6 organization screen.
 
 ## Bulk edits by workbook
 

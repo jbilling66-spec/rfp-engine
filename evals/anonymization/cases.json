@@ -1439,5 +1439,75 @@
     "suite": "anonymization_set",
     "target": "ingestion_agent",
     "tier": "component"
+  },
+  {
+    "case_id": "anon_043",
+    "expected": {
+      "labels": [
+        "Wexcombe Regional Transit",
+        "$2,150,000.00"
+      ],
+      "must_not_contain": [
+        "Wexcombe",
+        "2,150,000",
+        "$2.15M"
+      ],
+      "status": "blocked"
+    },
+    "held_out": false,
+    "input": {
+      "description": "ADVERSARIAL cents-form fee: the readers index the fee WITH cents; the un-cented and rounded restatements must still be caught (P2-51 \u2014 the scan's integer family blocks).",
+      "files": [
+        "docs/anon_043.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-10",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
+  },
+  {
+    "case_id": "anon_044",
+    "expected": {
+      "labels": [
+        "Firthmoor Logistics"
+      ],
+      "must_not_contain": [
+        "Firthmoor",
+        "\ufb01rthmoor"
+      ],
+      "status": "ingested"
+    },
+    "held_out": true,
+    "input": {
+      "description": "ADVERSARIAL ligature spelling: the document spells the client with a typographic fi-ligature (U+FB01), the way a PDF render pastes it (P2-52 \u2014 the fold substitutes it).",
+      "files": [
+        "docs/anon_044.md"
+      ]
+    },
+    "provenance": {
+      "authored_by": "engine-build",
+      "created": "2026-09-10",
+      "synthetic": true
+    },
+    "scoring": {
+      "bar": 1.0,
+      "blocking": true,
+      "method": "assertion",
+      "metric": "anonymization_recall"
+    },
+    "suite": "anonymization_set",
+    "target": "ingestion_agent",
+    "tier": "component"
   }
 ]

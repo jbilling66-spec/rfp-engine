@@ -11,8 +11,8 @@
     "created": { "type": "string", "format": "date-time" },
     "status": {
       "type": "string",
-      "enum": ["proposed", "accepted", "rejected", "superseded"],
-      "description": "proposed until a steward decides. superseded = a later proposal covers the same ground; nothing is deleted (the v1 governance spine — a rejected proposal is evidence about what the flywheel wanted, and erasing it loses the signal)."
+      "enum": ["proposed", "accepted", "rejected", "superseded", "voided"],
+      "description": "proposed until a steward decides. superseded = a later proposal covers the same ground; voided (P29a, P1-49/P1-52) = the SYSTEM withdrew it — a proposal another door opened dirty and the accept-time re-check refused, or one whose lineage a purge removed — never a steward's word; nothing is deleted (the v1 governance spine — a rejected proposal is evidence about what the flywheel wanted, and erasing it loses the signal)."
     },
     "source": {
       "type": "object",
@@ -67,7 +67,7 @@
       "properties": {
         "by": { "type": "string" },
         "at": { "type": "string", "format": "date-time" },
-        "decision": { "type": "string", "enum": ["accepted", "rejected"] },
+        "decision": { "type": "string", "enum": ["accepted", "rejected", "voided"] },
         "note": { "type": "string" }
       }
     }

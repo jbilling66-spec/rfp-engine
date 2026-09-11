@@ -182,7 +182,7 @@ on purpose. The pin is on paths, not methods.
 | version | Print the engine version |
 | check-run | Validate a run.jsonl: schemas, payload discipline, gapless seq |
 | kb seed | Build the committed store from the fixture corpus |
-| kb ingest | Ingest one firm-authored document |
+| kb ingest | Ingest one firm-authored document through two readers — `--live` (RFP_LIVE-gated by construction, P28) or, offline, `--wire` + `--reviewer-wire` |
 | kb search | Card search with full retrieval trace |
 | kb open | Open one card body |
 | kb snapshot | Print the KB content snapshot id |
@@ -193,7 +193,7 @@ on purpose. The pin is on paths, not methods.
 | intake run | Document package + ramble → brief.json, offline |
 | slice | The M1 vertical slice runner (`--ci` or `--live`) |
 | serve | The web app on 127.0.0.1 (host is deliberately not an argument) |
-| eval | The eval harness + release gates |
+| eval | The eval harness + release gates (`--live` with `--rebaseline`, or with `--suite anonymization` to record the live readers' measure — P28) |
 
 ## Module `__main__` doors
 

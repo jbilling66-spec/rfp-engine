@@ -276,7 +276,8 @@ def test_an_answered_gap_reaches_the_inbox_once(accepting):
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     opted = propose_gap_answer_card(
         store.root, gap=plan["sections"][0]["gaps"][0], pursuit_id=pid,
-        operator="Astrid", at="2026-08-07T09:00:00Z")
+        operator="Astrid", at="2026-08-07T09:00:00Z",
+        identifiers={})  # P29a: the index is required
     cards_before = [c["kb_id"] for c in store.list_cards()]
     flywheel = client.post(f"/api/pursuits/{pid}/accept",
                            json={}).json()["flywheel"]

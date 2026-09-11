@@ -70,3 +70,39 @@ def test_two_wires_ingest_with_typed_placeholders(tmp_path, capsys):
                      for p in (tmp_path / "kb" / "cards").glob("*.md"))
     assert "[CLIENT]" in cards and "[CONTACT]" in cards
     assert "foxfire.example" not in cards and "214-8890" not in cards
+
+
+# -- P29a (P2-53): the CAPABILITY leg — the door opens for a live caller ----
+
+def test_live_runs_both_readers_through_the_traced_caller(tmp_path, capsys,
+                                                          monkeypatch):
+    """P28 closed P1-45 on its refusal legs only; the branch that builds
+    TracedCaller(LiveCaller) and runs both readers was never executed by
+    the suite. Zero spend: an Anthropic-shaped stub client is injected by
+    patching the LiveCaller the door constructs — the door's own code
+    (the env read, the budget, the traced wrapper, both reads) runs."""
+    from engine.llm.live import LiveCaller as RealLiveCaller
+    from engine.runlog import read_run
+    from tests.llm.test_live_caller import KEY, StubClient, _response
+
+    monkeypatch.setenv("RFP_LIVE", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", KEY)
+    # the two readers' replies, IN CALL ORDER (ingest.py: the annotator
+    # first, the reviewer second) — the stub pops, it does not dispatch
+    stub = StubClient([_response(WIRE), _response(REVIEW)])
+    import engine.llm as llm_pkg
+    monkeypatch.setattr(
+        llm_pkg, "LiveCaller",
+        lambda **kw: RealLiveCaller(client=stub, sleep=lambda s: None, **kw))
+    assert main(_args(tmp_path, "--live", "--budget-usd", "1")) == 0
+    assert "ingested" in capsys.readouterr().out
+    assert len(stub.requests) == 2
+    runs = list((tmp_path / "kb" / "runs").glob("*/run.jsonl"))
+    assert len(runs) == 1
+    calls = [r for r in read_run(runs[0]) if r["record_type"] == "agent_call"]
+    assert [c["agent"] for c in calls] == ["ingestion_agent",
+                                          "anonymization_reviewer"]
+    assert all(c["cost_usd"] >= 0 for c in calls)
+    cards = " ".join(p.read_text(encoding="utf-8")
+                     for p in (tmp_path / "kb" / "cards").glob("*.md"))
+    assert "[CLIENT]" in cards and "Foxfire" not in cards

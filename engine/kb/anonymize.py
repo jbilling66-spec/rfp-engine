@@ -87,11 +87,24 @@ _GENERIC_TOKENS = frozenset(
 _INVISIBLE = re.compile("[\u00ad\u200b\u200c\u200d\u2060\ufeff]")
 
 
+# P29a (P2-52): the Latin typographic ligatures a PDF render pastes for
+# "fi"/"fl"/"ff"/"ffi"/"ffl"/"st" (U+FB00–U+FB06). Folded explicitly —
+# NFKC would fold them too, but it also rewrites non-breaking spaces,
+# trademark signs, fractions and full-width forms, and apply_placeholders
+# RETURNS the normalized text, so NFKC would move the stored bytes (and
+# content hashes) of every card.
+_LIGATURES = str.maketrans({
+    "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi",
+    "\ufb04": "ffl", "\ufb05": "st", "\ufb06": "st"})
+
+
 def normalize_text(text: str) -> str:
-    """NFC plus the invisible characters removed — lossless for prose, and
-    applied to BOTH sides of every match (P28): an identifier written in
-    decomposed Unicode, or split by a soft hyphen, still matches."""
-    return _INVISIBLE.sub("", unicodedata.normalize("NFC", text))
+    """NFC plus the invisible characters removed and the typographic
+    ligatures folded — lossless for prose, and applied to BOTH sides of
+    every match (P28, P29a): an identifier written in decomposed Unicode,
+    split by a soft hyphen, or spelled with a ligature still matches."""
+    return (_INVISIBLE.sub("", unicodedata.normalize("NFC", text))
+            .translate(_LIGATURES))
 
 
 @dataclass
@@ -184,7 +197,15 @@ def _fee_variants(identifier: str) -> list[str]:
     if bare != digits:
         variants.append(bare)  # the comma form without its $ escapes exact match
     if "." in digits:
-        return variants
+        # P29a (P2-51): a cents form is the likely INDEXED spelling — the
+        # readers copy fee tables verbatim — while the cover letter drops
+        # the cents and the summary rounds. The integer family derives
+        # from the whole-dollar part either way.
+        whole, _, _cents = digits.partition(".")
+        if not whole.isdigit():
+            return variants
+        variants += [whole, f"{int(whole):,}"]
+        digits = whole
     value = int(digits)
     if value >= 1_000 and value % 1_000 == 0:
         thousands = value // 1_000
@@ -263,6 +284,24 @@ def detect_structured(text: str) -> dict[str, str]:
             if value and value not in found:
                 found[value] = itype
     return found
+
+
+def cleaners(identifiers: dict[str, str]):
+    """P28/P29a (P1-46, P1-49): the pair every door that persists human
+    or buyer text uses — `clean` substitutes the known identifiers AND
+    the structured classes code detects in the text itself (an email is
+    placeholdered even when no buyer name is known); `verify` is the
+    ingestion scanner over the cleaned strings, the same gate a firm
+    document passes. One home: the accept-time learn route, the gap→card
+    spawner and the write-back route all build from here."""
+    def clean(text: str) -> str:
+        return apply_placeholders(
+            text, merge_identifiers(detect_structured(text), identifiers))
+
+    def verify(texts: dict[str, str]) -> list:
+        return scan(texts, identifiers)
+
+    return clean, verify
 
 
 def scan(texts: dict[str, str], identifiers: Iterable[str]) -> list[Finding]:

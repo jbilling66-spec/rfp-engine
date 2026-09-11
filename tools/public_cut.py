@@ -16,7 +16,10 @@
      decompressed text members of zip containers (docx/xlsx) — for the
      committed identifier baseline plus the machine-local person/firm
      patterns in tripwire-local/residue.txt (gitignored; required to cut
-     the private tree, B87 §4c)
+     the private tree, B87 §4c). A tracked SYMLINK refuses the cut before
+     any export work (P29a, P2-61): a link's blob is its link text — a
+     machine-local path the scan never reads, following or skipping the
+     link instead — and the review-only mirror has no use for one
   5. history, one commit under a neutral identity either way (override
      with PUBLIC_CUT_AUTHOR="Name <email>") — the history tripwire scans
      author, committer, and message, so neutrality is load-bearing. The
@@ -328,6 +331,29 @@ def release_commit(staging: Path, target: str,
     return release_dir, author
 
 
+def symlink_entries(ls_files_stage: str) -> list[str]:
+    """The tracked paths whose index mode is 120000 — a symlink's blob is
+    its LINK TEXT, which the staging tree recreates as a link and the
+    residue scan never reads (it follows or skips the link)."""
+    out = []
+    for line in ls_files_stage.splitlines():
+        if line.startswith("120000 ") and "\t" in line:
+            out.append(line.split("\t", 1)[1])
+    return sorted(out)
+
+
+def refuse_symlinks(ls_files_stage: str) -> None:
+    """P29a (P2-61): the cut exports no symlink, ever. The link text is a
+    machine-local path (a username, a private tree) the residue scan
+    cannot see, and the mirror is review-only — a link has nothing to
+    offer it. Refused BEFORE any export work, by name."""
+    links = symlink_entries(ls_files_stage)
+    if links:
+        sys.exit("FAILED: the tree tracks symlink(s) — the residue scan "
+                 "never reads a link's own text, so the cut exports none: "
+                 + ", ".join(links) + "\ndoes not ship red")
+
+
 def main() -> None:
     dirty = run("git", "status", "--porcelain", cwd=ROOT).stdout.strip()
     if dirty:
@@ -337,6 +363,7 @@ def main() -> None:
     # Refusals that need no staging happen BEFORE any export work.
     patterns = RESIDUE + machine_patterns()
     tracked = run("git", "ls-files", cwd=ROOT).stdout.splitlines()
+    refuse_symlinks(run("git", "ls-files", "-s", cwd=ROOT).stdout)
     validate_manifest(read_list(MANIFEST))
     validate_deny(read_list(DENY), tracked)
     uncovered, multi = coverage(tracked, read_list(MANIFEST), read_list(DENY))

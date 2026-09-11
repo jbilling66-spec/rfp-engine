@@ -57,7 +57,14 @@ and every structured class unconditionally. One hit and the document is
 BLOCKED — no card, no canonical model, the raw file retained behind the
 access log for the audit human the report names; the command prints the
 residue's location and matched text to your terminal (never to a
-record). A block is a finding to act on, not a number to watch.
+record). A block is a finding to act on, not a number to watch. The
+scan set is EVERY string the ingest persists, enumerated by one helper
+(the canonical elements, every claim text, each card's title, summary,
+body and question forms, each proposal note) — a persisted field is
+either in that set or it is not written (P29a). The document itself is
+recorded by a content id and a neutral handle; its filename lives only
+in the restricted meta, behind the access log, never in a card, a
+proposal or a run log.
 
 `--live` refuses without `RFP_LIVE=1`, a key and a priced table, and
 spends nothing until all three hold; `--budget-usd` (default 5) bounds
@@ -68,18 +75,29 @@ path, never the production one.
 The taxonomy above is the domain's as of P28 (the owner's call); A1's
 real-material review may add a class — that review is the closer named
 at the `TODO(spec-gap)` in `engine/kb/anonymize.py`, and the register
-records what arrived. The eval corpus (`evals/anonymization/`, 42 cases)
+records what arrived. The eval corpus (`evals/anonymization/`, 44 cases)
 carries an adversarial case per mechanism; the release record's
 anonymization lane reports `n_blocked` (how many synthetic cases the
 gate refused rather than delivered) and `measures.live` — the recorded
-measure of the LIVE readers, fresh only while the corpus fingerprint
-matches, `not_measured` with the reason otherwise. That record is A1's
-acceptance line; `docs/uat/a1-anonymization-live.md` is the run.
+measure of the LIVE readers, fresh only while every input it names —
+the case list, the documents, the gate code, the reader prompts, the
+model pins — and the model configuration still match, `not_measured`
+naming what moved otherwise (P29a); every run rebuilds every case's
+store from nothing, so the record measures the readers under test and
+never a previous run's cards. That record is A1's acceptance line;
+`docs/uat/a1-anonymization-live.md` is the run.
 
 The flywheel passes the same scanner: a reviewer edit, comment, waiver,
 answered gap or hand-typed case block that still names a party after
 placeholdering is not proposed — the accept and writeback responses list
-it under `blocked` by location (P1-46).
+it under `blocked` by location (P1-46; the write-back door's record
+joined at P29a, P3-23 — `skipped` there is benign skips only). An
+answered gap reaches the proposal queue through ONE door whichever
+lane offered it (Gate 0's opt-in, a ping answer's opt-in, the accept
+route) — the door cleans the question and the answer and scans them
+(P29a, P1-49); a proposal that door finds already open and dirty is
+`voided` with a curation-log line and the gap re-proposed clean, and a
+new card mints only from a body the accept-side scan passed.
 
 ## Spending money
 

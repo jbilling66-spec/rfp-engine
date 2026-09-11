@@ -445,3 +445,17 @@ def test_release_commit_refuses_empty_delta_and_unpublished_target(
     with pytest.raises(SystemExit) as exc:
         mod.release_commit(same, str(empty), release_dir=tmp_path / "rel2")
     assert "no tracked files" in str(exc.value)
+
+
+def test_the_private_tree_tracks_no_symlink():
+    """P2-61's reopen trigger, pinned where the cut reads it: the first
+    120000 entry in `git ls-files -s` is the day the refusal fires."""
+    git = shutil.which("git")
+    if git is None or not (REPO / ".git").exists():
+        pytest.fail("this contract requires a git checkout — refusing to "
+                    "pass vacuously")
+    staged = subprocess.run([git, "ls-files", "-s"], cwd=REPO,
+                            capture_output=True, text=True).stdout
+    links = [ln.split("\t", 1)[1] for ln in staged.splitlines()
+             if ln.startswith("120000 ")]
+    assert links == [], links

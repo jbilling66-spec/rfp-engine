@@ -1605,6 +1605,8 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         out = {"decision": result.decision, "converged": result.converged}
         if result.proposals:
             out["proposals"] = result.proposals  # steward inbox, not corpus
+        if result.blocked:
+            out["blocked"] = result.blocked  # P1-49: refused by location
         return out
 
     @app.get("/api/pursuits/{pursuit_id}/gate1")

@@ -153,8 +153,9 @@ def test_harness_catches_a_leak_in_the_canonical_model_only(tmp_path):
 def test_eval_cases_validate_and_held_out_quota():
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     # 20 text (P2) + 2 runtime-built media (C11) + 20 adversarial (P28:
-    # 18 text + 2 runtime-built docx)
-    assert len(cases) == 42
+    # 18 text + 2 runtime-built docx) + 2 adversarial (P29a: a cents-form
+    # fee, a ligature spelling)
+    assert len(cases) == 44
     for case in cases:
         validate("eval_case", case)
         assert case["suite"] == "anonymization_set"
@@ -202,8 +203,8 @@ def test_a_case_that_asserts_nothing_fails_the_eval(tmp_path):
     hollow[0] = dict(hollow[0], expected={})
     hollow_path = tmp_path / "suite" / "cases.json"
     hollow_path.write_text(json.dumps(hollow), encoding="utf-8")
-    # 38 text cases is below the committed floor of 42 — refused typed.
-    with pytest.raises(VacuousMeasure, match="anonymization: cases has n=38"):
+    # 40 text cases is below the committed floor of 44 — refused typed.
+    with pytest.raises(VacuousMeasure, match="anonymization: cases has n=40"):
         evaluate_anonymization_set(hollow_path, tmp_path / "work")
     # With the floor lifted for the unit, the hollow case is named.
     import engine.kb.evalset as evalset

@@ -36,34 +36,10 @@ from pathlib import Path
 _WAIVED_SUFFIX = re.compile(r"by (?P<actor>.+) at (?P<at>\S+)$")
 
 
-def _brief(pursuit) -> dict:
-    from engine.contracts import ContractError
-    try:
-        return pursuit.read_frozen("bid_brief")
-    except (FileNotFoundError, ContractError):
-        pass
-    try:
-        return pursuit.read_artifact("brief.json")
-    except FileNotFoundError:
-        return {}
-
-
-def buyer_identifiers(workspace: Path, pursuit) -> dict[str, str]:
-    """The buyer's names → CLIENT: the brief's buyer.name and, when the
-    pursuit is linked to an organization, every alias the registry
-    knows (P17/C6). Empty when nothing is known — then nothing is
-    replaced, and the harness (M-27) is the backstop."""
-    from engine.contracts import ContractError
-    from engine.workspace.orgs import read_org
-
-    buyer = (_brief(pursuit).get("buyer") or {})
-    names = [buyer.get("name") or ""]
-    if buyer.get("org_id"):
-        try:
-            names.extend(read_org(workspace, buyer["org_id"]).get("known_as") or [])
-        except ContractError:
-            pass
-    return {name.strip(): "CLIENT" for name in names if name and name.strip()}
+# P29a (P1-49): the index and the brief reader live in the workspace
+# layer now, so Gate 0 and the ping lane build the same index this route
+# does; the names stay importable from here.
+from engine.workspace.buyer import buyer_identifiers, read_brief as _brief  # noqa: E402,F401
 
 
 def cited_by_section(records: list[dict], pursuit_id: str) -> dict[str, list[str]]:
@@ -128,35 +104,63 @@ def answered_gaps(pursuit) -> list[dict]:
     return gaps
 
 
-def _route_gaps(pursuit, kb_root: Path, *, at: str, by: str, clean,
-                verify) -> tuple[list[str], list[dict]]:
-    """-> (opened proposal ids, blocked gaps [{gap_id, locations}]) —
-    P1-46: a gap answer that still carries a residue after cleaning
-    opens nothing and is reported by location."""
+def _route_gaps(pursuit, kb_root: Path, *, at: str, by: str,
+                identifiers: dict[str, str]) -> tuple[list[str], list[dict]]:
+    """-> (opened proposal ids, blocked [{gap_id, locations, ...}]) —
+    P1-46/P1-49: every answered gap goes through the ONE spawner door,
+    which cleans and scans; a residue opens nothing and is reported by
+    location. A gap already proposed is RE-CHECKED against today's
+    identifiers — a proposal another door opened dirty is voided (the
+    curation log names it) and the gap is re-proposed clean; a clean or
+    decided proposal stands (P1-44: one answered gap, one proposal)."""
     from engine.flywheel.proposals import ProposalStore
-    from engine.kb.curation import propose_gap_answer_card
+    from engine.kb.anonymize import cleaners
+    from engine.kb.curation import (GapResidue, append_curation_log,
+                                    propose_gap_answer_card)
+    from engine.kb.store import KBStore
 
     pursuit_id = pursuit.pursuit_id
-    already = {p["source"].get("gap_id")
-               for p in ProposalStore(kb_root).list()
-               if p["source"].get("pursuit_id") == pursuit_id
-               and p["source"].get("gap_id")}
-    opened = []
-    blocked = []
+    proposals = ProposalStore(kb_root)
+    _clean, verify = cleaners(identifiers)
+    prior: dict[str, list[dict]] = {}
+    for p in proposals.list():
+        if (p["source"].get("pursuit_id") == pursuit_id
+                and p["source"].get("gap_id")):
+            prior.setdefault(p["source"]["gap_id"], []).append(p)
+    opened: list[str] = []
+    blocked: list[dict] = []
     for gap in answered_gaps(pursuit):
-        if gap.get("gap_id") in already:
+        gap_id = gap.get("gap_id")
+        standing = []
+        for p in prior.get(gap_id, []):
+            if p["status"] != "proposed":
+                if p["status"] != "voided":
+                    standing.append(p)  # a steward decided it; it stands
+                continue
+            strings = {f"{k}.after": v["after"]
+                       for k, v in (p.get("diff") or {}).items()
+                       if isinstance(v, dict) and isinstance(v.get("after"), str)}
+            residue = sorted({f.location for f in verify(strings)})
+            if not residue:
+                standing.append(p)
+                continue
+            reason = "identifier residue at " + ", ".join(residue)
+            proposals.void(p["proposal_id"], by=f"learn:{by}", at=at,
+                           note=reason + " — voided at the accept-time "
+                                "re-check (P1-49)")
+            append_curation_log(KBStore(kb_root), at=at, by=f"learn:{by}",
+                                voided=[p["proposal_id"]], reason=reason)
+            blocked.append({"gap_id": gap_id, "proposal_id": p["proposal_id"],
+                            "locations": residue})
+        if standing:
             continue
-        cleaned = {"answer": clean(gap["answer"]),
-                   "question_to_human": clean(gap.get("question_to_human", ""))}
-        residue = sorted({f.location for f in verify(
-            {k: v for k, v in cleaned.items() if v})})
-        if residue:
-            blocked.append({"gap_id": gap.get("gap_id"), "locations": residue})
-            continue
-        opened.append(propose_gap_answer_card(
-            kb_root, gap={**gap, **cleaned}, pursuit_id=pursuit_id,
-            operator=gap.get("answered_by") or by, at=at))
-        already.add(gap.get("gap_id"))
+        try:
+            opened.append(propose_gap_answer_card(
+                kb_root, gap=gap, pursuit_id=pursuit_id,
+                operator=gap.get("answered_by") or by, at=at,
+                identifiers=identifiers))
+        except GapResidue as exc:
+            blocked.append({"gap_id": gap_id, "locations": exc.locations})
     return opened, blocked
 
 
@@ -166,17 +170,9 @@ def _cleaners(identifiers: dict[str, str]):
     the text itself (an email in a comment is placeholdered even when no
     buyer name is known); `verify` is the ingestion scanner over the
     cleaned strings — the same gate a firm document passes."""
-    from engine.kb.anonymize import (apply_placeholders, detect_structured,
-                                     merge_identifiers, scan)
+    from engine.kb.anonymize import cleaners
 
-    def clean(text):
-        return apply_placeholders(
-            text, merge_identifiers(detect_structured(text), identifiers))
-
-    def verify(texts):
-        return scan(texts, identifiers)
-
-    return clean, verify
+    return cleaners(identifiers)  # P29a: one home, in the kb layer
 
 
 def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
@@ -210,7 +206,8 @@ def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
     pursuit = PursuitDir(workspace, pursuit_id)
     lane = EventsLane(pursuit)
     store = KBStore(kb_root)
-    clean, verify = _cleaners(buyer_identifiers(workspace, pursuit))
+    identifiers = buyer_identifiers(workspace, pursuit)
+    clean, verify = _cleaners(identifiers)
 
     corpus = Corpus(workspace)
     records = corpus.runs()
@@ -222,7 +219,7 @@ def learn_from_accept(workspace: Path, kb_root: Path, pursuit_id: str, *,
         for line in revised:
             lane.append_revised(line)
         gap_proposals, blocked_gaps = _route_gaps(
-            pursuit, kb_root, at=at, by=by, clean=clean, verify=verify)
+            pursuit, kb_root, at=at, by=by, identifiers=identifiers)
         written = write_card_signals(store, records, corpus.events())
     proposals = sorted({
         pid
@@ -274,11 +271,13 @@ def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
                 "skipped": {HAND_FILL_NAME: "no hand-completion record"}}
     frozen = pursuit.read_frozen("pursuit_plan")
     container = pursuit.read_artifact(frozen.get("slots_ref", "slots.json"))
-    clean, verify = _cleaners(buyer_identifiers(workspace, pursuit))
+    identifiers = buyer_identifiers(workspace, pursuit)
+    clean, verify = _cleaners(identifiers)
 
     cases = {slot["slot_id"] for slot in case_block_slots(container)}
     proposals: list[str] = []
     skipped: dict[str, str] = {}
+    blocked: list[dict] = []
     for slot in hand_slots(container):
         slot_id = slot["slot_id"]
         value = record.get("values", {}).get(slot_id)
@@ -295,8 +294,9 @@ def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
         if residue:
             # P1-46: a hand-typed case block that still names a party
             # after cleaning opens nothing — named, never silently kept.
-            skipped[slot_id] = ("identifier residue at "
-                                + ", ".join(residue) + " — not proposed")
+            # P29a (P3-23): named under `blocked` by location, the accept
+            # response's shape — `skipped` keeps the benign skips only.
+            blocked.append({"slot_id": slot_id, "locations": residue})
             continue
         title = (slot.get("path") or slot.get("question_text")
                  or slot_id).strip()
@@ -317,4 +317,4 @@ def learn_from_writeback(workspace: Path, kb_root: Path, pursuit_id: str, *,
                       f"({slot_id}) — proposed as a corpus case study in "
                       f"the human's own words; a steward decides."))
         proposals.append(proposal["proposal_id"])
-    return {"proposals": proposals, "skipped": skipped}
+    return {"proposals": proposals, "skipped": skipped, "blocked": blocked}

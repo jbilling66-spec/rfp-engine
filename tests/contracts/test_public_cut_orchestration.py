@@ -179,3 +179,61 @@ def test_a_red_suite_in_the_cut_tree_names_what_failed(tmp_path, monkeypatch,
     assert "FAILED tests/web/test_x.py::test_y - assert 1 == 2" in out
     assert "1 failed, 4 passed" in out
     assert "a warning on stderr" in err
+
+
+# -- P29a (P3-16): the fifth orchestration guard, driven to its refusal ---
+
+def test_the_import_provenance_probe_refuses_an_outside_engine(tmp_path,
+                                                                monkeypatch):
+    """P1-18's fifth guard — 'engine imported from outside the cut tree' —
+    executed zero times across both public-cut files (a line tracer and a
+    surviving mutant proved it, review §5.17). One test drives the real
+    function to the refusal: the probe answers with the PRIVATE
+    checkout's engine, not the cut's."""
+    import subprocess as _sp
+
+    mod = _load_tool()
+    verify_dir = tmp_path / "cut"
+    (verify_dir / "engine").mkdir(parents=True)
+    (verify_dir / "engine" / "__init__.py").write_text("")
+    outside = tmp_path / "elsewhere" / "engine" / "__init__.py"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("")
+
+    class _Probe:
+        stdout = str(outside)
+
+    monkeypatch.setattr(mod, "run", lambda *a, **k: _Probe())
+    never = []
+    monkeypatch.setattr(mod.subprocess, "run",
+                        lambda *a, **k: never.append(a) or _sp.CompletedProcess(
+                            args=[], returncode=0, stdout="", stderr=""))
+    with pytest.raises(SystemExit, match="outside the cut tree"):
+        mod._verify_suite(verify_dir)
+    assert never == [], "the suite must not run over the wrong tree"
+
+
+# -- P29a (P2-61): the cut exports no symlink ------------------------------
+
+def test_a_tracked_symlink_refuses_the_cut_before_any_export(cut, capsys):
+    """A symlink's blob is its link text — a machine-local path the
+    residue scan never reads (it follows or skips the link). The cut
+    refuses the tree by name before staging exists."""
+    import os
+
+    mod, repo, staging, verified = cut
+    # link text built by concatenation so this file carries no literal
+    # the scanner could flag (test_public_cut.py's rule)
+    target = "/Users/" + "some" + "person/private/notes.md"
+    os.symlink(target, repo / "docs" / "link.md")
+    _git(mod, repo, "add", "-A")
+    _, _, env = mod.release_identity()
+    subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=",
+                    "commit", "-q", "-m", "adds a link"], cwd=repo, env=env,
+                   check=True)
+    assert mod.symlink_entries(
+        mod.run("git", "ls-files", "-s", cwd=repo).stdout) == ["docs/link.md"]
+    with pytest.raises(SystemExit, match="tracks symlink"):
+        mod.main()
+    assert not staging.exists(), "refused before any export work"
+    assert verified == []

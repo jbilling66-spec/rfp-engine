@@ -88,6 +88,16 @@ def _scripted_ingest_caller(args):
     return make_caller
 
 
+def neutral_doc_handle(path: Path) -> str:
+    """P29a (P1-47): the logical-document key the CLI door mints — a
+    digest of the case-folded stem, never the stem. Same filename, same
+    handle, so `prior_models` still finds a re-ingest's lineage."""
+    import hashlib
+
+    digest = hashlib.sha256(path.stem.casefold().encode("utf-8")).hexdigest()
+    return f"doc_{digest[:12]}"
+
+
 def _cmd_kb_ingest(args) -> int:
     from engine.kb import SourceDoc, ingest_document
     from engine.kb.read import read_source
@@ -111,7 +121,12 @@ def _cmd_kb_ingest(args) -> int:
     caller = make_caller(log)
     source = read_source(Path(args.file))  # python-docx primary here (B57)
     doc = SourceDoc(
-        doc_id=Path(args.file).stem,
+        # P29a (P1-47): a filename is, in practice, the client's name. The
+        # firm store never records it — the handle is a digest of the stem
+        # (stable across re-ingests of the same document, so lineage
+        # holds) and the original name rides the RESTRICTED meta only.
+        doc_id=neutral_doc_handle(Path(args.file)),
+        source_name=Path(args.file).name,
         text=source.text,
         source_client=args.client, source_pursuit=args.pursuit,
         outcome=args.outcome, date=args.date, authored_by=args.authored_by,

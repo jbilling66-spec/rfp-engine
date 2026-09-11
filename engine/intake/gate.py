@@ -49,6 +49,9 @@ class Gate0Result:
     brief_sha256: str | None = None
     converged: bool = False
     proposals: list = field(default_factory=list)
+    # P29a (P1-49): a card the spawner REFUSED by location — the answer
+    # stands on the brief; the record says the card did not.
+    blocked: list = field(default_factory=list)
 
 
 def _resolve_parent(brief: dict, field: str):
@@ -128,7 +131,9 @@ def _apply_corrections(brief: dict, corrections: list, actor: str) -> int:
 
 def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
                        actor: str, at: str, kb_root=None,
-                       pursuit_id: str = "") -> tuple[int, int, list, list]:
+                       pursuit_id: str = "",
+                       identifiers: dict | None = None
+                       ) -> tuple[int, int, list, list, list]:
     gaps = {g["gap_id"]: g for g in
             brief.get("intake", {}).get("gaps", [])}
 
@@ -143,6 +148,7 @@ def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
         return gap
 
     proposals: list = []
+    blocked: list = []
     gap_lines: list[dict] = []  # emitted by the caller AFTER the brief write
     for item in answers:
         gap = _open_gap(item.get("gap_id"))
@@ -165,10 +171,16 @@ def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
                     "gate_0: propose_card requested but no kb_root is "
                     "wired — the instruction is honored or refused, "
                     "never dropped")
-            from engine.kb.curation import propose_gap_answer_card
-            proposals.append(propose_gap_answer_card(
-                kb_root, gap=gap, pursuit_id=pursuit_id,
-                operator=actor, at=at))
+            from engine.kb.curation import GapResidue, propose_gap_answer_card
+            try:
+                proposals.append(propose_gap_answer_card(
+                    kb_root, gap=gap, pursuit_id=pursuit_id,
+                    operator=actor, at=at, identifiers=identifiers or {}))
+            except GapResidue as exc:
+                # P29a (P1-49): the door cleaned and scanned; the answer
+                # stands on the brief, the CARD is refused by location.
+                blocked.append({"gap_id": gap["gap_id"],
+                                "locations": exc.locations})
     for gap_id in skips:
         gap = _open_gap(gap_id)
         gap["status"] = "skipped"
@@ -176,7 +188,7 @@ def _apply_gap_actions(brief: dict, log, *, answers: list, skips: list,
             "gap_id": gap["gap_id"], "reason": gap["reason"],
             "question_to_human": gap["question_to_human"],
             "resolution": "descoped"})
-    return len(answers), len(skips), proposals, gap_lines
+    return len(answers), len(skips), proposals, gap_lines, blocked
 
 
 def _resolve_org(pursuit, brief, org: dict, actor: str, at: str) -> str:
@@ -286,6 +298,7 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
 
     summary_parts = []
     spawned: list = []
+    blocked: list = []
     gap_lines: list = []
     if not stamped_already:
         if org is not None:
@@ -296,9 +309,13 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
             brief["buyer"]["org_id"] = org_id
             summary_parts.append(f"org:{org_id}")
         applied = _apply_corrections(brief, corrections, actor)
-        answered, skipped, spawned, gap_lines = _apply_gap_actions(
+        from engine.workspace.buyer import buyer_identifiers
+        answered, skipped, spawned, gap_lines, blocked = _apply_gap_actions(
             brief, log, answers=answers, skips=skips, actor=actor, at=at,
-            kb_root=kb_root, pursuit_id=pursuit.pursuit_id)
+            kb_root=kb_root, pursuit_id=pursuit.pursuit_id,
+            # the brief in hand: the org link stamped above is in memory
+            identifiers=buyer_identifiers(pursuit.root.parent, pursuit,
+                                          brief=brief))
         if applied:
             summary_parts.append(f"correct:{applied}")
         if answered:
@@ -307,6 +324,8 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
             summary_parts.append(f"skip:{skipped}")
         if spawned:
             summary_parts.append(f"card:{len(spawned)}")
+        if blocked:
+            summary_parts.append(f"card_blocked:{len(blocked)}")
         if decision in ("approved", "approved_with_edits"):
             # blanket confirmation is a HUMAN act — replay leaves the
             # register unconfirmed rather than claiming a reader it
@@ -343,4 +362,4 @@ def approve_gate0(pursuit, log, *, decision: str, actor: str, at: str,
     log.emit("stage_end", stage="gate_0")
     return Gate0Result(decision=decision, brief_path=path,
                        brief_sha256=brief_sha, proposals=spawned,
-                       converged=stamped_already)
+                       blocked=blocked, converged=stamped_already)

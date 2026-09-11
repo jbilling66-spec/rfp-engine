@@ -25,11 +25,13 @@ corpus, and the release record reads it as `measures.live` — fresh, or
 """
 
 import importlib
+import shutil
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from engine.contracts import write_json_atomic
 from engine.evals import cases as _shared
 from engine.kb.anonymize import normalize_text
 from engine.kb.ingest import SourceDoc, ingest_document
@@ -41,7 +43,7 @@ from engine.workspace.pursuit import mint_run_id
 
 # P2-36 (P26b-3): the floor is the committed case count — a boolean
 # suite over a shrunken corpus is a vacuous pass by another route.
-MINIMUM_N = {"cases": 42}
+MINIMUM_N = {"cases": 44}
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "evals" / "anonymization" / "cases.json"
@@ -200,16 +202,55 @@ def _refuse_unless_live(caller_factory) -> None:
             "cannot declare itself live (P2-37, P28)")
 
 
-def cases_fingerprint(cases_path: Path = CASES_PATH) -> str:
-    """The corpus the live record stands behind: the case list plus the
-    bytes of every committed document it references (runtime-built
-    fixtures are covered by their generator names inside the case list)."""
+# P29a (P2-54): everything the live measure stands behind — the poison
+# arm's recipe (engine/validation/poison.py), this lane's inputs. The
+# gate modules are hashed whole by STRUCTURE (comments and docstrings
+# stripped, engine.evals.cases._semantic_source), so a scan or reader
+# edit stales the record and a comment does not.
+_GATE_MODULES = ("engine.kb.anonymize", "engine.kb.ingest",
+                 "engine.extraction.corpus")
+_READER_AGENTS = ("ingestion_agent", "anonymization_reviewer")
+
+
+def _gate_code_fingerprint() -> str:
+    import hashlib
+    import inspect
+
+    digest = hashlib.sha256()
+    for name in _GATE_MODULES:
+        module = importlib.import_module(name)
+        digest.update(name.encode("utf-8"))
+        digest.update(_shared._semantic_source(
+            inspect.getsource(module)).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def _reader_prompts_fingerprint() -> str:
+    return _shared.files_fingerprint(
+        *(ROOT / "prompts" / agent / "prompt.md" for agent in _READER_AGENTS))
+
+
+def fingerprint_inputs(cases_path: Path = CASES_PATH) -> dict[str, str]:
+    """Each input the live record stands behind, named: the case list,
+    the committed documents, the runtime generators and the gate code,
+    the two reader prompts, the model pins."""
     cases = _shared.load_cases(Path(cases_path))
     docs = sorted({Path(cases_path).parent / f
                    for case in cases for f in case["input"].get("files", [])
                    if (Path(cases_path).parent / f).is_file()})
-    return _shared.object_fingerprint({
-        "cases": cases, "docs": _shared.files_fingerprint(*docs)})
+    return {
+        "cases": _shared.object_fingerprint(cases),
+        "docs": _shared.files_fingerprint(*docs),
+        "gate code": _gate_code_fingerprint(),
+        "reader prompts": _reader_prompts_fingerprint(),
+        "model pins": _shared.model_fingerprint(*_READER_AGENTS),
+    }
+
+
+def cases_fingerprint(cases_path: Path = CASES_PATH) -> str:
+    """The composite the record carries; `fingerprint_inputs` names the
+    parts so a stale record can say WHICH input moved."""
+    return _shared.object_fingerprint(fingerprint_inputs(cases_path))
 
 
 def record_live_result(result: AnonymizationResult, *, cases_path: Path,
@@ -223,15 +264,16 @@ def record_live_result(result: AnonymizationResult, *, cases_path: Path,
         raise AnonymizationLiveRefused(
             "recording a scripted anonymization run is refused — the "
             "recorded pass would be the script's wearing the model's name")
+    inputs = fingerprint_inputs(cases_path)
     record = {
         "at": at, "workspace": workspace, "config_digest": config_digest,
-        "cases_fingerprint": cases_fingerprint(cases_path),
+        "cases_fingerprint": _shared.object_fingerprint(inputs),
+        "inputs": inputs,
         "n_cases": result.n_cases, "n_blocked": result.n_blocked,
         "blocked": result.blocked, "failures": result.failures,
         "pass": result.ok,
     }
-    Path(path).write_text(json.dumps(record, indent=1, sort_keys=True) + "\n",
-                          encoding="utf-8")
+    write_json_atomic(Path(path), record, indent=1)  # P29a (P3-18), P0-6
     return Path(path)
 
 
@@ -245,10 +287,29 @@ def live_measure(cases_path: Path = CASES_PATH,
         return {"status": "not_measured",
                 "since": "no live record — A1's run writes it "
                          "(docs/uat/a1-anonymization-live.md)"}
-    record = json.loads(Path(path).read_text(encoding="utf-8"))
-    if record.get("cases_fingerprint") != cases_fingerprint(cases_path):
+    try:
+        record = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (ValueError, UnicodeDecodeError, OSError) as exc:
+        # P29a (P3-18): a torn record is a reason, never a crash that
+        # takes every lane's release record down with it.
         return {"status": "not_measured",
-                "since": f"the corpus changed since the recorded run of "
+                "since": f"{Path(path).name} is unreadable "
+                         f"({type(exc).__name__}) — re-run the live arm"}
+    from engine.llm import effective_config
+    from engine.runlog import config_digest as _config_digest
+    if record.get("config_digest") != _config_digest(effective_config()):
+        # P29a (P2-54): the digest was written and never read back.
+        return {"status": "not_measured",
+                "since": f"the model configuration changed since the "
+                         f"recorded run of {record.get('at')} — re-run "
+                         "the live arm"}
+    inputs = fingerprint_inputs(cases_path)
+    moved = [name for name, value in inputs.items()
+             if (record.get("inputs") or {}).get(name) != value]
+    if moved or record.get("cases_fingerprint") != _shared.object_fingerprint(inputs):
+        what = ", ".join(moved) if moved else "the corpus"
+        return {"status": "not_measured",
+                "since": f"{what} changed since the recorded run of "
                          f"{record.get('at')} — re-run the live arm"}
     return {"status": "measured", "at": record["at"],
             "n_cases": record["n_cases"], "n_blocked": record["n_blocked"],
@@ -278,6 +339,12 @@ def run_anonymization_set(cases_path: Path, workdir: Path,
     blocked: list[str] = []
     for case in cases:
         root = Path(workdir) / case["case_id"]
+        if root.exists():
+            # P29a (P1-50): every run measures the readers UNDER TEST — a
+            # leftover store from an earlier run would dedupe the fresh
+            # cards against the old ones and the record would vouch for
+            # (or condemn) a reader that never produced them.
+            shutil.rmtree(root)
         generator = case["input"].get("generator")
         if generator:
             # Runtime-built fixture (C11 media cases): committed binaries
