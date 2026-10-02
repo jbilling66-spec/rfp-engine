@@ -107,7 +107,12 @@ press **Revise (apply pending)** — the engine applies the pending comments
 and produces the next revision. Repeat until it reads right. A pending
 comment of your own can be taken back with **Withdraw** before the next
 round; after a round, each section the engine rewrote offers
-**Accept revision** or **Reject revision**, both on the record.
+**Accept revision** or **Reject revision**, both on the record. Once a
+round has run, the review header offers **Show rounds**: each round lists
+with who ran it and how many sections it rewrote, and opening one shows
+every changed section as before and after, side by side. Nothing is
+preselected — the current text stays the page; the history is there
+when you want it.
 
 A red BLOCK mark stops the documents from going out until the claim is
 revised or waived. Press **Waive** beside it, write the real reason, and
@@ -116,7 +121,12 @@ that reason, and a boilerplate reason is surfaced as a warning, never
 hidden.
 
 When it all reads right, press **Accept pursuit** — every drafted
-section stamps final. It refuses while anything is still blocked.
+section stamps final. It refuses while anything is still blocked. On
+accept a **Learned** box opens over the pursuit: what the engine took from
+your edits for the knowledge base — each item is a proposal the steward
+decides on the knowledge base tab, never a change made on its own — and
+anything it skipped or withheld, with the reason. Close it like any box;
+the pursuit is underneath.
 
 ## Sharing for outside review
 
@@ -157,7 +167,13 @@ Once a pursuit has a validated draft, the pursuit screen shows
   and **Internal — do not send**. Anything withheld says why, in the
   record's own words — including a file whose bytes no longer match the
   proof its record carries (it stays withheld, both digests named, until
-  you confirm the write-back again).
+  you confirm the write-back again; that one also carries a **stale** tag,
+  so a stale copy and a refused one read differently at a glance).
+- Under each buyer file sits one line of what the file itself carries:
+  who it names as creator, how many tracked changes and comment parts it
+  holds, and whether the firm's identity is configured. The engine's own
+  renders show zero tracked changes and zero comments; anything else is
+  worth a look before it goes out.
 - **Preview write-back** shows exactly which cells of the buyer's own
   forms — or which sections of the firm's template — will be written and
   which are refused; nothing is written until you press
@@ -187,6 +203,32 @@ that still says "replace with the drafted section" never lists there.
 
 When the buyer decides, press **Record outcome** on the pursuit screen —
 the win and cost figures compute from that one entry.
+
+## Reading a run
+
+Below the outcome, the pursuit screen lists its **Runs** — every pass
+the engine made over this pursuit, newest last, with its status and what
+it cost. Open one and the engine's own record of that pass appears, one
+line per step: the model calls, what the knowledge base returned, each
+gate decision, each validation check, and any error with what the engine
+did about it. The **show** filter narrows the list to one kind of step;
+**raw** under any line shows the record exactly as the engine wrote it.
+This is reading only — nothing on this panel edits or stores anything,
+and the record never holds the text of a document, only digests and
+counts.
+
+## The operations view
+
+**Operations** in the sidebar is the whole floor at once, for whoever
+minds the engine: the health line (mode, version, how sign-in works),
+then a **needs attention** list — a pursuit whose file the engine cannot
+read, a torn lane, a run that stopped without finishing, a job that was
+orphaned or failed, a run still in flight — each naming the pursuit and
+where to look, then every pursuit with its stage, its last run and its
+last job. Sort by stage, last run, cost or last job. It is composed from
+what the pursuit list, the jobs and the health line already say; nothing
+here is a separate source of truth. Click a row to open the pursuit; its
+**Runs** panel has the detail.
 
 ## The ground rules
 

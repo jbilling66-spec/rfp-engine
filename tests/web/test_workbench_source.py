@@ -219,7 +219,7 @@ def test_the_sidebar_and_title_follow_the_hash():
     js = _js()
     assert "function setNav(view, title)" in js
     assert "a.dataset.view === view" in js and "document.title = " in js
-    for view in ("board", "pings", "kb", "assistant", "telemetry"):
+    for view in ("board", "pings", "kb", "assistant", "telemetry", "ops"):
         assert f'setNav("{view}"' in js, view
     assert "x.classList.toggle(\"active\", x === a)" not in js
 
@@ -250,7 +250,7 @@ def test_every_dialog_has_its_semantics_and_one_opener():
     it is required. Existence, not firing — the smoke test fires it."""
     html, js = _html(), _js()
     overlays = html.count('class="overlay"')
-    assert overlays == 10
+    assert overlays == 11  # W2b 4 (B136): + the Learned dialog
     assert html.count('role="dialog"') == overlays
     assert html.count('aria-modal="true"') == overlays
     assert html.count('aria-labelledby="') == overlays
@@ -260,3 +260,79 @@ def test_every_dialog_has_its_semantics_and_one_opener():
     assert 'e.key === "Escape"' in js and 'e.key !== "Tab") return;' in js
     assert 'ov.id === "opOverlay"' in js
     assert 'role="status"' in html and html.count('aria-live="polite"') >= 2
+
+
+# -- P27 wave 2, W2b (B136): the three screens -------------------------------
+
+def test_the_rounds_view_reaches_both_revisions_doors():
+    """W2b 1b: the review header offers Show rounds only when the server
+    names a last round; the list reaches the rounds door, a round reaches
+    the diff door, and a pair renders before | after as text. Existence,
+    not firing — the smoke walk opens it on the seeded reviewed pursuit."""
+    js, html, css = _js(), _html(), _css()
+    assert 'id="roundsBtn"' in html and ">Show rounds<" in html
+    assert 'id="reviewRounds"' in html
+    assert "/revisions`" in js and "/revisions/${" in js
+    assert "!m.last_round" in js  # the server's word, not a client guess
+    assert 'class="diff-pair"' in js and ".diff-pair" in css
+    assert "no text changed in this round" in js
+
+
+def test_the_runs_panel_reaches_both_runs_doors():
+    """W2b 2: the detail view lists the pursuit's runs and opens one as
+    its raw records with a type filter and a raw toggle — the back-end
+    human's view (B113 §10a). The shell renders what the door returns
+    and writes nothing. Existence, not firing — the smoke walk opens the
+    panel on the seeded pursuit's two runs."""
+    js, html, css = _js(), _html(), _css()
+    assert 'id="detailRuns"' in html and ">Runs<" in html
+    assert 'id="runKind"' in html and 'id="runRecords"' in html
+    assert "/runs`" in js and "/runs/${" in js
+    assert "function runSummary(r)" in js and 'case "error":' in js
+    assert "<summary>raw</summary>" in js
+    assert ".logrow" in css
+    # the viewer never writes: no POST/PUT/DELETE near the runs doors
+    body = js[js.index("async function loadRuns"):js.index("// -- the revision history")]
+    assert "method:" not in body
+
+
+def test_the_operations_view_is_composed_from_three_existing_doors():
+    """W2b 3: #/ops reads the board, the jobs journal and the health line
+    and composes the cross-pursuit view in the browser — no new server
+    door, no stored "attention" state. Existence, not firing — the smoke
+    walk deep-links it and reads the health line and the seeded row."""
+    js, html, css = _js(), _html(), _css()
+    assert 'href="#/ops"' in html and 'id="view-ops"' in html
+    assert ">Operations<" in html and ">needs attention<" in html
+    assert 'id="opsSort"' in html and 'id="opsHealth"' in html
+    assert '"/api/health"' in js and '"/api/pursuits"' in js and '"/api/jobs"' in js
+    assert "async function loadOps()" in js and "function renderOps()" in js
+    assert "OPS_QUIET_RUNS" in js
+    assert ".attn" in css
+
+
+def test_the_learn_report_renders_as_a_dialog():
+    """W2b 4 (B122 §9c): accept and write-back confirm read the response's
+    `flywheel` report into the Learned dialog — routed, proposals, signals,
+    skipped with reasons, withheld as counts (never the matched text), the
+    typed error. The fixed toast no longer drops it. Existence, not firing
+    — the smoke walk accepts the seeded reviewed pursuit and reads it."""
+    js, html, css = _js(), _html(), _css()
+    assert 'id="learnedOverlay"' in html and ">Learned<" in html
+    assert "function learnedLines(report)" in js and "function showLearned(report)" in js
+    assert js.count("showLearned(out.flywheel)") == 2  # accept + write-back confirm
+    assert "report.skipped" in js and "report.blocked" in js and "report.error" in js
+    assert "n(b.locations)" in js  # a count of locations, never their text
+    assert "b.locations.map" not in js and "b.locations.join" not in js
+    assert ".learn-skip" in css
+
+
+def test_the_finish_panel_renders_hygiene_and_stale():
+    """W2b 5: under each buyer file the shell shows the bundle's hygiene
+    line, and a withheld entry whose status is drifted carries the stale
+    chip — by the door's field, never by parsing the reason."""
+    js, css = _js(), _css()
+    assert "dl.hygiene" in js and "revision mark(s)" in js and "comment part(s)" in js
+    assert 'r.status === "drifted"' in js and ">stale</span>" in js
+    assert "hygiene not recorded" in js
+    assert ".hygiene" in css

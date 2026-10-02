@@ -199,7 +199,8 @@ def test_downloads_and_detail_name_what_is_withheld(fill_client):
     assert bare["finishing"] == {"reviewable": False, "bundle": None,
                                  "hand_fill_lane": False}
     assert client.get("/api/pursuits/pur_bare/downloads").json() == {
-        "to_the_buyer": [], "internal_do_not_send": [], "refused": []}
+        "to_the_buyer": [], "hygiene": {},  # W2b 5 (B136): additive, pinned
+        "internal_do_not_send": [], "refused": []}
 
 
 # --------------------------------------------- P26c: the case block learns

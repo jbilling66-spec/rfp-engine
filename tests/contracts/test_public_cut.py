@@ -67,8 +67,14 @@ def _probes() -> dict[str, bytes]:
         "dash-default": b"bt" + b"-default",
         "dot-internal": b"bt" + b".internal",
         "abbreviation": b"x B" + b"T y",
-        "person-lower": b"x j" + b"ohn y",
     }
+
+
+def _machine_probe() -> bytes:
+    # the person-name class (B87 §4c) — machine state, never a baseline
+    # literal: the sweep after W2b found the first name shipped in the
+    # mirror inside the scanner itself (B138)
+    return b"x j" + b"ohn y"
 
 
 def test_tool_manifest_and_overlay_exist():
@@ -146,6 +152,24 @@ def test_residue_baseline_detects_every_identifier_class():
     for label, probe in _probes().items():
         hit = any(rx.search(probe) for _, rx in mod.RESIDUE)
         assert hit, f"no RESIDUE pattern matches the {label} probe"
+
+
+def test_the_person_name_class_is_machine_state_not_baseline(tmp_path, monkeypatch):
+    """B138: the owner's first name is NOT a shipped baseline pattern (the
+    W2b sweep found the mirror's only name match was the scanner's own
+    list). The class lives in tripwire-local/residue.txt; a residue line
+    built from the probe matches it case-insensitively as a substring."""
+    mod = _load_tool()
+    probe = _machine_probe()
+    assert not any(rx.search(probe) for _, rx in mod.RESIDUE), (
+        "the person-name class is back in the shipped baseline")
+    residue = tmp_path / "residue.txt"
+    residue.write_bytes(probe.split()[1] + b"\n")  # the bare word, one line
+    monkeypatch.setattr(mod, "RESIDUE_FILE", residue)
+    monkeypatch.setattr(mod, "MIRROR_ATTESTATION", tmp_path / "absent")
+    pats = mod.machine_patterns()
+    assert len(pats) == 1 and pats[0][0] == "machine-local #1"
+    assert pats[0][1].search(probe) and pats[0][1].search(probe.upper())
 
 
 def test_the_scan_sees_filenames_and_zip_container_text(tmp_path):

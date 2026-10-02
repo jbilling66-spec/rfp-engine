@@ -869,17 +869,38 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         rev = root / "exports" / "review"
         return {
             "to_the_buyer": buyer,
+            # P27 wave 2 (W2b 5, B136): what each buyer file carries at
+            # the part level, from the bundle's own hygiene block (P3-15)
+            # — an additive sibling keyed by name, so the wave-1 list
+            # above keeps its shape; `revision_marks` is the SUM of the
+            # record's non-zero tag counts
+            "hygiene": {
+                d["name"]: _hygiene_line(d["hygiene"])
+                for d in deliverables
+                if d["status"] == "produced" and isinstance(d.get("hygiene"), dict)},
             "internal_do_not_send": sorted(
                 p.name for p in rev.iterdir()) if rev.exists() else [],
             # P27 wave 1: a withheld deliverable and its reason render on
             # the finish panel without a 409 round-trip — the record's
-            # own words, the same ones the download door refuses with
+            # own words, the same ones the download door refuses with.
+            # W2b 5: `status` says which kind — `drifted` is withheld
+            # AND stale (P2-56): bytes no proof stands behind
             "refused": sorted(
-                ({"name": d["name"], "reason": d.get("reason", "refused")}
+                ({"name": d["name"], "status": d["status"],
+                  "reason": d.get("reason", "refused")}
                  for d in deliverables
                  if d["status"] in ("refused", "drifted")),  # P2-56
                 key=lambda d: d["name"]),
         }
+
+    def _hygiene_line(block: dict) -> dict:
+        marks = block.get("revision_marks") or {}
+        return {"creator": block.get("creator"),
+                "last_modified_by": block.get("last_modified_by"),
+                "revision_marks": sum(int(v) for v in marks.values())
+                if isinstance(marks, dict) else int(marks or 0),
+                "comment_parts": int(block.get("comment_parts") or 0),
+                "firm_identity": block.get("firm_identity", "unconfigured")}
 
     @app.get("/api/pursuits/{pursuit_id}/download/{name:path}")
     def download(pursuit_id: str, name: str):
@@ -1424,12 +1445,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.get("/api/pursuits/{pursuit_id}/revisions")
     def revisions(pursuit_id: str):
         root = _pursuit_root(pursuit_id)
-        rev_dir = root / "revisions"
-        out = []
-        for record_path in sorted(rev_dir.glob("round_*.json")) \
-                if rev_dir.exists() else []:
-            out.append(json.loads(record_path.read_text(encoding="utf-8")))
-        return out
+        # round order, never name order (W2b 1a, B136): one sort, state's
+        return [json.loads(p.read_text(encoding="utf-8"))
+                for p in state_models.round_records(root / "revisions")]
 
     @app.get("/api/pursuits/{pursuit_id}/revisions/{n}")
     def revision_diff(pursuit_id: str, n: int):

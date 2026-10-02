@@ -190,5 +190,10 @@ def test_a_drifted_deliverable_is_named_and_never_served(split):
     drifted = next(d for d in listing["refused"]
                    if d["name"] == "qform-twin.docx")
     assert "no proof stands behind" in drifted["reason"]
+    # W2b 5 (B136): the entry says WHICH kind of withheld — the shell
+    # renders a drifted one as withheld AND stale, by the field, not by
+    # reading the reason's prose
+    assert drifted["status"] == "drifted"
+    assert "qform-twin.docx" not in listing["hygiene"]  # nothing vouched for
     r = client.get("/api/pursuits/pur_split/download/qform-twin.docx")
     assert r.status_code == 409 and "no proof" in r.json()["detail"]

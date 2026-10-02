@@ -50,6 +50,37 @@ def live_server(tmp_path_factory):
                      content=path.read_bytes())
         done = advance_past_gate0(seed, "pur_smoke")
         assert "awaiting_gate at gate_1" in done["message"], done
+    # W2b 7 (B136, the owner's call): a second pursuit, REVIEWED, with one
+    # revise round behind it, so the diff view, the Learned dialog and the
+    # finish panel's hygiene line are proven in a browser — the offline
+    # chain (intake → … → validation) lands `pur_gapcase` in the same
+    # file-backed workspace; a second app over it, carrying the round
+    # script, drives one comment → revise round and is discarded; the
+    # served app reads the same files. Zero spend throughout.
+    from engine.llm import FakeCaller, TracedCaller
+    from tests.revision.fixtures.rounds import round_script
+    from tests.validation.fixtures.validations import run_validation_package
+    t0 = time.time()
+    pursuit, report, _ = run_validation_package(ws)
+    assert report.status == "complete", report
+    assert pursuit.pursuit_id == "pur_gapcase"
+    script = round_script()
+    driver = create_app(ws, make_caller=lambda log: TracedCaller(FakeCaller(script), log),
+                        now=lambda: FIXED_AT)
+    with TestClient(driver, base_url="http://127.0.0.1") as drive:
+        sign_in(drive, "Sam Seeder")
+        model = drive.get("/api/pursuits/pur_gapcase/review").json()
+        sid = next(s["section_id"] for s in model["sections"] if s["slots"])
+        r = drive.post("/api/pursuits/pur_gapcase/comments", json={
+            "kind": "comment", "section_id": sid,
+            "text": "Lead with the transition story."})
+        assert r.status_code == 200, r.text
+        r = drive.post("/api/pursuits/pur_gapcase/revise", json={})
+        assert r.status_code == 202, r.text
+        job = wait_job(drive, r.json()["id"])
+        assert job["state"] == "done", job["message"]
+        assert "round 1: revised" in job["message"], job
+    print(f"[smoke seed] the reviewed pursuit took {time.time() - t0:.1f}s")
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]

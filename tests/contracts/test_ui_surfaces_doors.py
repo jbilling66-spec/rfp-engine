@@ -136,15 +136,17 @@ def test_every_wave_1_door_is_surfaced():
 # deliberately (wave 2, A5), never by drift.
 # W2a step 3 (B134): /api/jobs and /api/jobs/{job_id}/cancel left this set —
 # the strip re-attaches at boot and offers Cancel on the server's word.
+# W2b 1b (B136): the two revisions doors left — the review view's Show
+# rounds list and its before | after pairs.
+# W2b 2 (B136): the two runs doors left — the detail's Runs panel renders the
+# index and the raw records (digest-clean by construction; nothing persisted).
+# W2b 3 (B136): /api/health left — the operations view's header line. The
+# twelve below stay headless on purpose: P31 (orgs, addenda, KB card /
+# merge / import, advisor) on pilot evidence.
 API_ROWS = frozenset({
-    ("GET", "/api/health"),
-    ("GET", "/api/pursuits/{pursuit_id}/runs"),
-    ("GET", "/api/pursuits/{pursuit_id}/runs/{run_id}"),
     ("GET", "/api/orgs"),
     ("POST", "/api/orgs"),
     ("POST", "/api/orgs/{org_id}/notes"),
-    ("GET", "/api/pursuits/{pursuit_id}/revisions"),
-    ("GET", "/api/pursuits/{pursuit_id}/revisions/{n}"),
     ("POST", "/api/pursuits/{pursuit_id}/addenda"),
     ("GET", "/api/pursuits/{pursuit_id}/addenda"),
     ("POST", "/api/pursuits/{pursuit_id}/addenda/{aid}/decide"),

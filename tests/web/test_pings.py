@@ -172,3 +172,48 @@ def test_mid_review_gap_opening(gapped):
         "section_id": "nope", "question": "x"}).status_code == 409
     assert client.post("/api/pursuits/pur_ping/gaps", json={
         "section_id": sid, "question": " "}).status_code == 409
+
+
+def test_the_answered_journal_line_carries_the_text_and_survives_a_failed_plan_write(
+        gapped, monkeypatch):
+    """P3-17 (W2b 6, B136): P1-36's fix had no named test. The SME's text
+    rides the append-only pings journal line BEFORE the live plan write;
+    if that write fails, the answer is not lost and the ping is not
+    answerable twice. Red under the recorded mutant (strip `answer` from
+    the journal line in PingLane.answer)."""
+    from engine.workspace import PursuitDir
+    client, ws, (sid, _, _) = gapped
+    gap = client.post("/api/pursuits/pur_ping/gaps", json={
+        "section_id": sid,
+        "question": "Which escrow agent does the firm name for this line?"}).json()
+    ping = client.post(f"/api/pursuits/pur_ping/gaps/{gap['gap_id']}/ping",
+                       json={"route_to": "sme"}).json()
+    text = "The firm names Harbor Escrow Services for this line."
+    real_write = PursuitDir.write_artifact
+
+    def failing_plan_write(self, kind, doc, *args, **kwargs):
+        if kind in ("pursuit_plan", "bid_brief"):
+            raise OSError("disk full — the live plan write failed")
+        return real_write(self, kind, doc, *args, **kwargs)
+
+    monkeypatch.setattr(PursuitDir, "write_artifact", failing_plan_write)
+    with pytest.raises(OSError):
+        client.post(f"/api/pursuits/pur_ping/pings/{ping['ping_id']}/answer",
+                    json={"answer": text})
+    monkeypatch.undo()
+    # the append-only record carries the SME's words — the plan write
+    # that followed it failed, and the answer is still on disk
+    lines = [json.loads(l) for l in
+             (ws / "pur_ping" / "pings" / "pings.jsonl").read_text().splitlines()]
+    mine = [l for l in lines if l.get("ping_id") == ping["ping_id"]
+            and l.get("resolution") == "answered"]
+    assert len(mine) == 1
+    assert mine[0]["answer"] == text
+    assert mine[0]["answered_by"]
+    # and the ping reads as answered everywhere the journal is folded
+    row = next(x for x in client.get("/api/pings").json()
+               if x["ping_id"] == ping["ping_id"])
+    assert row["resolution"] == "answered" and row["answer"] == text
+    # a second answer refuses: the first one stood
+    assert client.post(f"/api/pursuits/pur_ping/pings/{ping['ping_id']}/answer",
+                       json={"answer": "again"}).status_code == 409

@@ -12,5 +12,5 @@ def test_version_carries_no_retired_vocabulary():
 
 
 def test_version_shape():
-    assert VERSION == "0.10.0"  # W2a close: the pilot-2.11 / v0.10.0 line
+    assert VERSION == "0.10.1"  # W2b close: the pilot-2.12 / v0.10.1 line
     assert engine_version().startswith(VERSION)

@@ -19,6 +19,7 @@
       <a href="#/kb" data-view="kb">Knowledge base</a>
       <a href="#/assistant" data-view="assistant">Assistant</a>
       <a href="#/telemetry" data-view="telemetry">Telemetry</a>
+      <a href="#/ops" data-view="ops">Operations</a>
     </nav>
     <div class="who" id="whoCard">
       <div class="who-name" id="whoName">not signed in</div>
@@ -81,14 +82,28 @@
           and cost metrics compute from this event and nothing else.</p>
         <div class="actions"><button id="outcomeBtn" class="ghost">Record outcome</button></div>
       </section>
+      <section id="detailRuns">
+        <h2 class="sub">Runs</h2>
+        <p class="muted hint">What the agents did, from this pursuit's run log —
+          every model call, retrieval, gate and error as the engine recorded it.
+          Reading only: nothing here is edited or stored.</p>
+        <div id="runRows" class="rows"></div>
+        <div class="actions" id="runTools" hidden>
+          <label class="muted" for="runKind">show</label>
+          <select id="runKind"></select>
+        </div>
+        <div id="runRecords" class="rows" hidden></div>
+      </section>
     </section>
     <section id="view-review" class="view">
       <a href="#/" class="back" id="reviewBack">&larr; pursuit</a>
       <header class="viewhead"><h1 id="reviewTitle"></h1>
-        <div><button id="reviseBtn">Revise (apply pending)</button>
+        <div><button id="roundsBtn" class="ghost" hidden>Show rounds</button>
+          <button id="reviseBtn">Revise (apply pending)</button>
           <button id="acceptBtn" class="ghost">Accept pursuit</button></div>
       </header>
       <div id="reviewFacts" class="facts"></div>
+      <div id="reviewRounds" class="rows" hidden></div>
       <div id="reviewSections" class="rows"></div>
     </section>
     <section id="view-pings" class="view">
@@ -149,6 +164,29 @@
       </header>
       <p class="muted" id="telNote"></p>
       <div id="telRows" class="rows"></div>
+    </section>
+    <section id="view-ops" class="view">
+      <header class="viewhead"><h1>Operations</h1>
+        <div>
+          <label class="muted" for="opsSort">sort by</label>
+          <select id="opsSort">
+            <option value="stage">stage</option>
+            <option value="run">last run</option>
+            <option value="cost">cost</option>
+            <option value="job">last job</option>
+          </select>
+        </div>
+      </header>
+      <p class="muted hint">Every pursuit at once, for the person minding the
+        engine: the health line, what needs attention, and each pursuit's
+        last run and last job. Composed from the board, the jobs and the
+        health doors — nothing here is a new source of truth.</p>
+      <div id="opsHealth" class="facts"></div>
+      <section id="opsAttention" class="facts" hidden>
+        <h2 class="sub">needs attention</h2>
+        <div id="opsAttnRows"></div>
+      </section>
+      <div id="opsRows" class="rows"></div>
     </section>
   </main>
 </div>
@@ -291,6 +329,18 @@
     <div class="modal-foot">
       <button class="ghost" data-close>Cancel</button>
       <button id="ocGo">Record</button>
+    </div>
+  </div>
+</div>
+<div id="learnedOverlay" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="learnedTitle">
+    <h2 id="learnedTitle">Learned</h2>
+    <p class="muted hint">What the flywheel took from this step — every entry
+      is a proposal the steward decides on the Knowledge base tab, never a
+      change made on its own. Skipped and withheld items say why.</p>
+    <div id="learnedBody" class="facts"></div>
+    <div class="modal-foot">
+      <button id="learnedGo" data-close>Close</button>
     </div>
   </div>
 </div>

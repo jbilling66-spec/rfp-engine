@@ -288,13 +288,27 @@ def review(workspace: Path, pursuit_id: str, *,
     return out
 
 
+def round_records(rev_dir: Path) -> list[Path]:
+    """The round records in ROUND order (W2b 1a, B136): `round_10` sorts
+    before `round_2` by name, so a name sort put the tenth revision's
+    record second and the review model named the wrong last round. The
+    one sort for every reader — `_last_round` here and the revisions
+    list door. A file whose suffix is not a number sorts first and is
+    never the last round."""
+    if not rev_dir.is_dir():
+        return []
+    def _n(path: Path) -> int:
+        tail = path.stem[len("round_"):]
+        return int(tail) if tail.isdigit() else -1
+    return sorted(rev_dir.glob("round_*.json"), key=_n)
+
+
 def _last_round(root: Path) -> dict | None:
     """P27 wave 1: the sections the latest revision round actually
     revised — the ones an accept/reject of the agent's revision applies
     to. Read from `revisions/round_{n}.json` (round.py's record:
     `round_n` + `sections[].outcome`); None until a round has run."""
-    rev_dir = root / "revisions"
-    rounds = sorted(rev_dir.glob("round_*.json")) if rev_dir.is_dir() else []
+    rounds = round_records(root / "revisions")
     if not rounds:
         return None
     record = _read_json(rounds[-1])

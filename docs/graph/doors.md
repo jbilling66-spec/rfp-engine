@@ -26,13 +26,21 @@ column against the path literals in the static sources in both
 directions and pins the `api` set closed, so a door stays terminal only
 on purpose. The pin is on paths, not methods.
 
+After P27 wave 2 (B136/B137) twelve doors stay `api`, each on purpose
+and each with a home: the three org doors, the three addenda doors and
+the three KB steward doors (card detail, proposal merge, workbook import)
+are **P31** — steward and intake doors in the browser, on pilot evidence;
+the three advisor doors stay headless until the assistant's grounding
+makes them redundant or the pilot asks (P31 decides). Nothing else is
+terminal.
+
 ### Session and health
 
 | method | path | purpose | gate | surface |
 |---|---|---|---|---|
 | POST | `/api/session` | Declare an operator name AND role (mints the cookie); the role is what every event door records | open; 400 in SSO mode | ui |
 | GET | `/api/session` | Who am I — name, role, and the declarable roles the sign-in picker offers | open | ui |
-| GET | `/api/health` | Liveness: ok/mode/version/auth mode | open | api |
+| GET | `/api/health` | Liveness: ok/mode/version/auth mode — the operations view's header line | open | ui |
 
 ### Pursuits, uploads, orgs
 
@@ -41,8 +49,8 @@ on purpose. The pin is on paths, not methods.
 | GET | `/api/pursuits` | Board rows for every pursuit | open | ui |
 | POST | `/api/pursuits` | Create a pursuit | operator | ui |
 | GET | `/api/pursuits/{pursuit_id}` | One pursuit's detail | open | ui |
-| GET | `/api/pursuits/{pursuit_id}/runs` | Run index for the pursuit | open | api |
-| GET | `/api/pursuits/{pursuit_id}/runs/{run_id}` | Raw run-log records | open | api |
+| GET | `/api/pursuits/{pursuit_id}/runs` | Run index for the pursuit — the detail's Runs panel | open | ui |
+| GET | `/api/pursuits/{pursuit_id}/runs/{run_id}` | Raw run-log records — a run's rows in the Runs panel, summary + raw | open | ui |
 | PUT | `/api/pursuits/{pursuit_id}/inbox/{filename}` | Upload a document, optionally declaring its role (core/supplemental/target) | operator | ui |
 | GET | `/api/orgs` | List org (tier-3 memory) records | open | api |
 | POST | `/api/orgs` | Create an org | operator | api |
@@ -91,8 +99,8 @@ on purpose. The pin is on paths, not methods.
 | POST | `/api/pursuits/{pursuit_id}/comments/{cid}/dismiss` | Dismiss a pending comment | operator; job-lane | ui |
 | POST | `/api/pursuits/{pursuit_id}/events` | Accept/reject an agent revision | operator | ui |
 | POST | `/api/pursuits/{pursuit_id}/revise` | Submit one revision round as a job | operator; 409 on conflict | ui |
-| GET | `/api/pursuits/{pursuit_id}/revisions` | Round records | open | api |
-| GET | `/api/pursuits/{pursuit_id}/revisions/{n}` | One round + before/after diff | open | api |
+| GET | `/api/pursuits/{pursuit_id}/revisions` | Round records — the review view's Show rounds list | open | ui |
+| GET | `/api/pursuits/{pursuit_id}/revisions/{n}` | One round + before/after diff — a round's before | after pairs | open | ui |
 | POST | `/api/pursuits/{pursuit_id}/accept` | Accept the pursuit — sections stamp final | operator; job-lane | ui |
 | POST | `/api/pursuits/{pursuit_id}/outcome` | Record win/loss + buyer feedback | operator | ui |
 | POST | `/api/pursuits/{pursuit_id}/effort` | Record review effort | operator | ui |
@@ -112,7 +120,7 @@ on purpose. The pin is on paths, not methods.
 | method | path | purpose | gate | surface |
 |---|---|---|---|---|
 | POST | `/api/pursuits/{pursuit_id}/export` | Render submission/review DOCX + recompose the bundle | operator; job-lane | ui |
-| GET | `/api/pursuits/{pursuit_id}/downloads` | The two headings — buyer list read from the submission bundle (a withheld firm-template fill lists as refused, its working copy under internal) | open | ui |
+| GET | `/api/pursuits/{pursuit_id}/downloads` | The two headings — buyer list read from the submission bundle (a withheld firm-template fill lists as refused, its working copy under internal); each buyer file's hygiene line (creator, revision marks summed, comment parts, firm identity); a refused entry's `status` names `drifted` = withheld and stale | open | ui |
 | GET | `/api/pursuits/{pursuit_id}/download/{name:path}` | Serve one file — closed allow-list from the bundle record | open; 403 outside the list; 409 naming what remains for a deliverable the bundle records as refused | ui |
 | GET | `/api/pursuits/{pursuit_id}/writeback/preview` | Per-file facts preview for every declared lane | open (the preview half) | ui |
 | POST | `/api/pursuits/{pursuit_id}/writeback/confirm` | Run every declared write-back lane; facts + bundle written | operator; confirm; job-lane | ui |

@@ -28,6 +28,7 @@ TABS = (  # hash, view id suffix, sidebar data-view, document title
     ("#/kb", "kb", "kb", "Knowledge base — RFP Engine"),
     ("#/assistant", "assistant", "assistant", "Assistant — RFP Engine"),
     ("#/telemetry", "telemetry", "telemetry", "Telemetry — RFP Engine"),
+    ("#/ops", "ops", "ops", "Operations — RFP Engine"),
     ("#/", "board", "board", "Pursuits — RFP Engine"),
 )
 
@@ -69,8 +70,9 @@ def test_signing_in_lands_on_the_board_with_the_seeded_pursuit(walk):
     page.select_option("#opRole", "pursuit_lead")
     page.click("#opGo")
     expect(page.locator("#opOverlay")).to_be_hidden()
-    expect(page.locator("#boardRows .row").first).to_contain_text("pur_smoke")
-    expect(page.locator("#boardRows .row").first).to_contain_text("gate_1")
+    row = page.locator("#boardRows .row", has_text="pur_smoke")
+    expect(row).to_have_count(1)
+    expect(row).to_contain_text("gate_1")
 
 
 @pytest.mark.parametrize("hash_, view, nav, title", TABS)
@@ -80,6 +82,18 @@ def test_every_tab_deep_links_lit_and_named(walk, hash_, view, nav, title):
     expect(page.locator(f"#view-{view}")).to_have_class("view show")
     expect(page.locator("#mainNav a.active")).to_have_attribute("data-view", nav)
     expect(page).to_have_title(title)
+
+
+def test_the_operations_view_reads_health_and_the_board(walk):
+    """W2b 3: the composed view names the engine's version from the health
+    door and lists the seeded pursuit from the board door."""
+    from engine.version import VERSION
+    base, page, _ = walk
+    page.evaluate("location.hash = '#/ops'")
+    expect(page.locator("#view-ops")).to_have_class("view show")
+    expect(page.locator("#opsHealth")).to_contain_text(f"engine {VERSION}")
+    expect(page.locator("#opsRows .row", has_text="pur_smoke")).to_have_count(1)
+    expect(page).to_have_title("Operations — RFP Engine")
 
 
 def test_the_detail_screen_renders_the_server_decided_actions(walk):
@@ -153,6 +167,82 @@ def test_a_failed_door_is_a_toast_never_a_blank_view(walk):
         expect(other.locator("#toast")).to_be_hidden()
     finally:
         other.close()
+
+
+def test_the_runs_panel_opens_a_run_and_filters_its_records(walk):
+    """W2b 2: gate 0 left two runs on pur_smoke; the panel lists them,
+    a click opens the records with the type filter, raw on demand."""
+    base, page, _ = walk
+    page.evaluate("location.hash = '#/pursuit/pur_smoke'")
+    expect(page.locator("#view-detail")).to_have_class("view show")
+    runs = page.locator("#runRows .runrow")
+    assert runs.count() >= 2  # gate 0's advance, the re-advance, and their closes
+    expect(runs.first).to_contain_text("run_")
+    runs.first.click()
+    expect(page.locator("#runRecords")).to_be_visible()
+    records = page.locator("#runRecords .logrow")
+    assert records.count() >= 1
+    expect(records.first).to_contain_text("run_start")
+    options = page.locator("#runKind option")
+    assert options.count() > 1
+    page.select_option("#runKind", "run_start")
+    expect(page.locator("#runRecords .logrow[data-kind='run_start']").first).to_be_visible()
+    hidden = page.locator("#runRecords .logrow:not([data-kind='run_start'])")
+    if hidden.count():
+        expect(hidden.first).to_be_hidden()
+    page.select_option("#runKind", "")
+
+
+def test_the_review_view_shows_rounds_and_a_diff(walk):
+    """W2b 1b on the reviewed pursuit: Show rounds appears because the
+    server names a last round; round 1 opens as before | after pairs."""
+    base, page, _ = walk
+    page.evaluate("location.hash = '#/review/pur_gapcase'")
+    expect(page.locator("#view-review")).to_have_class("view show")
+    expect(page.locator("#reviewTitle")).to_contain_text("revision 1")
+    expect(page.locator("#roundsBtn")).to_be_visible()
+    expect(page.locator("#reviewRounds")).to_be_hidden()  # nothing preselected
+    page.click("#roundsBtn")
+    rounds = page.locator("#reviewRounds .roundrow")
+    expect(rounds).to_have_count(1)
+    expect(rounds.first).to_contain_text("round 1")
+    rounds.first.click()
+    pairs = page.locator("#reviewRounds .diff-row")
+    expect(pairs.first).to_be_visible()  # auto-waits for the diff door
+    before = page.locator("#reviewRounds .diff-pair .prose").nth(0)
+    after = page.locator("#reviewRounds .diff-pair .prose").nth(1)
+    assert before.inner_text().strip() and after.inner_text().strip()
+    assert before.inner_text() != after.inner_text()
+
+
+def test_the_finish_panel_shows_each_buyer_files_hygiene(walk):
+    """W2b 5 on the reviewed pursuit: Render documents composes the
+    bundle; the buyer file lists with its hygiene line beneath it."""
+    base, page, _ = walk
+    page.evaluate("location.hash = '#/pursuit/pur_gapcase'")
+    expect(page.locator("#view-detail")).to_have_class("view show")
+    expect(page.locator("#detailFinish")).to_be_visible()
+    page.click("#renderBtn")
+    expect(page.locator("#finishDownloads a.dl").first).to_contain_text("response.docx")
+    expect(page.locator("#finishDownloads .hygiene").first).to_contain_text("revision mark(s)")
+    expect(page.locator("#finishDownloads .hygiene").first).to_contain_text("identity")
+
+
+def test_accept_opens_the_learned_dialog_over_the_pursuit(walk):
+    """W2b 4 on the reviewed pursuit — LAST of its tests, accept is
+    irreversible: the learn report renders as a dialog over the pursuit
+    the action lands on; Esc closes it like any dialog."""
+    base, page, _ = walk
+    page.evaluate("location.hash = '#/review/pur_gapcase'")
+    expect(page.locator("#view-review")).to_have_class("view show")
+    page.click("#acceptBtn")
+    expect(page.locator("#learnedOverlay")).to_be_visible()
+    expect(page.locator("#learnedOverlay .modal")).to_have_attribute("role", "dialog")
+    assert page.locator("#learnedBody").inner_text().strip()
+    assert page.evaluate("location.hash") == "#/pursuit/pur_gapcase"
+    page.keyboard.press("Escape")
+    expect(page.locator("#learnedOverlay")).to_be_hidden()
+    expect(page.locator("#view-detail")).to_have_class("view show")
 
 
 def test_the_walk_raised_no_console_errors_or_unhandled_rejections(walk):

@@ -163,3 +163,23 @@ def test_both_exit_doors_refuse_stale_bindings(tmp_path):
         assert r.status_code == 409 and "does not match" in r.text
     assert not (pursuit.root / "exports" / "submission").exists() or not any(
         (pursuit.root / "exports" / "submission").iterdir())
+
+
+def test_the_listing_carries_each_buyer_files_hygiene(exportable):
+    """W2b 5 (B136; P3-15 rendered): the downloads door hands the shell
+    what each buyer file carries at the part level, from the bundle's own
+    hygiene block — an additive sibling keyed by name, the wave-1 list
+    untouched. The render lane's file is the proof here."""
+    client, pursuit = exportable
+    pid = pursuit.pursuit_id
+    assert client.post(f"/api/pursuits/{pid}/export", json={}).status_code == 200
+    listing = client.get(f"/api/pursuits/{pid}/downloads").json()
+    assert listing["to_the_buyer"] == ["response.docx"]  # the shape stands
+    line = listing["hygiene"]["response.docx"]
+    assert set(line) == {"creator", "last_modified_by", "revision_marks",
+                         "comment_parts", "firm_identity"}
+    assert isinstance(line["revision_marks"], int)
+    assert isinstance(line["comment_parts"], int)
+    assert line["firm_identity"] in ("configured", "unconfigured")
+    # the engine's own render carries no tracked changes and no comments
+    assert line["revision_marks"] == 0 and line["comment_parts"] == 0

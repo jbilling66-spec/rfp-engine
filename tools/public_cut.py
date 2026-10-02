@@ -64,18 +64,18 @@ DEFAULT_AUTHOR = "RFP Engine Maintainers <rfp-engine@invalid>"
 # person-name check. The tripwire covers restricted CLIENT tokens; this
 # scan covers the build's own residue classes (B85 §3, D6). The committed
 # baseline carries ONLY patterns whose text already lives in tracked files;
-# the personal/firm-NAME class (surname, username, firm words) is machine
-# state in tripwire-local/residue.txt — the paraphrase law (CLAUDE.md
-# rule 6) binds the scanner too (B87 §4c).
+# the personal/firm-NAME class (first name, surname, username, firm words)
+# is machine state in tripwire-local/residue.txt — the paraphrase law
+# (CLAUDE.md rule 6) binds the scanner too (B87 §4c; the first name left
+# the baseline in B138 after the W2b sweep found it shipped in the mirror).
 RESIDUE = [
     ("bt_default", re.compile(rb"bt_default", re.I)),
     ("bt_reference", re.compile(rb"bt_reference", re.I)),
     ("bt-default", re.compile(rb"bt-default", re.I)),
     ("bt.internal", re.compile(rb"bt\.internal", re.I)),
-    # Uppercase-only: the standalone firm abbreviation (the docx title
-    # finding, B87 §2); lowercase standalone "bt" is everyday byte noise.
+    # Uppercase-only: a two-letter standalone abbreviation (the docx-title
+    # finding, B87 §2); the lowercase form is everyday byte noise.
     ("BT", re.compile(rb"\bBT\b")),
-    ("John", re.compile(rb"\bjohn\b", re.I)),
 ]
 
 RESIDUE_FILE = ROOT / "tripwire-local" / "residue.txt"

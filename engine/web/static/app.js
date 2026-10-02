@@ -287,6 +287,7 @@ async function loadDetail(pid) {
   await loadPursuitPings(pid, d);
   await loadShares(pid);
   wireOutcome(pid);
+  await loadRuns(pid);
   $("detailSections").innerHTML = (d.sections || []).map((s) => `
     <div class="row">
       <span class="id">${esc(s.section_id)}</span>
@@ -327,12 +328,23 @@ async function loadDownloads(pid, f) {
   const href = (name) =>
     `/api/pursuits/${encodeURIComponent(pid)}/download/${encodeURIComponent(name)}`;
   const link = (name) => `<a class="dl" href="${href(name)}">${esc(name)}</a>`;
+  // W2b 5 (B136): what the file carries, from the bundle's hygiene block
+  const hygiene = (name) => {
+    const h = (dl.hygiene || {})[name];
+    if (!h) return `<div class="meta hygiene">hygiene not recorded</div>`;
+    return `<div class="meta hygiene">creator ${esc(String(h.creator || "—"))}
+      &middot; ${esc(String(h.revision_marks))} revision mark(s)
+      &middot; ${esc(String(h.comment_parts))} comment part(s)
+      &middot; identity ${esc(String(h.firm_identity))}</div>`;
+  };
   $("finishDownloads").innerHTML =
     `<div class="dlhead">To the buyer</div>`
-    + (dl.to_the_buyer.length ? dl.to_the_buyer.map(link).join("")
+    + (dl.to_the_buyer.length
+        ? dl.to_the_buyer.map((n) => link(n) + hygiene(n)).join("")
         : `<div class="meta">nothing shippable yet</div>`)
     + (dl.refused || []).map((r) =>
-        `<div class="meta withheld">withheld — ${esc(r.name)}: ${
+        `<div class="meta withheld">withheld${r.status === "drifted"
+          ? ' <span class="chip draft">stale</span>' : ""} — ${esc(r.name)}: ${
           esc(r.reason)}</div>`).join("")
     + `<div class="dlhead">Internal — do not send</div>`
     + (dl.internal_do_not_send.length
@@ -400,9 +412,9 @@ async function confirmWriteback(pid) {
       `/api/pursuits/${encodeURIComponent(pid)}/writeback/confirm`,
       { method: "POST", body: "{}" });
     closeDialog("writebackOverlay");
-    toast(`write-back done — ${out.bundle.deliverables.length} deliverable(s)
-      recorded`, true);
+    toast(`write-back done — ${out.bundle.deliverables.length} deliverable(s) recorded`, true);
     routeFromHash();
+    if (out.flywheel !== undefined) showLearned(out.flywheel);
   } catch (e) { toast(e.message, true); }
 }
 
@@ -870,10 +882,11 @@ async function loadReview(pid) {
   $("acceptBtn").onclick = async () => {
     flushReviewEffort();
     try {
-      await api(`/api/pursuits/${encodeURIComponent(pid)}/accept`,
-                { method: "POST", body: "{}" });
+      const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/accept`,
+                            { method: "POST", body: "{}" });
       toast("accepted — every drafted section is now final", true);
       location.hash = `#/pursuit/${encodeURIComponent(pid)}`;
+      showLearned(out.flywheel);  // over the pursuit it lands on
     } catch (e) { toast(e.message, true); }
   };
   $("reviseBtn").onclick = async () => {
@@ -885,6 +898,286 @@ async function loadReview(pid) {
       watchJob(job.id, pid);
     } catch (e) { toast(e.message); }
   };
+  wireRounds(pid, m);
+}
+
+// -- the learn report (P27 wave 2, W2b 4, B136; B122 §9c) -------------------
+// Accept and write-back confirm each return the flywheel's report under
+// `flywheel`: what was routed, what became a proposal, what was skipped
+// and why, what was withheld because identifying material was found. The
+// shell used to toast a fixed line and drop it. It is a transient response,
+// not a read model, so it renders once, as a dialog, over the pursuit the
+// action lands on. Withheld items show a COUNT of locations, never text.
+function learnedLines(report) {
+  const n = (v) => (Array.isArray(v) ? v.length : 0);
+  if (!report) return ['<div class="meta">no learn report on this response</div>'];
+  if (report.error) {
+    return [`<div class="honesty">the flywheel failed — the step itself stood: ${esc(
+      String(report.error))}</div>`];
+  }
+  const lines = [];
+  if (typeof report.skipped === "string") {
+    lines.push(`<div><b>skipped</b> &mdash; ${esc(report.skipped)}</div>`);
+  }
+  if (report.routed !== undefined) {
+    lines.push(`<div><b>${esc(String(n(report.routed)))}</b> edit(s) routed</div>`);
+  }
+  if (report.proposals !== undefined || report.gap_proposals !== undefined) {
+    const total = n(report.proposals) + n(report.gap_proposals);
+    lines.push(`<div><b>${esc(String(total))}</b> proposal(s) for the steward
+      &mdash; the Knowledge base tab</div>`);
+  }
+  if (report.signals_written !== undefined) {
+    lines.push(`<div><b>${esc(String(n(report.signals_written)))}</b> card signal(s) written</div>`);
+  }
+  if (report.skipped && typeof report.skipped === "object") {
+    for (const [what, why] of Object.entries(report.skipped)) {
+      lines.push(`<div class="learn-skip"><b>skipped</b> ${esc(what)} &mdash; ${esc(String(why))}</div>`);
+    }
+  }
+  if (n(report.blocked)) {
+    lines.push(`<div class="honesty"><b>${esc(String(n(report.blocked)))}</b> item(s) withheld
+      &mdash; identifying material was found, so nothing was written</div>`);
+    for (const b of report.blocked) {
+      lines.push(`<div class="learn-skip">${esc(String(b.event_id || b.gap_id || b.slot_id || ""))}
+        &mdash; ${esc(String(n(b.locations)))} location(s)</div>`);
+    }
+  }
+  if (!lines.length) lines.push('<div class="meta">nothing to learn from this one</div>');
+  return lines;
+}
+
+function showLearned(report) {
+  $("learnedBody").innerHTML = learnedLines(report).join("");
+  openDialog("learnedOverlay");
+}
+
+// -- the operations view (P27 wave 2, W2b 3, B136) --------------------------
+// Composed in the browser from three doors that already exist — the board
+// rows (stage, last run, totals, torn, corrupt, revision), the jobs journal
+// and the health line — so there is no new read model to pin and nothing
+// the server does not already say. "needs attention" is a reading of those
+// rows, not a stored state: corrupt, a torn lane, a last run that is neither
+// completed nor waiting on a human, an orphaned or errored job, a run in
+// flight. The row links into the pursuit, whose Runs panel has the detail.
+const OPS_QUIET_RUNS = new Set(["completed", "awaiting_gate", "awaiting_gap"]);
+let OPS = null;
+
+async function loadOps() {
+  const [health, pursuits, jobs] = await Promise.all([
+    api("/api/health"), api("/api/pursuits"), api("/api/jobs")]);
+  $("opsHealth").innerHTML =
+    `<b>${esc(String(health.mode))}</b> &middot; engine ${esc(String(health.version))}
+     &middot; sign-in ${esc(String(health.auth_mode))}
+     &middot; ${esc(String(pursuits.length))} pursuit(s)
+     &middot; ${esc(String(jobs.length))} job(s) in the journal`;
+  const latest = {};  // the newest job per pursuit (the door lists newest first)
+  for (const j of jobs) if (!latest[j.pursuit]) latest[j.pursuit] = j;
+  const attention = [];
+  for (const r of pursuits) {
+    if (r.corrupt) attention.push([r.pursuit_id, "corrupt — a file the engine cannot read",
+                                   "its row names the file; the recovery runbook has the steps"]);
+    for (const t of (r.torn || [])) attention.push(
+      [r.pursuit_id, `torn ${t} lane`, "repaired on its next write; the Runs panel shows the tail"]);
+    if (r.last_run_status === "in_flight") attention.push(
+      [r.pursuit_id, "a run in flight", "a job is working; the strip follows it"]);
+    else if (r.last_run_status && !OPS_QUIET_RUNS.has(r.last_run_status)) attention.push(
+      [r.pursuit_id, `last run ${r.last_run_status}`, "open the pursuit's Runs panel"]);
+  }
+  for (const j of jobs) {
+    if (j.state === "orphaned" || j.state === "error") attention.push(
+      [j.pursuit, `${j.kind} job ${j.state}`, j.message || ""]);
+  }
+  $("opsAttention").hidden = !attention.length;
+  $("opsAttnRows").innerHTML = attention.map(([pid, what, where]) =>
+    `<div class="attn"><a href="#/pursuit/${encodeURIComponent(pid)}">${esc(pid)}</a>
+       &mdash; ${esc(what)} <span class="muted">&middot; ${esc(where)}</span></div>`).join("");
+  OPS = { pursuits, latest };
+  renderOps();
+}
+
+function renderOps() {
+  if (!OPS) return;
+  const key = $("opsSort").value;
+  const rows = OPS.pursuits.slice();
+  const cost = (r) => ((r.totals || {}).cost_usd || 0);
+  const jobAt = (r) => ((OPS.latest[r.pursuit_id] || {}).at || "");
+  const by = {
+    stage: (a, b) => String(a.stage).localeCompare(String(b.stage)) || a.pursuit_id.localeCompare(b.pursuit_id),
+    run: (a, b) => String(a.last_run_status || "").localeCompare(String(b.last_run_status || "")),
+    cost: (a, b) => cost(b) - cost(a),
+    job: (a, b) => jobAt(b).localeCompare(jobAt(a)),
+  }[key] || ((a, b) => 0);
+  rows.sort(by);
+  $("opsRows").innerHTML = rows.length ? rows.map((r) => {
+    const j = OPS.latest[r.pursuit_id];
+    return `<div class="row" data-pid="${esc(r.pursuit_id)}">
+      <span class="id">${esc(r.pursuit_id)}</span>
+      <span class="chip ${STAGE_COLOR[r.stage] || "plan"}">${esc(r.stage)}</span>
+      ${r.last_run_status ? `<span class="chip ${RUN_COLOR[r.last_run_status]
+        || (r.last_run_status === "completed" ? "done" : "stop")}">run ${esc(r.last_run_status)}</span>` : ""}
+      ${(r.torn || []).map((t) => `<span class="chip draft">torn: ${esc(t)}</span>`).join("")}
+      <div class="meta">${r.revision_n !== undefined ? `revision ${esc(String(r.revision_n))} &middot; ` : ""}
+        $${esc(cost(r).toFixed(4))} (run totals)
+        ${j ? ` &middot; last job ${esc(j.kind)} ${esc(j.state)} by ${esc(String(j.by || ""))} at ${esc(String(j.at || ""))}` : " &middot; no jobs yet"}
+      </div>
+    </div>`;
+  }).join("") : '<div class="meta">no pursuits yet</div>';
+  $("opsRows").querySelectorAll(".row[data-pid]").forEach((row) => {
+    row.onclick = () => { location.hash = `#/pursuit/${encodeURIComponent(row.dataset.pid)}`; };
+  });
+}
+
+// -- the run log, read in the browser (P27 wave 2, W2b 2, B136) ------------
+// The back-end human's view of what the agents did (B113 §10a). The runs
+// door lists the index; the records door returns the raw log — digest-clean
+// by construction (the writer never persists prompts or matched text), so
+// the shell renders what it is given and persists nothing. One summary line
+// per record, built from the record's own keys by type; the raw record on
+// demand.
+function runSummary(r) {
+  const money = (v) => (typeof v === "number" ? `$${v.toFixed(4)}` : "");
+  switch (r.record_type) {
+    case "run_start": case "run_end": case "cost_rollup": {
+      const run = r.run || {};
+      const totals = run.totals || {};
+      return [run.mode, run.status, run.engine_version && `engine ${run.engine_version}`,
+              totals.cost_usd !== undefined && `${money(totals.cost_usd)} total`]
+        .filter(Boolean).join(" · ");
+    }
+    case "agent_call": {
+      const t = r.tokens || {};
+      return [r.agent, r.model, money(r.cost_usd),
+              t.input !== undefined && `${t.input} in / ${t.output || 0} out`,
+              r.target && r.target.section_id].filter(Boolean).join(" · ");
+    }
+    case "tool_call": return r.tool || "";
+    case "kb_retrieval": {
+      const kb = r.kb || {};
+      const n = (v) => (Array.isArray(v) ? v.length : (v || 0));
+      return [kb.step, `${n(kb.cards_returned)} returned`, `${n(kb.cards_opened)} opened`,
+              `${n(kb.cards_cited)} cited`, kb.empty_result && "empty result"]
+        .filter(Boolean).join(" · ");
+    }
+    case "gate": {
+      const g = r.gate || {};
+      return [g.which, g.decision, g.actor && `by ${g.actor}`,
+              g.auto_approved && "auto-approved"].filter(Boolean).join(" · ");
+    }
+    case "validation": {
+      const v = r.validation || {};
+      return [v.check, v.result, v.claim_tier && `tier ${v.claim_tier}`,
+              v.waived_by && `waived by ${v.waived_by}`].filter(Boolean).join(" · ");
+    }
+    case "gap": {
+      const g = r.gap || {};
+      return [g.gap_id, g.resolution || g.reason].filter(Boolean).join(" · ");
+    }
+    case "artifact": {
+      const a = r.artifact || {};
+      return [a.kind, a.revision_n !== undefined && `revision ${a.revision_n}`]
+        .filter(Boolean).join(" · ");
+    }
+    case "error": {
+      const e = r.error || {};
+      return [e.code, e.message, e.recoverable ? "recoverable" : "not recoverable",
+              e.action_taken && `action: ${e.action_taken}`].filter(Boolean).join(" · ");
+    }
+    default: return r.notes || "";
+  }
+}
+
+async function loadRuns(pid) {
+  const rows = $("runRows");
+  const records = $("runRecords");
+  const tools = $("runTools");
+  records.hidden = true; tools.hidden = true;
+  records.innerHTML = "";
+  const runs = await api(`/api/pursuits/${encodeURIComponent(pid)}/runs`);
+  rows.innerHTML = runs.length ? runs.map((r) => {
+    const color = RUN_COLOR[r.status] || (r.status === "completed" ? "done" : "stop");
+    const totals = r.totals || {};
+    return `<div class="row runrow" data-run="${esc(r.run_id)}">
+      <span class="id">${esc(r.run_id)}</span>
+      <span class="chip ${color}">${esc(r.status)}</span>
+      ${r.torn_tail ? '<span class="chip draft">torn tail</span>' : ""}
+      <span class="meta">${esc(String(r.mode || ""))} &middot; ${esc(String(
+        r.records))} record(s)${totals.cost_usd !== undefined
+        ? ` &middot; $${esc(Number(totals.cost_usd).toFixed(4))}` : ""}</span>
+    </div>`;
+  }).join("") : '<div class="meta">no runs yet</div>';
+  rows.querySelectorAll(".runrow").forEach((row) => {
+    row.onclick = guarded(async () => {
+      rows.querySelectorAll(".runrow").forEach((o) => o.classList.toggle("active", o === row));
+      const run = encodeURIComponent(row.dataset.run);
+      const log = await api(`/api/pursuits/${encodeURIComponent(pid)}/runs/${run}`);
+      const kinds = [...new Set(log.map((r) => r.record_type))];
+      $("runKind").innerHTML = ['<option value="">all</option>']
+        .concat(kinds.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`)).join("");
+      records.innerHTML = log.length ? log.map((r) => `
+        <div class="row logrow" data-kind="${esc(r.record_type)}">
+          <span class="mono">${esc(String(r.ts || ""))}</span>
+          <span class="chip plan">${esc(r.record_type)}</span>
+          <span class="muted">${esc(String(r.stage || ""))}</span>
+          <span>${esc(runSummary(r))}</span>
+          <details><summary>raw</summary><pre>${esc(JSON.stringify(r, null, 1))}</pre></details>
+        </div>`).join("") : '<div class="meta">an empty run log</div>';
+      tools.hidden = false;
+      records.hidden = false;
+      $("runKind").onchange = () => {
+        const want = $("runKind").value;
+        records.querySelectorAll(".logrow").forEach((l) => {
+          l.hidden = Boolean(want) && l.dataset.kind !== want;
+        });
+      };
+    });
+  });
+}
+
+// -- the revision history (P27 wave 2, W2b 1b, B136) ------------------------
+// The server computes the diff (WP8: before from the archived rev{n-1}
+// envelope, after from rev{n}); the shell lists the rounds in the order the
+// door returns them and renders each pair as text. Nothing is preselected:
+// the current prose above stays the primary surface, the history is on
+// demand. The control shows only when the server names a last round.
+function wireRounds(pid, m) {
+  const box = $("reviewRounds");
+  box.hidden = true;
+  box.innerHTML = "";
+  $("roundsBtn").hidden = !m.last_round;
+  $("roundsBtn").onclick = guarded(async () => {
+    if (!box.hidden) { box.hidden = true; return; }
+    const rounds = await api(
+      `/api/pursuits/${encodeURIComponent(pid)}/revisions`);
+    box.innerHTML = rounds.length ? rounds.map((r) => {
+      const revised = r.sections.filter((s) => s.outcome === "revised").length;
+      return `<div class="row roundrow" data-n="${esc(String(r.round_n))}">
+        <span class="id">round ${esc(String(r.round_n))}</span>
+        <span class="meta">${esc(String(revised))} of ${esc(String(
+          r.sections.length))} section(s) revised &middot; by ${esc(
+          r.actor || "—")} &middot; ${esc(r.at || "")}</span>
+        <div class="diffbox"></div>
+      </div>`;
+    }).join("") : '<div class="meta">no rounds yet</div>';
+    box.hidden = false;
+    box.querySelectorAll(".roundrow").forEach((row) => {
+      row.onclick = guarded(async (e) => {
+        if (e.target.closest(".diffbox")) return;  // reading, not toggling
+        const pane = row.querySelector(".diffbox");
+        if (pane.innerHTML) { pane.innerHTML = ""; return; }
+        const n = encodeURIComponent(row.dataset.n);
+        const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/revisions/${n}`);
+        pane.innerHTML = out.diff.length ? out.diff.map((d) => `
+          <div class="diff-row"><b>${esc(d.section_id)}</b>${d.slot_id
+            ? ` <span class="muted">${esc(String(d.slot_id))}</span>` : ""}
+            <div class="diff-pair">
+              <div><div class="difflbl">before</div><div class="prose">${esc(d.before)}</div></div>
+              <div><div class="difflbl">after</div><div class="prose">${esc(d.after)}</div></div>
+            </div></div>`).join("")
+          : '<div class="meta">no text changed in this round</div>';
+      });
+    });
+  });
 }
 
 // -- waivers (P27 wave 1): a Tier-1 block, overridden on the record -------
@@ -1416,6 +1709,9 @@ async function routeFromHash() {
     setNav("telemetry", "Telemetry"); showView("telemetry");
     await loadTelemetry("system"); return;
   }
+  if (location.hash.startsWith("#/ops")) {
+    setNav("ops", "Operations"); showView("ops"); await loadOps(); return;
+  }
   setNav("board", "Pursuits"); showView("board"); await loadBoard();
 }
 
@@ -1429,6 +1725,7 @@ function wireNavExtras() {
     if (e.key === "Enter") sendAssistant();
   };
   if ($("telProd")) $("telProd").onclick = () => loadTelemetry("system");
+  if ($("opsSort")) $("opsSort").onchange = () => renderOps();
   if ($("telBench")) $("telBench").onclick = () => loadTelemetry("bench");
 }
 

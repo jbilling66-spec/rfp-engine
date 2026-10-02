@@ -137,3 +137,33 @@ button.ghost.active{color:var(--text);border-color:var(--accent)}
 button:focus-visible,a:focus-visible,input:focus-visible,
 select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+/* P27 wave 2, W2b 1b (B136): the revision history — rounds, then pairs */
+.roundrow .diffbox{margin-top:6px;cursor:default}
+.diff-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.diff-pair .prose{margin:2px 0 0}
+.difflbl{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim)}
+@media (max-width:700px){.diff-pair{grid-template-columns:1fr}}
+/* W2b 2 (B136): the run log in the browser */
+/* the hidden attribute wins over any display rule — a grid/flex class had
+   out-ranked the browser's [hidden] (the smoke walk caught the run filter) */
+[hidden]{display:none!important}
+.runrow.active{border-color:var(--accent)}
+.logrow{display:grid;grid-template-columns:auto auto auto 1fr;gap:10px;
+  align-items:baseline;cursor:default;font-size:13px}
+.logrow details{grid-column:1 / -1}
+.logrow pre{font-size:11px;white-space:pre-wrap;word-break:break-word;
+  max-height:240px;overflow:auto;margin:4px 0 0}
+.mono{font-family:ui-monospace,monospace;font-size:12px;color:var(--dim)}
+#runKind{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel);color:var(--text)}
+@media (max-width:700px){.logrow{grid-template-columns:1fr}}
+/* W2b 3 (B136): the operations view */
+.attn{font-size:13px;margin:4px 0}
+.attn a{color:var(--text)}
+#opsSort{font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel);color:var(--text)}
+/* W2b 4 (B136): the Learned dialog */
+.learn-skip{font-size:13px;margin:3px 0 3px 12px;color:var(--dim)}
+#learnedBody div{margin:4px 0}
+/* W2b 5 (B136): the hygiene line under a buyer file */
+.hygiene{margin:0 0 6px 12px}
