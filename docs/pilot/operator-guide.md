@@ -50,7 +50,11 @@ The sidebar has five tabs: **Pursuits** (the board you will live on),
 
 Press **Advance** to run the engine as far as it can go. It stops honestly:
 at a gate that needs your decision, or on gaps that need answers. A status
-strip narrates what is happening.
+strip narrates what is happening. The strip survives a reload — reopen the
+app and it re-attaches to the running job. A revision job offers
+**Cancel** on the strip; an advance does not, because it cannot stop
+mid-stage without lying about what finished. If the strip loses the
+server it says so (*reload to re-attach*) rather than spinning forever.
 
 *The pause is normal.* During the pilot, the engine's judgment steps are
 answered by an assistant session that the pilot host runs on the same machine. When

@@ -91,7 +91,7 @@ button.danger{background:var(--stop)}
 .asst-msg{max-width:78%;padding:9px 12px;border-radius:10px;
   font-size:14px;white-space:pre-wrap;word-break:break-word}
 .asst-msg.me{align-self:flex-end;background:var(--plan);color:#fff}
-.asst-msg.bot{align-self:flex-start;background:var(--bg);
+.asst-msg.bot{align-self:flex-start;background:var(--ink);
   border:1px solid var(--line)}
 .asst-msg.pending{color:var(--dim)}
 .asst-decline{color:var(--dim);font-style:italic}
@@ -120,3 +120,20 @@ body.guest{background:var(--ink)}
 .revisedrow{font-size:12px;color:var(--plan);margin:6px 0}
 .pendingnote button{margin-left:6px;padding:2px 8px;font-size:11px}
 
+/* P27 wave 2, W2a step 1 (B134): every class the shell uses has a rule and
+   nothing is styled inline — the CSP (default-src 'self', no unsafe-inline)
+   drops a style attribute silently, which is how the upload label shipped
+   unstyled. Promoted from descendant-only rules: .meta .hint .q */
+.muted{color:var(--dim)}
+.hint{color:var(--dim);font-size:13px}
+.meta{color:var(--dim);font-size:13px;margin-top:2px}
+.q{white-space:pre-line;color:var(--dim)}
+.diff-row{font-size:13px;margin:3px 0;padding-left:8px;
+  border-left:2px solid var(--line)}
+.upload{display:inline-block;border:1px solid var(--line);border-radius:6px;
+  padding:7px 14px;cursor:pointer;color:var(--dim)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.ghost.active{color:var(--text);border-color:var(--accent)}
+button:focus-visible,a:focus-visible,input:focus-visible,
+select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}

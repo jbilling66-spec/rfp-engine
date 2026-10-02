@@ -12,21 +12,36 @@ const STAGE_COLOR = {
   intake: "plan", research: "plan", gate_1: "draft", planning: "plan",
   gate_2: "draft", drafting: "draft", validation: "draft",
   review: "done", declined: "stop",
+  // W2a (B134): gate_0 is a stage; corrupt is the server's override —
+  // an unknown key fell through to plan-blue, so both read as healthy
+  gate_0: "draft", corrupt: "stop",
 };
+// the run footer's own vocabulary (run-log schema): a waiting run is
+// amber, an open one blue, anything else red; completed is not shown
+const RUN_COLOR = { in_flight: "plan", awaiting_gate: "draft",
+  awaiting_gap: "draft", failed: "stop", aborted: "stop", corrupt: "stop" };
 
 let OPERATOR = null;
 let OPERATOR_ROLE = null;  // the session's role — the server records it,
                           // the shell never sends one (P27, M-9)
 let JOB_TIMER = null;
 
+// W2a (B134): one typed error for every door — the status decides what
+// the shell does (401 → sign in again), the detail is what it says
+class ApiError extends Error {
+  constructor(status, detail) { super(detail); this.status = status; }
+}
+
 async function api(path, opts = {}) {
+  // raw: a file body goes as the browser types it — no JSON header
+  const { raw, ...rest } = opts;
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
+    headers: raw ? {} : { "Content-Type": "application/json" },
+    ...rest,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `${res.status} on ${path}`);
+    throw new ApiError(res.status, body.detail || `${res.status} on ${path}`);
   }
   return res.json();
 }
@@ -39,6 +54,49 @@ function toast(msg, sticky = false) {
   if (!sticky) setTimeout(() => { t.hidden = true; }, 3200);
   else t.onclick = () => { t.hidden = true; };
 }
+
+// -- dialogs (W2a, B134) ---------------------------------------------------
+// One opener and one closer own focus: the element that opened a dialog
+// gets it back on close; Tab stays inside; Esc closes — except the
+// sign-in dialog, which is required (nothing to go back to).
+
+const FOCUSABLE = 'button:not([disabled]),input:not([disabled]):not([hidden]),'
+  + 'select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
+let DIALOG_RETURN = null;
+
+function openDialog(id) {
+  const ov = $(id);
+  if (!ov.hidden) return;
+  DIALOG_RETURN = document.activeElement;
+  ov.hidden = false;
+  const first = ov.querySelector(FOCUSABLE);
+  if (first) first.focus();
+}
+
+function closeDialog(id) {
+  const ov = $(id);
+  ov.hidden = true;
+  if (DIALOG_RETURN && typeof DIALOG_RETURN.focus === "function") DIALOG_RETURN.focus();
+  DIALOG_RETURN = null;
+}
+
+document.addEventListener("keydown", (e) => {
+  const ov = Array.from(document.querySelectorAll(".overlay")).find((o) => !o.hidden);
+  if (!ov) return;
+  if (e.key === "Escape") {
+    if (ov.id === "opOverlay") return;
+    e.preventDefault(); closeDialog(ov.id); return;
+  }
+  if (e.key !== "Tab") return;
+  const items = Array.from(ov.querySelectorAll(FOCUSABLE))
+    .filter((x) => x.offsetParent !== null);
+  if (!items.length) { e.preventDefault(); return; }
+  const first = items[0], last = items[items.length - 1];
+  const at = document.activeElement;
+  if (!ov.contains(at)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+});
 
 // -- session ---------------------------------------------------------------
 
@@ -53,7 +111,8 @@ async function bootSession() {
     + (s.roles || []).map((r) =>
       `<option value="${esc(r)}">${esc(r.replace(/_/g, " "))}</option>`).join("");
   renderWho();
-  if (!OPERATOR) $("opOverlay").hidden = false;
+  if (!OPERATOR) openDialog("opOverlay");
+  await resumeJobs();
 }
 
 function renderWho() {
@@ -63,7 +122,7 @@ function renderWho() {
   $("signInBtn").hidden = Boolean(OPERATOR);
 }
 
-$("signInBtn").onclick = () => { $("opOverlay").hidden = false; };
+$("signInBtn").onclick = () => { openDialog("opOverlay"); };
 $("opGo").onclick = async () => {
   try {
     const out = await api("/api/session", {
@@ -73,7 +132,7 @@ $("opGo").onclick = async () => {
     OPERATOR = out.operator;
     OPERATOR_ROLE = out.role;
     renderWho();
-    $("opOverlay").hidden = true;
+    closeDialog("opOverlay");
   } catch (e) { toast(e.message); }
 };
 
@@ -169,6 +228,11 @@ async function loadBoard() {
       <span class="chip ${esc(STAGE_COLOR[r.stage] || "plan")}">${esc(r.stage)}</span>
       ${r.packaging && r.packaging.blocked
         ? '<span class="chip stop">BLOCKED</span>' : ""}
+      ${r.last_run_status && r.last_run_status !== "completed"
+        ? `<span class="chip ${esc(RUN_COLOR[r.last_run_status] || "stop")}">run ${esc(r.last_run_status)}</span>`
+        : ""}
+      ${(r.torn || []).map((t) =>
+        `<span class="chip draft">torn: ${esc(t)}</span>`).join("")}
       <div class="meta">${esc(r.next)}
         ${r.open_gaps ? ` &middot; ${esc(r.open_gaps)} open gap(s)` : ""}
         &middot; $${esc((r.totals.cost_usd).toFixed(4))}
@@ -208,8 +272,7 @@ async function loadDetail(pid) {
   if (d.stage === "review") {
     acts.push(`<button id="reviewBtn">Open review</button>`);
   }
-  acts.push(`<label class="ghost" style="border:1px solid var(--line);
-    border-radius:6px;padding:7px 14px;cursor:pointer">upload to inbox
+  acts.push(`<label class="ghost upload">upload to inbox
     <input id="upl" type="file" hidden></label>`);
   $("detailActions").innerHTML = acts.join("");
   $("advanceBtn").onclick = () => submitAdvance(pid);
@@ -326,7 +389,7 @@ async function previewWriteback(pid) {
     // the confirm door is two steps: it opens only behind a rendered preview
     $("wbConfirm").disabled = false;
     $("wbConfirm").onclick = () => confirmWriteback(pid);
-    $("writebackOverlay").hidden = false;
+    openDialog("writebackOverlay");
   } catch (e) { toast(e.message, true); }
 }
 
@@ -336,7 +399,7 @@ async function confirmWriteback(pid) {
     const out = await api(
       `/api/pursuits/${encodeURIComponent(pid)}/writeback/confirm`,
       { method: "POST", body: "{}" });
-    $("writebackOverlay").hidden = true;
+    closeDialog("writebackOverlay");
     toast(`write-back done — ${out.bundle.deliverables.length} deliverable(s)
       recorded`, true);
     routeFromHash();
@@ -417,7 +480,7 @@ async function openHandFill(pid) {
     const h = await api(
       `/api/pursuits/${encodeURIComponent(pid)}/writeback/hand-fill`);
     renderHandFill(pid, h);
-    $("handFillOverlay").hidden = false;
+    openDialog("handFillOverlay");
   } catch (e) { toast(e.message, true); }
 }
 
@@ -471,7 +534,7 @@ async function loadShares(pid) {
       } catch (e) { toast(e.message, true); }
     };
   }
-  $("shareNewBtn").onclick = () => { $("shareOverlay").hidden = false; };
+  $("shareNewBtn").onclick = () => { openDialog("shareOverlay"); };
   $("shGo").onclick = async () => {
     const days = Math.max(1, Math.min(30, Number($("shDays").value) || 7));
     const expires_at = new Date(Date.now() + days * 86400000)
@@ -481,7 +544,7 @@ async function loadShares(pid) {
         method: "POST",
         body: JSON.stringify({ label: $("shLabel").value, expires_at }),
       });
-      $("shareOverlay").hidden = true;
+      closeDialog("shareOverlay");
       $("shLabel").value = "";
       toast(`${link.link_id} created — ${url(link)}`, true);
       loadShares(pid);
@@ -610,7 +673,7 @@ const OUTCOME_RESULTS = ["won", "lost", "shortlisted", "withdrawn", "no_decision
 function wireOutcome(pid) {
   $("ocResult").innerHTML = `<option value="">— result —</option>`
     + OUTCOME_RESULTS.map((r) => `<option value="${r}">${esc(r.replace(/_/g, " "))}</option>`).join("");
-  $("outcomeBtn").onclick = () => { $("outcomeOverlay").hidden = false; };
+  $("outcomeBtn").onclick = () => { openDialog("outcomeOverlay"); };
   $("ocGo").onclick = async () => {
     const body = { result: $("ocResult").value };
     if ($("ocFeedback").value) body.buyer_feedback = $("ocFeedback").value;
@@ -618,7 +681,7 @@ function wireOutcome(pid) {
     try {
       await api(`/api/pursuits/${encodeURIComponent(pid)}/outcome`,
                 { method: "POST", body: JSON.stringify(body) });
-      $("outcomeOverlay").hidden = true;
+      closeDialog("outcomeOverlay");
       toast(`outcome recorded: ${body.result}`, true);
     } catch (e) { toast(e.message, true); }
   };
@@ -627,14 +690,9 @@ function wireOutcome(pid) {
 async function uploadFile(pid) {
   const file = $("upl").files[0];
   if (!file) return;
-  const res = await fetch(
+  await api(
     `/api/pursuits/${encodeURIComponent(pid)}/inbox/${encodeURIComponent(file.name)}`,
-    { method: "PUT", body: file });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    toast(body.detail || "upload failed");
-    return;
-  }
+    { method: "PUT", body: file, raw: true });
   toast(`stored ${file.name}`);
 }
 
@@ -647,13 +705,50 @@ async function submitAdvance(pid) {
   } catch (e) { toast(e.message); }
 }
 
+// W2a (B134): the strip survives — a failed tick is counted, not fatal
+// (three in a row give up by name); boot re-attaches to a live job; Cancel
+// renders only when the server says the job is cancellable.
+let JOB_FAILS = 0;
+
+function renderJobStrip(job) {
+  const mins = job.at ? Math.max(0, Math.round((Date.now() - Date.parse(job.at)) / 60000)) : null;
+  $("jobMsg").textContent =
+    `${job.kind} · ${job.pursuit} · ${job.state} — ${job.message}`
+    + (mins === null ? "" : ` (${mins} min)`);
+  $("jobCancel").hidden = !job.cancellable;
+}
+
+async function cancelJob(jobId) {
+  await api(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
+  toast("cancel requested — the job stops at its next check");
+}
+
+async function resumeJobs() {
+  const jobs = await api("/api/jobs");
+  const live = jobs.find((j) => ["queued", "running"].includes(j.state));
+  if (live) watchJob(live.id, live.pursuit);
+}
+
 function watchJob(jobId, pid) {
   clearInterval(JOB_TIMER);
+  JOB_FAILS = 0;
   $("jobStrip").hidden = false;
+  $("jobCancel").onclick = () => cancelJob(jobId);
   JOB_TIMER = setInterval(async () => {
-    const job = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
-    $("jobMsg").textContent =
-      `${job.kind} · ${job.state} — ${job.message}`;
+    let job;
+    try {
+      job = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
+      JOB_FAILS = 0;
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        clearInterval(JOB_TIMER); failed(e); return;
+      }
+      if (++JOB_FAILS < 3) return;
+      clearInterval(JOB_TIMER);
+      toast(`lost the job — ${e.message}; reload to re-attach`, true);
+      return;
+    }
+    renderJobStrip(job);
     if (!["queued", "running"].includes(job.state)) {
       clearInterval(JOB_TIMER);
       setTimeout(() => { $("jobStrip").hidden = true; }, 3500);
@@ -799,14 +894,14 @@ async function loadReview(pid) {
 function openWaiver(pid, claimId, line) {
   $("wvClaim").textContent = `${claimId} — ${line}`;
   $("wvReason").value = "";
-  $("waiverOverlay").hidden = false;
+  openDialog("waiverOverlay");
   $("wvGo").onclick = async () => {
     try {
       const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/waivers`, {
         method: "POST",
         body: JSON.stringify({ claim_id: claimId, reason: $("wvReason").value }),
       });
-      $("waiverOverlay").hidden = true;
+      closeDialog("waiverOverlay");
       toast(out.warnings.length
         ? `waived — ${out.warnings.join("; ")}` : "waived — on the record", true);
       loadReview(pid);
@@ -850,7 +945,7 @@ async function openGate0(pid) {
           : `<span class="chip">${esc(g.status)}</span>
              ${esc(g.answer || "")}`}
       </div>`).join("");
-  $("gate0Overlay").hidden = false;
+  openDialog("gate0Overlay");
   gateClockOpen("g0Minutes");
   $("g0Approve").onclick = () => decideGate0(pid, true);
   $("g0Reject").onclick = () => decideGate0(pid, false);
@@ -877,7 +972,7 @@ async function decideGate0(pid, approve) {
   try {
     const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/gate0`,
                           { method: "POST", body: JSON.stringify(body) });
-    $("gate0Overlay").hidden = true;
+    closeDialog("gate0Overlay");
     toast(`Gate 0: ${out.decision}`, true);
     routeFromHash();
   } catch (e) { toast(e.message); }
@@ -899,7 +994,7 @@ async function openGate1(pid) {
       <div class="q">${esc(c.rationale || "")}
         &middot; cites: ${esc((c.cites || []).join(", "))}</div>
     </div>`).join("");
-  $("gate1Overlay").hidden = false;
+  openDialog("gate1Overlay");
   gateClockOpen("g1Minutes");
   $("g1Approve").onclick = () => decideGate1(pid, true);
   $("g1Reject").onclick = () => decideGate1(pid, false);
@@ -919,7 +1014,7 @@ async function decideGate1(pid, approve) {
   try {
     const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/gate1`,
                           { method: "POST", body: JSON.stringify(body) });
-    $("gate1Overlay").hidden = true;
+    closeDialog("gate1Overlay");
     toast(`Gate 1: ${out.decision}`, true);
     if (out.job) watchJob(out.job, pid);
     else routeFromHash();
@@ -960,7 +1055,7 @@ async function openGate2(pid) {
           <input class="g2waivenote" data-id="${esc(o.id)}"
                  placeholder="waive reason (required)">` : ""}
       </div>`).join("");
-  $("gate2Overlay").hidden = false;
+  openDialog("gate2Overlay");
   gateClockOpen("g2Minutes");
   $("g2Approve").onclick = () => decideGate2(pid, true);
   $("g2Reject").onclick = () => decideGate2(pid, false);
@@ -996,7 +1091,7 @@ async function decideGate2(pid, approve) {
   try {
     const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/gate2`,
                           { method: "POST", body: JSON.stringify(body) });
-    $("gate2Overlay").hidden = true;
+    closeDialog("gate2Overlay");
     toast(`Gate 2: ${out.decision}${out.frozen ? " — plan frozen" : ""}`,
           true);
     routeFromHash();
@@ -1005,9 +1100,9 @@ async function decideGate2(pid, approve) {
 
 // -- new pursuit -----------------------------------------------------------
 
-$("newPursuitBtn").onclick = () => { $("newOverlay").hidden = false; };
+$("newPursuitBtn").onclick = () => { openDialog("newOverlay"); };
 document.querySelectorAll("[data-close]").forEach((b) => {
-  b.onclick = () => { b.closest(".overlay").hidden = true; };
+  b.onclick = () => { closeDialog(b.closest(".overlay").id); };
 });
 $("npGo").onclick = async () => {
   try {
@@ -1015,7 +1110,7 @@ $("npGo").onclick = async () => {
       method: "POST",
       body: JSON.stringify({ pursuit_id: $("npId").value.trim() }),
     });
-    $("newOverlay").hidden = true;
+    closeDialog("newOverlay");
     location.hash = `#/pursuit/${out.pursuit_id}`;
   } catch (e) { toast(e.message); }
 };
@@ -1028,9 +1123,9 @@ async function loadKb() {
     staleness: $("kbStale").value,
   });
   const [cards, proposals, accepted] = await Promise.all([
-    fetch(`/api/kb/cards?${params}`).then((r) => r.json()),
-    fetch("/api/kb/proposals?status=proposed").then((r) => r.json()),
-    fetch("/api/kb/proposals?status=accepted").then((r) => r.json()),
+    api(`/api/kb/cards?${params}`),
+    api("/api/kb/proposals?status=proposed"),
+    api("/api/kb/proposals?status=accepted"),
   ]);
 
   // P26c: a steward approves a VISIBLE change (S4) — every row shows the
@@ -1112,11 +1207,9 @@ async function decideProposal(id, decision) {
     if (input.value) fills[input.dataset.fill] = input.value;
   });
   if (Object.keys(fills).length) body.fills = { [id]: fills };
-  const res = await fetch(`/api/kb/proposals/${id}/decide`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  await api(`/api/kb/proposals/${id}/decide`, {
+    method: "POST", body: JSON.stringify(body),
   });
-  if (!res.ok) { alert((await res.json()).detail); return; }
   await loadKb();
 }
 
@@ -1148,8 +1241,7 @@ async function loadTelemetry(which) {
   const bench = which === "bench";
   $("telProd").classList.toggle("active", !bench);
   $("telBench").classList.toggle("active", bench);
-  const data = await fetch(bench ? "/api/telemetry/bench" : "/api/telemetry")
-    .then((r) => r.json());
+  const data = await api(bench ? "/api/telemetry/bench" : "/api/telemetry");
 
   let head = "";
   if (bench) {
@@ -1291,23 +1383,40 @@ function showView(name) {
     v.classList.toggle("show", v.id === `view-${name}`));
 }
 
+// W2a (B134): the sidebar highlight and the tab title follow the hash,
+// so a deep link lands lit and named — not only a click
+function setNav(view, title) {
+  document.querySelectorAll("#mainNav a").forEach((a) =>
+    a.classList.toggle("active", a.dataset.view === view));
+  document.title = `${title} — RFP Engine`;
+}
+
 async function routeFromHash() {
   const r = location.hash.match(/^#\/review\/(.+)$/);
   if (REVIEW_PID && !(r && r[1] === REVIEW_PID)) flushReviewEffort();
-  if (r) { showView("review"); await loadReview(r[1]); return; }
-  const m = location.hash.match(/^#\/pursuit\/(.+)$/);
-  if (m) { showView("detail"); await loadDetail(m[1]); return; }
-  if (location.hash.startsWith("#/pings")) {
-    showView("pings"); await loadPingInbox(); return;
+  if (r) {
+    setNav("board", `Review ${r[1]}`); showView("review");
+    await loadReview(r[1]); return;
   }
-  if (location.hash.startsWith("#/kb")) { showView("kb"); await loadKb(); return; }
+  const m = location.hash.match(/^#\/pursuit\/(.+)$/);
+  if (m) {
+    setNav("board", m[1]); showView("detail"); await loadDetail(m[1]); return;
+  }
+  if (location.hash.startsWith("#/pings")) {
+    setNav("pings", "Pings"); showView("pings"); await loadPingInbox(); return;
+  }
+  if (location.hash.startsWith("#/kb")) {
+    setNav("kb", "Knowledge base"); showView("kb"); await loadKb(); return;
+  }
   if (location.hash.startsWith("#/assistant")) {
-    showView("assistant"); await loadAssistant(); return;
+    setNav("assistant", "Assistant"); showView("assistant");
+    await loadAssistant(); return;
   }
   if (location.hash.startsWith("#/telemetry")) {
-    showView("telemetry"); await loadTelemetry("system"); return;
+    setNav("telemetry", "Telemetry"); showView("telemetry");
+    await loadTelemetry("system"); return;
   }
-  showView("board"); await loadBoard();
+  setNav("board", "Pursuits"); showView("board"); await loadBoard();
 }
 
 function wireNavExtras() {
@@ -1321,10 +1430,43 @@ function wireNavExtras() {
   };
   if ($("telProd")) $("telProd").onclick = () => loadTelemetry("system");
   if ($("telBench")) $("telBench").onclick = () => loadTelemetry("bench");
-  document.querySelectorAll("#mainNav a").forEach((a) =>
-    a.onclick = () => document.querySelectorAll("#mainNav a").forEach((x) =>
-      x.classList.toggle("active", x === a)));
 }
+
+// -- one error path (W2a, B134) --------------------------------------------
+// Every entry point the shell exposes — a route, a dialog opener, an
+// upload, a decision — runs guarded: a 401 reopens the sign-in dialog
+// (the session is gone), anything else is a sticky toast carrying the
+// server's own detail. A failed load never leaves a blank view.
+
+function failed(e) {
+  if (e instanceof ApiError && e.status === 401) {
+    OPERATOR = null; OPERATOR_ROLE = null; renderWho();
+    openDialog("opOverlay");
+    toast("your session ended — sign in to continue", true);
+    return;
+  }
+  toast(e.message, true);
+}
+
+function guarded(fn) {
+  return async function (...args) {
+    try { return await fn.apply(this, args); } catch (e) { failed(e); }
+  };
+}
+
+routeFromHash = guarded(routeFromHash);
+bootSession = guarded(bootSession);
+openGate0 = guarded(openGate0);
+openGate1 = guarded(openGate1);
+openGate2 = guarded(openGate2);
+uploadFile = guarded(uploadFile);
+decideProposal = guarded(decideProposal);
+loadShares = guarded(loadShares);
+loadReview = guarded(loadReview);
+loadKb = guarded(loadKb);
+loadTelemetry = guarded(loadTelemetry);
+cancelJob = guarded(cancelJob);
+
 wireNavExtras();
 
 window.addEventListener("hashchange", routeFromHash);

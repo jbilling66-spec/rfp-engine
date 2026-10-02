@@ -68,6 +68,15 @@ jobs:
           uv pip install --require-hashes -r requirements.lock
           uv pip install --no-deps -e .
 
+      - name: Browser for the workbench smoke test
+        # W2a (B134): tests/web/test_workbench_smoke.py drives the shell
+        # in headless chromium. The binary is not a wheel: installed here
+        # on every run (about a minute; no cache action added — B89's
+        # SHA-pin discipline prefers fewer third-party actions). The test
+        # skips BY NAME when the binary is absent and a pin on this file
+        # keeps that skip from ever hiding in CI.
+        run: .venv/bin/playwright install --with-deps chromium
+
       - name: Restricted-token list
         # Private repo: the TRIPWIRE_TOKENS secret (one token per line)
         # becomes the machine-local list, so CI runs the honest full suite.

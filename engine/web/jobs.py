@@ -49,6 +49,19 @@ _STATES = ("queued", "running", "done", "refused", "error", "cancelled",
            "orphaned")
 
 
+def cancellable(job: dict) -> bool:
+    """Whether `cancel` would land: queued work of any kind, running work
+    only of a kind that polls the flag. The shell renders Cancel on this
+    view field and never on a copy of CANCELLABLE_KINDS (W2a, B134)."""
+    if job["state"] == "queued":
+        return True
+    return job["state"] == "running" and job["kind"] in CANCELLABLE_KINDS
+
+
+def _view(job: dict) -> dict:
+    return dict(job, cancellable=cancellable(job))
+
+
 class JobRunner:
     def __init__(self, workspace: Path):
         self.workspace = Path(workspace)
@@ -220,11 +233,11 @@ class JobRunner:
 
     def jobs(self, limit: int = 40) -> list[dict]:
         out = sorted(self._jobs.values(), key=lambda j: j["id"], reverse=True)
-        return [dict(j) for j in out[:limit]]
+        return [_view(j) for j in out[:limit]]
 
     def job(self, job_id: str) -> dict | None:
         job = self._jobs.get(job_id)
-        return dict(job) if job else None
+        return _view(job) if job else None
 
     def cancel(self, job_id: str, by: str) -> dict:
         job = self._jobs.get(job_id)
@@ -238,7 +251,7 @@ class JobRunner:
                 "cancelled badge on completed work would lie")
         job["cancel"] = True
         job["message"] = f"cancel requested by {by}"
-        return dict(job)
+        return _view(job)
 
 
 class JobConflict(Exception):

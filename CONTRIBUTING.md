@@ -43,3 +43,9 @@ The README's quick start is the whole setup: create the uv venv,
 install from the lock, run `make check`. The suite is offline and
 spends nothing; it must be green before and after any change you
 propose. `make check` is also exactly what CI runs.
+
+One extra, once per machine: the workbench smoke test drives the shell in
+headless chromium, which is not a Python wheel — run
+`.venv/bin/playwright install chromium` after installing from the lock.
+Without it that one test skips by name (and CI, which installs the
+browser, never skips it).

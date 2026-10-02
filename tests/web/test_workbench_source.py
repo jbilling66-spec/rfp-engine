@@ -1,11 +1,12 @@
 """P27 wave 1 — source-level pins on the workbench shell.
 
-There is no browser harness in this repo, so each test here proves that a
-code path EXISTS in the shipped shell (a string, a handler, a fetch path),
-never that it fires in a browser; behaviour is proven through the routes'
-own web tests, and the owner's click-through before a pilot tag is the
-one browser check this repo can make (B110). A test here that reads like
-a behavioural claim is a defect (lessons.md)."""
+Each test here proves that a code path EXISTS in the shipped shell (a
+string, a handler, a fetch path), never that it fires in a browser;
+behaviour is proven through the routes' own web tests and, since P27
+wave 2 (B134), by tests/web/test_workbench_smoke.py, which drives the
+shell in headless chromium; the owner's click-through before a pilot tag
+stays the one HUMAN check (B110). A test here that reads like a
+behavioural claim is a defect (lessons.md)."""
 
 from pathlib import Path
 
@@ -124,3 +125,138 @@ def test_the_review_loop_doors_are_reached():
     assert 'OUTCOME_RESULTS = ["won", "lost", "shortlisted", "withdrawn", "no_decision"]' in js
     assert "flagged by the injection screen" in js
 
+
+# -- P27 wave 2, W2a step 1 (B134): shell hygiene ---------------------------
+
+# class tokens the script uses only as selectors (querySelectorAll hooks);
+# they carry no style and need no rule — every other token must have one
+HOOK_CLASSES = frozenset({
+    "cmt", "cmtGo", "g0ans", "g0fix", "g0skip", "g1kill", "g2dispose",
+    "g2note", "g2waive", "g2waivenote", "hfrows", "hfv", "pendDismiss",
+    "pendInclude", "pendWithdraw", "pingAnswer", "pingBtn", "pingGo",
+    "pingPropose", "revAccept", "revReject", "routeTo", "shareCopy",
+    "shareRevoke", "waiveBtn",
+})
+
+
+def _css():
+    return (STATIC / "app.css").read_text(encoding="utf-8")
+
+
+def test_the_shell_carries_no_inline_style():
+    """The CSP is default-src 'self' with no unsafe-inline, so a style
+    attribute never renders — the upload label shipped unstyled for six
+    pilot tags. Every control is styled from app.css."""
+    assert 'style="' not in _js()
+    assert 'style="' not in _html()
+
+
+def test_every_class_the_shell_uses_has_a_rule():
+    """A class with no rule is a ghost (`muted` had eighteen uses and no
+    rule). Tokens from class="…" in the shell and from classList calls,
+    minus the selector-only hooks, each match a `.name` selector."""
+    import re
+    tokens = set()
+    for src in (_html(), _js()):
+        for m in re.finditer(r'class="([^"]*)"', src):
+            tokens.update(t for t in m.group(1).split()
+                          if re.fullmatch(r"[A-Za-z][\w-]*", t))
+    tokens.update(re.findall(r'classList\.(?:toggle|add)\("([\w-]+)"', _js()))
+    css = _css()
+    ghosts = sorted(t for t in tokens - HOOK_CLASSES
+                    if not re.search(r"\." + re.escape(t) + r"(?![\w-])", css))
+    assert not ghosts, ghosts
+    # the allowlist is exact: a hook that gained a rule leaves the list
+    styled_hooks = sorted(t for t in HOOK_CLASSES
+                          if re.search(r"\." + re.escape(t) + r"(?![\w-])", css))
+    assert not styled_hooks, styled_hooks
+
+
+def test_the_stage_colors_cover_every_stage_the_server_names():
+    """The server decides the stage (state.py); the shell only colours it.
+    Every literal `_stage_and_next` can return, plus the `corrupt`
+    override, has a STAGE_COLOR entry — an unknown stage fell through to
+    plan-blue, so a corrupt pursuit read as healthy."""
+    import re
+    state = (SERVER.parent / "state.py").read_text(encoding="utf-8")
+    stages = set(re.findall(r'return "([a-z_0-9]+)",', state)) | {"corrupt"}
+    block = re.search(r"const STAGE_COLOR = \{(.*?)\};", _js(), re.S).group(1)
+    keys = set(re.findall(r"(\w+):", block))
+    assert stages <= keys, sorted(stages - keys)
+    assert 'corrupt: "stop"' in block
+
+
+# -- P27 wave 2, W2a step 2 (B134): one error path; the sidebar follows ----
+
+GUARDED_ENTRY_POINTS = (
+    "routeFromHash", "bootSession", "openGate0", "openGate1", "openGate2",
+    "uploadFile", "decideProposal", "loadShares", "loadReview", "loadKb",
+    "loadTelemetry",
+)
+
+
+def test_the_shell_has_one_error_path():
+    """A failed load used to leave a blank view (401) or an unhandled
+    rejection; one alert() and three bare `.then(r => r.json())` fetches
+    bypassed api(). Now api() throws a typed ApiError and every entry
+    point is wrapped: 401 reopens the sign-in dialog, anything else is a
+    sticky toast carrying the server's detail. Existence, not firing."""
+    js = _js()
+    assert js.count("alert(") == 0
+    assert js.count(".then((r) => r.json())") == 0
+    assert "class ApiError extends Error" in js
+    assert "e.status === 401" in js and "function guarded(fn)" in js
+    for name in GUARDED_ENTRY_POINTS:
+        assert f"{name} = guarded({name});" in js, name
+    # the raw upload keeps its wire shape: no JSON header on a PUT body
+    assert "raw: true" in js and 'headers: raw ? {} :' in js
+
+
+def test_the_sidebar_and_title_follow_the_hash():
+    """A deep link to #/kb left "Pursuits" lit and the tab titled by the
+    static <title>: the highlight was set only by the click handler.
+    routeFromHash now names the view and the title on every route."""
+    js = _js()
+    assert "function setNav(view, title)" in js
+    assert "a.dataset.view === view" in js and "document.title = " in js
+    for view in ("board", "pings", "kb", "assistant", "telemetry"):
+        assert f'setNav("{view}"' in js, view
+    assert "x.classList.toggle(\"active\", x === a)" not in js
+
+
+# -- P27 wave 2, W2a step 3 (B134): the job strip survives --------------------
+
+def test_the_job_strip_resumes_and_cancels():
+    """A reload lost the strip (no jobs fetch at boot) and a failed poll
+    left it alive forever (no error path in the tick). Boot re-attaches
+    to a live job from the jobs list; three failed ticks give up by name;
+    Cancel renders on the server's `cancellable`. Existence, not firing."""
+    js, html = _js(), _html()
+    assert '"/api/jobs"' in js and "function resumeJobs()" in js
+    assert "/cancel`" in js and 'method: "POST"' in js
+    assert ">Cancel</button>" in html and 'id="jobCancel"' in html
+    assert "job.cancellable" in js
+    assert "JOB_FAILS" in js and "++JOB_FAILS < 3" in js
+    assert "reload to re-attach" in js
+
+
+# -- P27 wave 2, W2a step 4 (B134): dialogs are dialogs ---------------------
+
+def test_every_dialog_has_its_semantics_and_one_opener():
+    """Ten overlays shipped as bare divs: no role, no label, no Esc, no
+    focus trap, focus never returned. Every modal now carries
+    role=dialog / aria-modal / aria-labelledby, and one openDialog /
+    closeDialog pair owns focus; the sign-in dialog ignores Esc because
+    it is required. Existence, not firing — the smoke test fires it."""
+    html, js = _html(), _js()
+    overlays = html.count('class="overlay"')
+    assert overlays == 10
+    assert html.count('role="dialog"') == overlays
+    assert html.count('aria-modal="true"') == overlays
+    assert html.count('aria-labelledby="') == overlays
+    assert 'Overlay").hidden = false' not in js
+    assert 'Overlay").hidden = true' not in js
+    assert "function openDialog(id)" in js and "function closeDialog(id)" in js
+    assert 'e.key === "Escape"' in js and 'e.key !== "Tab") return;' in js
+    assert 'ov.id === "opOverlay"' in js
+    assert 'role="status"' in html and html.count('aria-live="polite"') >= 2

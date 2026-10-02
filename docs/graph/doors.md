@@ -53,9 +53,9 @@ on purpose. The pin is on paths, not methods.
 | method | path | purpose | gate | surface |
 |---|---|---|---|---|
 | POST | `/api/pursuits/{pursuit_id}/jobs` | Submit the `advance` job — runs the pipeline to the next gate | operator; 409 on conflict | ui |
-| GET | `/api/jobs` | All jobs | open | api |
+| GET | `/api/jobs` | All jobs — the shell re-attaches to a live job at boot | open | ui |
 | GET | `/api/jobs/{job_id}` | One job's status | open | ui |
-| POST | `/api/jobs/{job_id}/cancel` | Cooperative cancel | operator | api |
+| POST | `/api/jobs/{job_id}/cancel` | Cooperative cancel — the strip's Cancel when the job says `cancellable` | operator | ui |
 
 ### Gates and waivers
 

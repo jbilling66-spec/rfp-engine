@@ -155,3 +155,20 @@ def test_journal_rehydration_flips_dead_running_to_orphaned(tmp_path):
     nxt = runner.submit(kind="advance", pursuit_id="pur_c", by="x",
                         at=FIXED_AT, target=lambda job: ("done", "ok"))
     assert nxt["id"] == "job-0003"
+
+
+def test_a_job_says_whether_it_can_be_cancelled(demo_client):
+    """W2a (B134): the shell renders Cancel only when the SERVER says so —
+    the set of cancellable kinds is the lane's, never the shell's. The
+    predicate is pure and public; every job view carries it."""
+    from engine.web.jobs import cancellable
+    assert cancellable({"state": "queued", "kind": "advance"}) is True
+    assert cancellable({"state": "running", "kind": "advance"}) is False
+    assert cancellable({"state": "running", "kind": "revise"}) is True
+    assert cancellable({"state": "done", "kind": "revise"}) is False
+    client, _ = demo_client
+    rows = client.get("/api/jobs").json()
+    assert rows and all(isinstance(j["cancellable"], bool) for j in rows)
+    done = rows[0]
+    assert done["cancellable"] is False
+    assert client.get(f"/api/jobs/{done['id']}").json()["cancellable"] is False

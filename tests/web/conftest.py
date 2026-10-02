@@ -25,6 +25,49 @@ def offline_app(tmp_path):
         yield client
 
 
+@pytest.fixture(scope="module")
+def live_server(tmp_path_factory):
+    """W2a (B134): a real HTTP server for the browser smoke test — the
+    same app object a TestClient seeded in-process (one pursuit, three
+    inbox files, past gate 0 under FakeCaller), then uvicorn on a free
+    loopback port in a daemon thread. Yields (base_url, workspace)."""
+    import socket
+    import threading
+
+    import uvicorn
+
+    from engine.cli.slice import DEMO_PACK, DEMO_RAMBLE, DEMO_WORKBOOK
+
+    ws = tmp_path_factory.mktemp("web-smoke") / "ws"
+    app = create_app(ws, now=lambda: FIXED_AT)  # default = FakeCaller
+    with TestClient(app, base_url="http://127.0.0.1") as seed:
+        sign_in(seed, "Sam Seeder")
+        seed.post("/api/pursuits", json={"pursuit_id": "pur_smoke"})
+        for name, path in (("demo-twin.xlsx", DEMO_WORKBOOK),
+                           ("ramble.md", DEMO_RAMBLE),
+                           ("research-pack.md", DEMO_PACK)):
+            seed.put(f"/api/pursuits/pur_smoke/inbox/{name}",
+                     content=path.read_bytes())
+        done = advance_past_gate0(seed, "pur_smoke")
+        assert "awaiting_gate at gate_1" in done["message"], done
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(
+        app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.time() + 30
+    while not server.started and time.time() < deadline:
+        time.sleep(0.05)
+    assert server.started, "uvicorn did not start within 30s"
+    try:
+        yield f"http://127.0.0.1:{port}", ws
+    finally:
+        server.should_exit = True
+        thread.join(10)
+
+
 def sign_in(client, name="Jordan Reviewer", role="pursuit_lead") -> str:
     """Declares name AND role — the role is the session's, never a
     payload field (P27 wave 1, M-9)."""

@@ -134,6 +134,8 @@ def test_every_wave_1_door_is_surfaced():
 
 # The doors that stay headless on purpose — each shrinks this set
 # deliberately (wave 2, A5), never by drift.
+# W2a step 3 (B134): /api/jobs and /api/jobs/{job_id}/cancel left this set —
+# the strip re-attaches at boot and offers Cancel on the server's word.
 API_ROWS = frozenset({
     ("GET", "/api/health"),
     ("GET", "/api/pursuits/{pursuit_id}/runs"),
@@ -141,8 +143,6 @@ API_ROWS = frozenset({
     ("GET", "/api/orgs"),
     ("POST", "/api/orgs"),
     ("POST", "/api/orgs/{org_id}/notes"),
-    ("GET", "/api/jobs"),
-    ("POST", "/api/jobs/{job_id}/cancel"),
     ("GET", "/api/pursuits/{pursuit_id}/revisions"),
     ("GET", "/api/pursuits/{pursuit_id}/revisions/{n}"),
     ("POST", "/api/pursuits/{pursuit_id}/addenda"),
