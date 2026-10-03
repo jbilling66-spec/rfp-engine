@@ -35,15 +35,39 @@
     <section id="view-board" class="view show">
       <header class="viewhead">
         <h1>Pursuits</h1>
-        <button id="newPursuitBtn">+ New pursuit</button>
+        <div class="toolbar">
+          <label class="muted" for="boardSort">sort by</label>
+          <select id="boardSort">
+            <option value="stage">stage</option>
+            <option value="id">id</option>
+            <option value="cost">cost</option>
+          </select>
+          <button id="boardFilter" class="ghost" aria-pressed="false">waiting on you</button>
+          <span id="boardCount" class="muted mono"></span>
+          <button id="newPursuitBtn">+ New pursuit</button>
+        </div>
       </header>
       <div id="boardRows" class="rows"></div>
     </section>
     <section id="view-detail" class="view">
-      <a href="#/" class="back">&larr; all pursuits</a>
-      <header class="viewhead"><h1 id="detailTitle"></h1></header>
+      <nav class="crumbs" aria-label="where you are"><a href="#/">Pursuits</a><span class="sep">/</span><span id="crumbPid"></span></nav>
+      <header class="viewhead">
+        <div><h1 id="detailTitle"></h1><div id="detailTrack"></div></div>
+      </header>
+      <div class="detail-grid">
+      <aside class="rail" id="detailRail">
+        <div class="rail-k">next</div>
+        <p class="rail-next" id="railNext"></p>
+        <div class="rail-k">stage</div>
+        <div class="rail-v" id="railStage"></div>
+        <div class="rail-k">open gaps</div>
+        <div class="rail-v" id="railGaps"></div>
+        <div class="rail-k">gates</div>
+        <div class="rail-v" id="railGates"></div>
+        <div class="actions" id="detailActions"></div>
+      </aside>
+      <div class="detail-main">
       <div id="detailFacts" class="facts"></div>
-      <div class="actions" id="detailActions"></div>
       <div id="detailSections" class="rows"></div>
       <section id="detailFinish" hidden>
         <h2 class="sub">Finish</h2>
@@ -94,9 +118,11 @@
         </div>
         <div id="runRecords" class="rows" hidden></div>
       </section>
+      </div>
+      </div>
     </section>
     <section id="view-review" class="view">
-      <a href="#/" class="back" id="reviewBack">&larr; pursuit</a>
+      <nav class="crumbs" aria-label="where you are"><a href="#/">Pursuits</a><span class="sep">/</span><a id="reviewBack" href="#/"></a><span class="sep">/</span><span>Review</span></nav>
       <header class="viewhead"><h1 id="reviewTitle"></h1>
         <div><button id="roundsBtn" class="ghost" hidden>Show rounds</button>
           <button id="reviseBtn">Revise (apply pending)</button>

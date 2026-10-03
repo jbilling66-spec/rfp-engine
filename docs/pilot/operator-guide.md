@@ -31,11 +31,12 @@ make is recorded under that name and role; the role sets the rate the
 effort figures use, so choose honestly. If the sidebar shows
 **not signed in**, press **declare operator** to bring the prompt back.
 
-The sidebar has five tabs: **Pursuits** (the board you will live on),
+The sidebar has six tabs: **Pursuits** (the board you will live on),
 **Pings** (questions routed to experts, across pursuits),
 **Knowledge base** (the firm's reusable answer library), **Assistant**
 (a question-answering helper grounded in the docs and the library), and
-**Telemetry** (system numbers; you can ignore it).
+**Telemetry** (system numbers; you can ignore it), and **Operations**
+(every pursuit's health on one screen, for the back-end human).
 
 ## Starting a pursuit
 
@@ -46,7 +47,19 @@ The sidebar has five tabs: **Pursuits** (the board you will live on),
    RFP workbook (.xlsx). You can also upload an optional ramble.md (your
    voice notes about the deal) and an optional research-pack.md.
 
+Under every row on the board, and under the pursuit's title, a bar of
+nine segments shows where the pursuit stands: green for the stages
+behind it, amber for the one it is at now, grey for what is still to
+come. The engine decides the stage; the bar only draws it. The board
+is ordered furthest-along first; **sort by** offers id and cost as well,
+and **waiting on you** narrows it to the pursuits paused on a person —
+a gate or the review — with the count on the button.
+
 ## Advancing — and the pause
+
+The panel on the right of a pursuit is its orientation: what to do
+next, which stage of nine it is at, how many gaps are open, each gate's
+decision with who made it, and the buttons that apply right now.
 
 Press **Advance** to run the engine as far as it can go. It stops honestly:
 at a gate that needs your decision, or on gaps that need answers. A status
@@ -101,7 +114,8 @@ the steward reviews it before it is ever reused.
 
 ## Review and revision
 
-When drafting is done, press **Open review**. Read each section; press
+When drafting is done, press **Open review** — the trail above the
+title leads back to the pursuit and to the board. Read each section; press
 **Comment** to attach feedback to a section. When your comments are in,
 press **Revise (apply pending)** — the engine applies the pending comments
 and produces the next revision. Repeat until it reads right. A pending

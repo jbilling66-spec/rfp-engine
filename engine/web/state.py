@@ -22,6 +22,38 @@ from engine.workspace import PursuitDir
 
 _STAGE_ORDER = ("intake", "gate_0", "research", "gate_1", "planning",
                 "gate_2", "drafting", "validation")
+# P30a (B139): the nine stations the stage track draws — the eight
+# working stages plus the terminal review; declined and corrupt sit
+# off the pipeline and get no station number (three-state)
+PIPELINE = _STAGE_ORDER + ("review",)
+# the gate records the artifacts carry: (station, key, artifact)
+_GATE_RECORDS = (("gate_0", "gate0", "brief"), ("gate_1", "gate1", "brief"),
+                 ("gate_2", "gate2", "plan"))
+
+
+def _stage_pos(row: dict) -> None:
+    """The station number for the shell's stage track and sort — 1-based
+    into PIPELINE; absent off the pipeline, never defaulted."""
+    if row["stage"] in PIPELINE:
+        row["stage_n"] = PIPELINE.index(row["stage"]) + 1
+        row["stage_count"] = len(PIPELINE)
+
+
+def _open_gaps(plan: dict) -> int:
+    gaps = [g for s in plan.get("sections", []) for g in s.get("gaps", [])]
+    return sum(1 for g in gaps if g.get("status") in ("open", "pinged"))
+
+
+def _gates(brief: dict | None, plan: dict | None) -> dict:
+    """The decided gates, read from the records the gates themselves
+    wrote into the artifacts (`approved_by`, `at`); only approvals leave
+    a record, so a declined pursuit shows through its stage instead."""
+    out: dict = {}
+    for station, key, which in _GATE_RECORDS:
+        rec = ((brief if which == "brief" else plan) or {}).get(key)
+        if isinstance(rec, dict) and rec.get("approved_by") and rec.get("at"):
+            out[station] = {"by": rec["approved_by"], "at": rec["at"]}
+    return out
 
 
 class _Corrupt(list):
@@ -167,14 +199,13 @@ def board(workspace: Path) -> list[dict]:
         stage, next_action = _stage_and_next(root, brief, plan, corrupt)
         row = {"pursuit_id": root.name, "stage": stage, "next": next_action,
                "totals": _run_totals(root, corrupt)}
+        if brief is not None and (brief.get("buyer") or {}).get("name"):
+            row["buyer_name"] = brief["buyer"]["name"]  # P30a: as the detail
         run_status = _last_run_status(root, corrupt)
         if run_status is not None:
             row["last_run_status"] = run_status
         if plan is not None:
-            gaps = [g for s in plan.get("sections", [])
-                    for g in s.get("gaps", [])]
-            row["open_gaps"] = sum(
-                1 for g in gaps if g.get("status") in ("open", "pinged"))
+            row["open_gaps"] = _open_gaps(plan)
         envelope = _read_json(root / "drafts" / "draft.json", corrupt)
         if envelope is not None:
             row["revision_n"] = envelope.get("revision_n")
@@ -190,6 +221,7 @@ def board(workspace: Path) -> list[dict]:
             row["stage"], row["next"] = "corrupt", (
                 "a workspace file is unreadable — see the recovery "
                 "runbook: " + "; ".join(corrupt))
+        _stage_pos(row)  # after the corrupt override: no station then
         rows.append(row)
     return rows
 
@@ -350,10 +382,15 @@ def detail(workspace: Path, pursuit_id: str) -> dict | None:
                       for g in s.get("gaps", [])]}
             for s in plan.get("sections", [])]
         out["obligations"] = plan.get("obligations", [])
+        out["open_gaps"] = _open_gaps(plan)
     annotated = _read_json(root / "drafts" / "annotated-draft.json")
     if annotated is not None:
         out["packaging"] = annotated.get("packaging")
         out["revision_n"] = annotated.get("revision_n")
+    gates = _gates(brief, plan)  # P30a (B139): the rail's decided gates
+    if gates:
+        out["gates"] = gates
+    _stage_pos(out)
     out["finishing"] = _finishing(pursuit, root, annotated is not None)
     return out
 

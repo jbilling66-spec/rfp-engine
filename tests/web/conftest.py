@@ -50,6 +50,10 @@ def live_server(tmp_path_factory):
                      content=path.read_bytes())
         done = advance_past_gate0(seed, "pur_smoke")
         assert "awaiting_gate at gate_1" in done["message"], done
+        # P30a 5 (B139): a third, BARE pursuit — intake, nothing uploaded,
+        # zero spend — so the board's filter and stage sort have something
+        # to discriminate (stations 4 / 2 / 1)
+        seed.post("/api/pursuits", json={"pursuit_id": "pur_blank"})
     # W2b 7 (B136, the owner's call): a second pursuit, REVIEWED, with one
     # revise round behind it, so the diff view, the Learned dialog and the
     # finish panel's hygiene line are proven in a browser — the offline

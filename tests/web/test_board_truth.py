@@ -85,3 +85,14 @@ def test_last_run_status_picks_the_numerically_latest_run(tmp_path):
             "ts": "2026-09-02T10:00:00Z", "record_type": "run_end",
             "run": {"status": status, "totals": {}}}) + "\n")
     assert _row(ws)["last_run_status"] == "failed"  # run_0010, not run_0009
+
+
+def test_the_board_row_names_the_buyer_only_when_the_brief_does(tmp_path):
+    """P30a (B139): the board row carries the buyer the way the detail
+    does — present when the brief names one, absent otherwise."""
+    ws, pursuit = _pursuit(tmp_path)
+    assert "buyer_name" not in _row(ws)
+    brief = json.loads((pursuit.root / "brief.json").read_text())
+    brief["buyer"] = {"name": "Example Authority"}
+    (pursuit.root / "brief.json").write_text(json.dumps(brief))
+    assert _row(ws)["buyer_name"] == "Example Authority"

@@ -20,6 +20,24 @@ const STAGE_COLOR = {
 // amber, an open one blue, anything else red; completed is not shown
 const RUN_COLOR = { in_flight: "plan", awaiting_gate: "draft",
   awaiting_gap: "draft", failed: "stop", aborted: "stop", corrupt: "stop" };
+// P30a (B139): the nine stations the stage track draws — pinned equal to
+// the server's PIPELINE by a contract test; position and sort come from
+// the server's stage_n, this list only names the segments
+const STAGE_ORDER = ["intake", "gate_0", "research", "gate_1", "planning",
+  "gate_2", "drafting", "validation", "review"];
+
+function stageTrack(stage, labeled) {
+  // from the CURRENT stage only — a replanned pursuit honestly reads
+  // "drafting" again; declined / corrupt draw nothing (the stop chip)
+  const at = STAGE_ORDER.indexOf(stage);
+  if (at < 0) return "";
+  const segs = STAGE_ORDER.map((name, i) => {
+    const state = i < at ? "done" : (i === at ? "current" : "todo");
+    return `<span class="seg" data-state="${state}"><span class="lbl">${esc(name)}</span></span>`;
+  }).join("");
+  const cls = labeled ? "track labeled" : "track";
+  return `<div class="${cls}" role="img" aria-label="stage ${at + 1} of ${STAGE_ORDER.length}: ${esc(stage)}">${segs}</div>`;
+}
 
 let OPERATOR = null;
 let OPERATOR_ROLE = null;  // the session's role — the server records it,
@@ -220,11 +238,40 @@ window.addEventListener("pagehide", flushReviewEffort);
 
 // -- board -----------------------------------------------------------------
 
+// P30a 5 (B139): the board keeps the server's rows and re-renders on sort
+// or filter. Order is the server's station number (stage_n — pipeline
+// order, furthest first; declined then corrupt last), id, or cost; the
+// filter keeps the stages that wait on a person. Ties break on id.
+let BOARD = null;
+let BOARD_WAITING = false;
+const WAITING = new Set(["gate_0", "gate_1", "gate_2", "review"]);
+const cost = (r) => ((r.totals || {}).cost_usd || 0);
+function stageRank(r) {
+  return r.stage_n ?? (r.stage === "declined" ? -1 : -2);
+}
+const byId = (a, b) => a.pursuit_id.localeCompare(b.pursuit_id);
+const byStage = (a, b) => (stageRank(b) - stageRank(a)) || byId(a, b);
+const byCost = (a, b) => (cost(b) - cost(a)) || byId(a, b);
+
 async function loadBoard() {
-  const rows = await api("/api/pursuits");
-  $("boardRows").innerHTML = rows.length ? rows.map((r) => `
+  BOARD = await api("/api/pursuits");
+  renderBoard();
+}
+
+function renderBoard() {
+  if (!BOARD) return;
+  const waiting = BOARD.filter((r) => WAITING.has(r.stage));
+  const shown = (BOARD_WAITING ? waiting : BOARD).slice();
+  shown.sort({ stage: byStage, id: byId, cost: byCost }[$("boardSort").value] || byStage);
+  $("boardFilter").textContent = `waiting on you (${waiting.length})`;
+  $("boardFilter").setAttribute("aria-pressed", String(BOARD_WAITING));
+  $("boardFilter").classList.toggle("active", BOARD_WAITING);
+  $("boardCount").textContent = `${shown.length} of ${BOARD.length}`;
+  const empty = BOARD.length ? "nothing is waiting on you" : "no pursuits yet";
+  $("boardRows").innerHTML = shown.length ? shown.map((r) => `
     <div class="row" data-pid="${esc(r.pursuit_id)}">
       <span class="id">${esc(r.pursuit_id)}</span>
+      ${r.buyer_name ? `<span class="buyer">${esc(r.buyer_name)}</span>` : ""}
       <span class="chip ${esc(STAGE_COLOR[r.stage] || "plan")}">${esc(r.stage)}</span>
       ${r.packaging && r.packaging.blocked
         ? '<span class="chip stop">BLOCKED</span>' : ""}
@@ -238,7 +285,8 @@ async function loadBoard() {
         &middot; $${esc((r.totals.cost_usd).toFixed(4))}
         <span title="run totals, not a registered metric">(run totals)</span>
       </div>
-    </div>`).join("") : '<div class="meta">no pursuits yet</div>';
+      ${stageTrack(r.stage, false)}
+    </div>`).join("") : `<div class="meta">${empty}</div>`;
   for (const el of $("boardRows").querySelectorAll(".row")) {
     el.onclick = () => { location.hash = `#/pursuit/${el.dataset.pid}`; };
   }
@@ -249,9 +297,23 @@ async function loadBoard() {
 async function loadDetail(pid) {
   const d = await api(`/api/pursuits/${encodeURIComponent(pid)}`);
   $("detailTitle").textContent = d.pursuit_id;
+  $("detailTrack").innerHTML = stageTrack(d.stage, true);
+  // P30a 4 (B139): the rail — every line is the server's word
+  $("crumbPid").textContent = d.pursuit_id;
+  $("railNext").textContent = d.next;
+  $("railStage").textContent = d.stage_n
+    ? `Stage ${d.stage_n} of ${d.stage_count}` : d.stage;
+  $("railGaps").textContent = d.open_gaps ? `${d.open_gaps} open` : "none open";
+  $("railGates").innerHTML = ["gate_0", "gate_1", "gate_2"].map((g) => {
+    const rec = (d.gates || {})[g];
+    const word = rec
+      ? `decided by ${esc(rec.by)} &middot; ${esc(rec.at)}`
+      : (g === "gate_1" && d.stage === "declined"
+        ? "declined" : '<span class="muted">not yet</span>');
+    return `<div class="gate-row"><span class="mono">${esc(g)}</span><span>${word}</span></div>`;
+  }).join("");
   $("detailFacts").innerHTML =
-    `stage <b>${esc(d.stage)}</b> &middot; next: ${esc(d.next)}`
-    + (d.buyer_name ? ` &middot; buyer <b>${esc(d.buyer_name)}</b>` : "")
+    (d.buyer_name ? `buyer <b>${esc(d.buyer_name)}</b>` : "buyer not named yet")
     + ` &middot; cost $${esc(d.totals.cost_usd.toFixed(4))} (run totals)`
     + (d.packaging ? ` &middot; packaging ${d.packaging.blocked
         ? '<span class="chip stop">BLOCKED</span>'
@@ -780,6 +842,7 @@ async function loadReview(pid) {
   if (REVIEW_PID !== pid) { REVIEW_PID = pid; clockStart(); }
   $("reviewTitle").textContent = `${m.pursuit_id} — revision ${m.revision_n}`;
   $("reviewBack").href = `#/pursuit/${encodeURIComponent(pid)}`;
+  $("reviewBack").textContent = pid;  // P30a 4: the crumb names the pursuit
   $("reviewFacts").innerHTML =
     `packaging ${m.packaging.blocked
       ? `<span class="chip stop">BLOCKED (${esc(String(
@@ -1000,12 +1063,11 @@ function renderOps() {
   if (!OPS) return;
   const key = $("opsSort").value;
   const rows = OPS.pursuits.slice();
-  const cost = (r) => ((r.totals || {}).cost_usd || 0);
   const jobAt = (r) => ((OPS.latest[r.pursuit_id] || {}).at || "");
   const by = {
-    stage: (a, b) => String(a.stage).localeCompare(String(b.stage)) || a.pursuit_id.localeCompare(b.pursuit_id),
+    stage: byStage,  // P30a 5: pipeline order (the server's stage_n), not alphabetical
     run: (a, b) => String(a.last_run_status || "").localeCompare(String(b.last_run_status || "")),
-    cost: (a, b) => cost(b) - cost(a),
+    cost: byCost,
     job: (a, b) => jobAt(b).localeCompare(jobAt(a)),
   }[key] || ((a, b) => 0);
   rows.sort(by);
@@ -1726,6 +1788,10 @@ function wireNavExtras() {
   };
   if ($("telProd")) $("telProd").onclick = () => loadTelemetry("system");
   if ($("opsSort")) $("opsSort").onchange = () => renderOps();
+  if ($("boardSort")) $("boardSort").onchange = () => renderBoard();
+  if ($("boardFilter")) $("boardFilter").onclick = () => {
+    BOARD_WAITING = !BOARD_WAITING; renderBoard();
+  };
   if ($("telBench")) $("telBench").onclick = () => loadTelemetry("bench");
 }
 

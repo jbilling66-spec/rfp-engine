@@ -336,3 +336,90 @@ def test_the_finish_panel_renders_hygiene_and_stale():
     assert 'r.status === "drifted"' in js and ">stale</span>" in js
     assert "hygiene not recorded" in js
     assert ".hygiene" in css
+
+
+def test_the_stylesheet_is_built_on_tokens():
+    """P30a step 2 (B139): the shell's type and colour come from tokens
+    on :root — system serif display + mono micro-labels, a six-step
+    scale, tinted chips whose ink clears AA — so no rule outside :root
+    carries a literal pixel font size, the mono stack is declared once,
+    and a chip is never white-on-colour."""
+    import re
+    css = _css()
+    for token in ("--font-display", "--font-mono", "--fs-xs", "--fs-sm",
+                  "--fs-md", "--fs-base", "--fs-lg", "--fs-xl",
+                  "--plan-tint", "--plan-ink", "--stop-tint", "--stop-ink"):
+        assert f"{token}:" in css, token
+    assert css.count("ui-monospace") == 1
+    after_root = css[css.index("}", css.index(":root{")) + 1:]
+    assert not re.findall(r"font(?:-size)?:\s*\d+px", after_root), "px font size outside :root"
+    chip = css[css.index(".chip{"):css.index(".facts{")]
+    assert "#fff" not in chip and "--plan-ink" in chip and "--stop-tint" in chip
+    assert "var(--font-display)" in css[css.index("h1{"):css.index("button{")]
+
+
+def test_the_shell_stage_order_is_the_servers():
+    """P30a step 3 (B139): the stage track draws the server's nine
+    stations — STAGE_ORDER in the shell equals state.PIPELINE, every
+    station has a colour, and the track derives from the CURRENT stage
+    (the server's word), never from checkpoint stems."""
+    import re
+    from engine.web import state
+    js = _js()
+    order = re.search(r"const STAGE_ORDER = \[(.*?)\];", js, re.S).group(1)
+    assert re.findall(r'"([a-z_0-9]+)"', order) == list(state.PIPELINE)
+    block = re.search(r"const STAGE_COLOR = \{(.*?)\};", js, re.S).group(1)
+    assert set(state.PIPELINE) <= set(re.findall(r"(\w+):", block))
+    assert "function stageTrack(" in js and 'data-state="' in js
+    assert "completed_stages" not in js
+    html, css = _html(), _css()
+    assert 'id="detailTrack"' in html
+    for sel in (".track", ".seg", ".lbl", '.seg[data-state="current"]'):
+        assert sel in css, sel
+
+
+def test_the_detail_rail_and_crumbs_are_in_the_shell():
+    """P30a step 4 (B139): the detail's right rail — next, stage N of M,
+    open gaps, the decided gates, the actions — sits first in DOM (tab
+    order) and second on screen; a crumb trail replaces the back links
+    on detail and review; every value is the server's."""
+    html, js, css = _html(), _js(), _css()
+    for i in ('id="detailRail"', 'id="railNext"', 'id="railStage"',
+              'id="railGaps"', 'id="railGates"', 'id="crumbPid"',
+              'id="reviewBack"'):
+        assert i in html, i
+    assert html.count('class="crumbs"') == 2 and 'class="back"' not in html
+    assert (html.index('id="detailRail"') < html.index('id="detailActions"')
+            < html.index('class="detail-main"'))
+    assert "d.gates" in js and "Stage ${d.stage_n} of ${d.stage_count}" in js
+    assert 'class="gate-row"' in js and "not yet" in js
+    for sel in (".detail-grid", ".rail", ".rail-k", ".rail-next", ".crumbs",
+                ".gate-row", ".detail-main"):
+        assert sel in css, sel
+    assert "max-width:1240px" in css
+    # the look caught it: the sidebar's `nav a{display:block}` reached the
+    # crumb trail and stacked it — the crumbs' own rule puts it back inline
+    assert ".crumbs a{display:inline" in css
+
+
+def test_the_board_sorts_and_filters_on_the_servers_words():
+    """P30a step 5 (B139): the board names the buyer the server sends,
+    sorts by the server's station number (pipeline order, furthest
+    first; declined and corrupt last), by id, or by cost, and filters
+    to the stages that wait on a person — a set pinned under the
+    server's PIPELINE. The ops view sorts stage the same way, no longer
+    alphabetically."""
+    import re
+    from engine.web import state
+    html, js, css = _html(), _js(), _css()
+    for i in ('id="boardSort"', 'id="boardFilter"', 'id="boardCount"',
+              ">sort by<", ">waiting on you<"):
+        assert i in html, i
+    assert "function stageRank(" in js and "function renderBoard()" in js
+    assert "r.buyer_name" in js and "r.stage_n" in js
+    waiting = re.search(r"const WAITING = new Set\(\[(.*?)\]\)", js).group(1)
+    assert set(re.findall(r'"([a-z_0-9]+)"', waiting)) <= set(state.PIPELINE)
+    assert "localeCompare(String(b.stage))" not in js
+    assert "stage: byStage" in js and "cost: byCost" in js
+    for sel in (".toolbar", ".buyer"):
+        assert sel in css, sel

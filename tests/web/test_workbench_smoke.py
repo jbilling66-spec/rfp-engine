@@ -73,6 +73,30 @@ def test_signing_in_lands_on_the_board_with_the_seeded_pursuit(walk):
     row = page.locator("#boardRows .row", has_text="pur_smoke")
     expect(row).to_have_count(1)
     expect(row).to_contain_text("gate_1")
+    # P30a 3: the stage track on the row — one amber segment, the current
+    expect(row.locator(".track .seg[data-state='current']")).to_have_count(1)
+
+def test_the_board_filters_to_what_waits_on_a_person_and_sorts_by_station(walk):
+    """P30a 5: three seeded pursuits — gate_1 (station 4), the reviewed
+    one at gate_0 on the board (2), and a bare one at intake (1). The
+    filter keeps the two paused on a person and drops the bare one; stage
+    sort puts the bare one last, id sort puts it first. Every word is the
+    server's: the station number, the stage, the count."""
+    base, page, _ = walk
+    expect(page.locator("#boardFilter")).to_have_text("waiting on you (2)")
+    expect(page.locator("#boardCount")).to_have_text("3 of 3")
+    ids = page.locator("#boardRows .row .id")
+    expect(ids.last).to_have_text("pur_blank")           # stage: intake last
+    page.select_option("#boardSort", "id")
+    expect(ids.first).to_have_text("pur_blank")          # id: alphabetical
+    page.click("#boardFilter")
+    expect(page.locator("#boardCount")).to_have_text("2 of 3")
+    expect(page.locator("#boardRows .row", has_text="pur_blank")).to_have_count(0)
+    expect(page.locator("#boardFilter")).to_have_attribute("aria-pressed", "true")
+    page.click("#boardFilter")
+    expect(page.locator("#boardCount")).to_have_text("3 of 3")
+    page.select_option("#boardSort", "stage")
+    expect(ids.last).to_have_text("pur_blank")
 
 
 @pytest.mark.parametrize("hash_, view, nav, title", TABS)
@@ -105,6 +129,14 @@ def test_the_detail_screen_renders_the_server_decided_actions(walk):
     expect(page.locator("#gate2Btn")).to_have_count(0)  # and nothing else
     expect(page.locator("label.upload")).to_be_visible()
     expect(page).to_have_title("pur_smoke — RFP Engine")
+    expect(page.locator("#detailTrack .seg")).to_have_count(9)  # P30a 3
+    # P30a 4: the rail — the server's next sentence, the station, the
+    # decided gate, the actions inside the rail; the crumb names the pursuit
+    expect(page.locator("#railStage")).to_have_text("Stage 4 of 9")
+    expect(page.locator("#railNext")).to_contain_text("Gate 1")
+    expect(page.locator("#railGates")).to_contain_text("decided by")
+    expect(page.locator("#detailRail #gate1Btn")).to_be_visible()
+    expect(page.locator("#crumbPid")).to_have_text("pur_smoke")
 
 
 def test_a_dialog_opens_focused_closes_on_escape_and_returns_focus(walk):
