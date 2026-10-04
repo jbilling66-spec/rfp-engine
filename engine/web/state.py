@@ -390,9 +390,35 @@ def detail(workspace: Path, pursuit_id: str) -> dict | None:
     gates = _gates(brief, plan)  # P30a (B139): the rail's decided gates
     if gates:
         out["gates"] = gates
+    outcome = _outcome(root)  # P30b (B141): what the Outcome panel shows
+    if outcome is not None:
+        out["outcome"] = outcome
     _stage_pos(out)
     out["finishing"] = _finishing(pursuit, root, annotated is not None)
     return out
+
+
+def _outcome(root: Path) -> dict | None:
+    """P30b (B141): the last recorded outcome — `result`, `at`, `by` —
+    read back from the events lane through the walker's own collapse
+    (D30: a revised copy wins by event_id), so the Outcome panel shows
+    what was recorded. None until an outcome event exists; a lane the
+    reader cannot parse reads as none here — the board's `corrupt`
+    override is the place that names it."""
+    path = root / "events" / "events.jsonl"
+    if not path.exists():
+        return None
+    from engine.metrics.walker import last_wins
+    try:
+        records, _torn = read_jsonl(path)
+    except ContractError:
+        return None
+    last = None
+    for event in last_wins(records):
+        if event.get("kind") == "outcome" and isinstance(event.get("outcome"), dict):
+            last = {"result": event["outcome"].get("result"),
+                    "at": event.get("at"), "by": event.get("actor")}
+    return last
 
 
 def _finishing(pursuit, root: Path, reviewable: bool) -> dict:

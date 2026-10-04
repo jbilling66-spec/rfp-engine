@@ -2,7 +2,7 @@
 
 **Advance** runs the pipeline as far as it can go and stops honestly:
 at a gate that needs your decision, or on gaps that need answers. The
-job strip shows progress; the finished banner stays until you dismiss
+job strip shows progress; the finished message stays until you click
 it.
 
 The stages, in order: intake reads the uploaded package into a bid

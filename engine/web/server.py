@@ -38,7 +38,7 @@ from engine.web.events import EventsError, EventsLane
 from engine.web import limits
 from engine.web.payload import field
 from engine.web.headers import SecurityHeadersMiddleware
-from engine.web.jobs import JobConflict, JobNotFound, JobRunner
+from engine.web.jobs import JobConflict, JobNotFound, JobRunner, cancellable
 from engine.workspace import PursuitDir, orgs as org_registry
 from engine.workspace.lock import WorkspaceLocked, workspace_lock
 
@@ -189,12 +189,23 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     def board():
         return state_models.board(workspace)
 
+    def _with_live_job(out: dict, pursuit_id: str) -> dict:
+        """P30b 1 (B141): the detail and the review name the pursuit's
+        live job so the shell can disable the pursuit's buttons on the
+        SERVER's word (B134 §1d's `busy`) — the same `busy()` the 409
+        consults. Three-state: no live job, no key."""
+        live = app.state.runner.busy(pursuit_id)
+        if live is not None:
+            out["job"] = {k: live[k] for k in ("id", "kind", "state", "message")}
+            out["job"]["cancellable"] = cancellable(live)
+        return out
+
     @app.get("/api/pursuits/{pursuit_id}")
     def detail(pursuit_id: str):
         out = state_models.detail(workspace, pursuit_id)
         if out is None:
             raise HTTPException(404, f"no pursuit {pursuit_id!r}")
-        return out
+        return _with_live_job(out, pursuit_id)
 
     @app.get("/api/pursuits/{pursuit_id}/runs")
     def runs(pursuit_id: str):
@@ -1395,7 +1406,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             raise HTTPException(
                 400, "nothing to review yet — the surface renders the "
                      "validated annotated draft")
-        return out
+        return _with_live_job(out, pursuit_id)
 
     def _revise_target(pursuit_id: str, at: str):
         def target(job: dict):

@@ -250,7 +250,7 @@ def test_every_dialog_has_its_semantics_and_one_opener():
     it is required. Existence, not firing — the smoke test fires it."""
     html, js = _html(), _js()
     overlays = html.count('class="overlay"')
-    assert overlays == 11  # W2b 4 (B136): + the Learned dialog
+    assert overlays == 12  # W2b 4 (B136): + Learned; P30b 2 (B141): + the confirm dialog
     assert html.count('role="dialog"') == overlays
     assert html.count('aria-modal="true"') == overlays
     assert html.count('aria-labelledby="') == overlays
@@ -423,3 +423,94 @@ def test_the_board_sorts_and_filters_on_the_servers_words():
     assert "stage: byStage" in js and "cost: byCost" in js
     for sel in (".toolbar", ".buyer"):
         assert sel in css, sel
+
+
+# -- P30b (B141): behaviours + copy ------------------------------------------
+
+
+def test_the_irreversible_actions_confirm_first():
+    """Accept pursuit, Revoke a share link and Dismiss a guest comment
+    each fired on one click (the 2026-10-02 scan, §3a items 7 and 8).
+    One confirm dialog, opened through the W2a dialog pair, fronts all
+    three with the action's own word on the go button — never a bare OK,
+    never a native confirm(). Existence, not firing — the smoke test
+    fires it on Accept and on Revoke."""
+    html, js = _html(), _js()
+    for needle in ('id="confirmOverlay"', 'id="confirmTitle"',
+                   'id="confirmBody"', 'id="confirmGo"'):
+        assert needle in html, needle
+    assert "function confirmThen(title, body, word, fn" in js
+    # the three callers, each inside its own handler's window
+    i = js.index('$("acceptBtn").onclick')
+    assert "confirmThen(" in js[i:i + 400] and '"Accept pursuit"' in js[i:i + 400]
+    i = js.index('querySelectorAll(".shareRevoke")')
+    assert "confirmThen(" in js[i:i + 400] and '"Revoke"' in js[i:i + 400]
+    i = js.index('pend(".pendDismiss"')
+    assert 'word: "Dismiss"' in js[i:i + 400]
+    assert "confirmThen(ask.title, ask.body, ask.word" in js
+    # no native confirm anywhere (the one-error-path rule's sibling)
+    stripped = js.replace("confirmThen(", "").replace("confirmWriteback(", "")
+    assert "confirm(" not in stripped
+    # Revise keeps its solid weight only while something is pending
+    assert 'classList.toggle("ghost", !m.sections.some(' in js
+
+
+def test_the_actions_wait_while_the_server_names_a_live_job():
+    """F5's remainder (B134 §1d): the buttons stayed live while a job
+    ran, and the server 409'd the second click. Now the detail and the
+    review payloads carry `job` (P30b 1) and the shell disables the
+    pursuit's actions on that word; the clicked button waits from the
+    click itself until the strip's terminal tick re-reads the detail.
+    Nothing is hidden — the upload label stays a control; its input
+    waits. Existence, not firing — the smoke test fires it."""
+    js = _js()
+    assert "function setBusy(job)" in js and "setBusy(d.job)" in js
+    assert "#detailActions input" in js and "#finishActions button" in js
+    assert "Boolean(m.job)" in js
+    assert '$("advanceBtn").disabled = true;' in js
+    assert '$("reviseBtn").disabled = true;' in js
+
+
+def test_the_secondary_panels_fold_under_their_headings():
+    """F8: Finish, Gaps and pings, Share for review, Outcome and Runs
+    stacked as flat blocks and Outcome showed at every stage. Each is a
+    `details.panel` whose summary wraps the SAME heading text (the
+    guide's bold spans) plus a count the loaders fill; Finish stays open
+    (it is the stage's work), Gaps opens while gaps are open, Outcome is
+    rendered only once the pursuit is in review or declined and names
+    the last recorded outcome. Existence, not firing."""
+    import re
+    html, js, css = _html(), _js(), _css()
+    assert html.count('class="panel"') == 5
+    for pid_ in ("detailFinish", "detailPings", "detailShares",
+                 "detailOutcome", "detailRuns"):
+        assert re.search(r'<details class="panel" id="%s"' % pid_, html), pid_
+    for heading in (">Finish</h2>", ">Gaps and pings</h2>", ">Share for review</h2>",
+                    ">Outcome</h2>", ">Runs</h2>"):
+        assert heading in html, heading
+    assert '<details class="panel" id="detailFinish" open' in html
+    assert '<details class="panel" id="detailOutcome" hidden' in html
+    for cid in ("finishCount", "gapsCount", "sharesCount", "outcomeCount", "runsCount"):
+        assert f'id="{cid}"' in html, cid
+    assert "d.outcome" in js and '["review", "declined"].includes(d.stage)' in js
+    assert '$("detailPings").open = open.length > 0' in js
+    assert ".panel>summary" in css and ".count{" in css
+
+
+def test_the_first_run_banner_is_per_viewer_and_never_throws():
+    """F9: nothing greeted a first sign-in before an empty board. The
+    board carries a banner with the guide's three starting steps and the
+    Assistant pointer, shown while a versioned per-viewer key is absent;
+    Got it sets it. Every storage touch sits inside a try on the same
+    line — a browser that blocks storage gets no banner, never a throw.
+    It is not a board row (the count pins stay exact)."""
+    html, js, css = _html(), _js(), _css()
+    assert 'id="firstRun"' in html and 'id="firstRunGo"' in html
+    assert html.index('id="firstRun"') < html.index('id="boardRows"')
+    for step in ("+ New pursuit", "upload to inbox", "Advance", "Assistant", ">Got it<"):
+        assert step in html, step
+    assert 'const FIRST_RUN_KEY = "rfp.firstrun.v1";' in js
+    touches = [line for line in js.splitlines() if "localStorage" in line]
+    assert touches and all("try {" in line for line in touches), touches
+    assert "function firstRunSeen()" in js and "firstRunSeen()" in js
+    assert ".banner" in css

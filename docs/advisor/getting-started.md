@@ -3,7 +3,8 @@
 The workbench runs at the address your administrator gives you (it is
 served on the machine itself, never the open internet). Declare who you
 are when the operator prompt appears — every decision and comment is
-recorded under that name.
+recorded under that name. The first time, three starting steps show
+above the board; **Got it** puts them away.
 
 The **Pursuits** board lists every pursuit with its stage, what to do
 next, open gaps, and cost to date (a run-totals figure, not an invoice),

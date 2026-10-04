@@ -50,6 +50,13 @@ def live_server(tmp_path_factory):
                      content=path.read_bytes())
         done = advance_past_gate0(seed, "pur_smoke")
         assert "awaiting_gate at gate_1" in done["message"], done
+        # P30b 2 (B141): one live share link, seeded here because the
+        # browser's REAL clock would put a minted expiry 30+ days past the
+        # server's frozen one (P3-12 refuses it); the smoke test revokes it
+        r = seed.post("/api/pursuits/pur_smoke/share",
+                      json={"label": "smoke guest",
+                            "expires_at": "2026-08-16T09:00:00"})
+        assert r.status_code == 200, r.text
         # P30a 5 (B139): a third, BARE pursuit — intake, nothing uploaded,
         # zero spend — so the board's filter and stage sort have something
         # to discriminate (stations 4 / 2 / 1)

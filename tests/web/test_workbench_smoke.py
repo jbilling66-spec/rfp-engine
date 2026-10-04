@@ -76,6 +76,21 @@ def test_signing_in_lands_on_the_board_with_the_seeded_pursuit(walk):
     # P30a 3: the stage track on the row — one amber segment, the current
     expect(row.locator(".track .seg[data-state='current']")).to_have_count(1)
 
+def test_the_first_sign_in_shows_the_three_steps_once(walk):
+    """P30b 5 (B141): a fresh browser sees the three starting steps above
+    the board; Got it puts them away, and a reload (the session cookie
+    keeps the sign-in) does not bring them back."""
+    base, page, _ = walk
+    expect(page.locator("#firstRun")).to_be_visible()
+    expect(page.locator("#firstRun")).to_contain_text("+ New pursuit")
+    page.click("#firstRunGo")
+    expect(page.locator("#firstRun")).to_be_hidden()
+    page.reload()
+    expect(page.locator("#opOverlay")).to_be_hidden()
+    expect(page.locator("#boardRows .row", has_text="pur_smoke")).to_have_count(1)
+    expect(page.locator("#firstRun")).to_be_hidden()
+
+
 def test_the_board_filters_to_what_waits_on_a_person_and_sorts_by_station(walk):
     """P30a 5: three seeded pursuits — gate_1 (station 4), the reviewed
     one at gate_0 on the board (2), and a bare one at intake (1). The
@@ -137,10 +152,12 @@ def test_the_detail_screen_renders_the_server_decided_actions(walk):
     expect(page.locator("#railGates")).to_contain_text("decided by")
     expect(page.locator("#detailRail #gate1Btn")).to_be_visible()
     expect(page.locator("#crumbPid")).to_have_text("pur_smoke")
+    expect(page.locator("#detailOutcome")).to_be_hidden()  # P30b 4: until review
 
 
 def test_a_dialog_opens_focused_closes_on_escape_and_returns_focus(walk):
     base, page, _ = walk
+    page.click("#detailShares summary")  # P30b 4: the panel folds; open it
     page.click("#shareNewBtn")
     expect(page.locator("#shareOverlay")).to_be_visible()
     assert page.evaluate("document.activeElement.id") == "shLabel"
@@ -148,6 +165,27 @@ def test_a_dialog_opens_focused_closes_on_escape_and_returns_focus(walk):
     page.keyboard.press("Escape")
     expect(page.locator("#shareOverlay")).to_be_hidden()
     assert page.evaluate("document.activeElement.id") == "shareNewBtn"
+
+
+def test_revoking_a_share_link_asks_first(walk):
+    """P30b 2 (B141): the seeded link (conftest — the browser's clock
+    cannot mint one the frozen server accepts); Revoke opens the confirm
+    naming the label; Escape backs out and the link stays live;
+    confirming revokes it. Still on pur_smoke's detail."""
+    base, page, _ = walk
+    row = page.locator("#shareRows .gaprow", has_text="smoke guest")
+    expect(row).to_have_count(1)
+    expect(row).to_contain_text("live")
+    row.locator(".shareRevoke").click()
+    expect(page.locator("#confirmOverlay")).to_be_visible()
+    expect(page.locator("#confirmBody")).to_contain_text("smoke guest")
+    expect(page.locator("#confirmGo")).to_have_text("Revoke")
+    page.keyboard.press("Escape")
+    expect(page.locator("#confirmOverlay")).to_be_hidden()
+    expect(row).to_contain_text("live")
+    row.locator(".shareRevoke").click()
+    page.click("#confirmGo")
+    expect(row).to_contain_text("revoked")
 
 
 def test_tab_stays_inside_an_open_dialog(walk):
@@ -164,6 +202,25 @@ def test_tab_stays_inside_an_open_dialog(walk):
         "document.getElementById('gate1Overlay').contains(document.activeElement)")
     page.keyboard.press("Escape")
     expect(page.locator("#gate1Overlay")).to_be_hidden()
+
+
+def test_a_running_job_disables_the_actions_until_it_ends(walk):
+    """P30b 3 (B141): Advance on the bare pursuit submits a job the worker
+    refuses within a tick (nothing in its inbox) — zero spend, no state
+    beyond a refused run. The button waits from the click; the strip
+    shows; the terminal tick re-reads the detail and the button is live
+    again. The sticky toast is clicked away so it sits under nothing."""
+    base, page, _ = walk
+    page.evaluate("location.hash = '#/pursuit/pur_blank'")
+    expect(page.locator("#view-detail")).to_have_class("view show")
+    expect(page.locator("#detailTitle")).to_have_text("pur_blank")
+    page.click("#advanceBtn")
+    expect(page.locator("#advanceBtn")).to_be_disabled()
+    expect(page.locator("#jobStrip")).to_be_visible()
+    expect(page.locator("#toast")).to_contain_text("refused", timeout=20000)
+    expect(page.locator("#advanceBtn")).to_be_enabled(timeout=20000)
+    page.click("#toast")
+    expect(page.locator("#jobStrip")).to_be_hidden(timeout=10000)
 
 
 def test_the_sign_in_dialog_ignores_escape(walk):
@@ -207,7 +264,12 @@ def test_the_runs_panel_opens_a_run_and_filters_its_records(walk):
     base, page, _ = walk
     page.evaluate("location.hash = '#/pursuit/pur_smoke'")
     expect(page.locator("#view-detail")).to_have_class("view show")
+    page.click("#detailRuns summary")  # P30b 4: the panel folds; open it
     runs = page.locator("#runRows .runrow")
+    # the panel fills after the detail's other loads — and since P30b 3 the
+    # walk arrives here from pur_blank, whose one refused run is still on
+    # screen until pur_smoke's list lands: wait for a second row
+    expect(runs.nth(1)).to_be_visible()
     assert runs.count() >= 2  # gate 0's advance, the re-advance, and their closes
     expect(runs.first).to_contain_text("run_")
     runs.first.click()
@@ -268,6 +330,10 @@ def test_accept_opens_the_learned_dialog_over_the_pursuit(walk):
     page.evaluate("location.hash = '#/review/pur_gapcase'")
     expect(page.locator("#view-review")).to_have_class("view show")
     page.click("#acceptBtn")
+    # P30b 2 (B141): accept asks first, with its own word on the button
+    expect(page.locator("#confirmOverlay")).to_be_visible()
+    expect(page.locator("#confirmGo")).to_have_text("Accept pursuit")
+    page.click("#confirmGo")
     expect(page.locator("#learnedOverlay")).to_be_visible()
     expect(page.locator("#learnedOverlay .modal")).to_have_attribute("role", "dialog")
     assert page.locator("#learnedBody").inner_text().strip()

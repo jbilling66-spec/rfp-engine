@@ -25,11 +25,13 @@ beyond the name you give it.
 ## Signing in
 
 When the app opens you will see **Who is deciding?** — type your name,
-choose **Your role** (nothing is preselected — pick the role you are
+choose **Your role** (nothing is chosen for you — pick the role you are
 acting in), and press **Start session**. Every decision and comment you
 make is recorded under that name and role; the role sets the rate the
 effort figures use, so choose honestly. If the sidebar shows
 **not signed in**, press **declare operator** to bring the prompt back.
+The first time a browser opens the board, three starting steps show
+above it; press **Got it** to put them away.
 
 The sidebar has six tabs: **Pursuits** (the board you will live on),
 **Pings** (questions routed to experts, across pursuits),
@@ -63,7 +65,8 @@ decision with who made it, and the buttons that apply right now.
 
 Press **Advance** to run the engine as far as it can go. It stops honestly:
 at a gate that needs your decision, or on gaps that need answers. A status
-strip narrates what is happening. The strip survives a reload — reopen the
+strip narrates what is happening, and while a job runs the pursuit's
+buttons wait — greyed out until it ends. The strip survives a reload — reopen the
 app and it re-attaches to the running job. A revision job offers
 **Cancel** on the strip; an advance does not, because it cannot stop
 mid-stage without lying about what finished. If the strip loses the
@@ -135,8 +138,10 @@ that reason, and a boilerplate reason is surfaced as a warning, never
 hidden.
 
 When it all reads right, press **Accept pursuit** — every drafted
-section stamps final. It refuses while anything is still blocked. On
-accept a **Learned** box opens over the pursuit: what the engine took from
+section stamps final. It asks once more before it does: a box names
+what happens, and **Accept pursuit** on that box is the final word
+(**Cancel** or Escape backs out). It refuses while anything is still
+blocked. On accept a **Learned** box opens over the pursuit: what the engine took from
 your edits for the knowledge base — each item is a proposal the steward
 decides on the knowledge base tab, never a change made on its own — and
 anything it skipped or withheld, with the reason. Close it like any box;
@@ -148,10 +153,10 @@ Under **Share for review** on the pursuit screen, press
 **New share link**, say who it is for, and choose how many days it lives;
 press **Create link**. The link opens a read-only page of the review with a
 comment box under every section — no sign-in, no internal panels.
-**Copy link** puts it on your clipboard; **Revoke** kills it at once.
-A guest's comment shows up under the section as a guest note; it
-reaches the revision only if you press **Include** — press **Dismiss**
-to record it without acting. Guests see the verdicts, never who waived
+**Copy link** puts it on your clipboard; **Revoke** asks first, then
+kills it at once. A guest's comment shows up under the section as a
+guest note; it reaches the revision only if you press **Include** —
+press **Dismiss** (it asks first too) to record it without acting. Guests see the verdicts, never who waived
 what or what anything cost.
 
 The guest presses **Send comment** on the page they were sent, and sees
@@ -172,8 +177,10 @@ to a buyer.
 
 ## Finishing a pursuit
 
-Once a pursuit has a validated draft, the pursuit screen shows
-**Finish**:
+The panels below a pursuit's facts fold under their headings — click a
+heading to open or close it; the heading carries a count (gaps open,
+links live, runs made). Once a pursuit has a validated draft, the
+pursuit screen shows **Finish**, open:
 
 - **Render documents** produces the submission and review documents and
   recomposes the record of what may go out.
@@ -216,13 +223,15 @@ Only then does the buyer copy appear under the buyer heading — a document
 that still says "replace with the drafted section" never lists there.
 
 When the buyer decides, press **Record outcome** on the pursuit screen —
-the win and cost figures compute from that one entry.
+the **Outcome** panel appears once the pursuit is in review, and after
+you record, its heading names what was recorded. The win and cost
+figures compute from that one entry.
 
 ## Reading a run
 
-Below the outcome, the pursuit screen lists its **Runs** — every pass
-the engine made over this pursuit, newest last, with its status and what
-it cost. Open one and the engine's own record of that pass appears, one
+Below the outcome, folded under **Runs** with the count on the heading,
+the pursuit screen lists every pass the engine made over this pursuit,
+newest last, with its status and what it cost. Open one and the engine's own record of that pass appears, one
 line per step: the model calls, what the knowledge base returned, each
 gate decision, each validation check, and any error with what the engine
 did about it. The **show** filter narrows the list to one kind of step;

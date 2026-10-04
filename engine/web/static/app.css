@@ -223,3 +223,18 @@ select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* P30a 5 (B139): the board toolbar — sort, the waiting filter, the count */
 .toolbar{display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap}
 .buyer{color:var(--dim);margin-left:var(--sp-2)}
+/* P30b 4 (B141): the secondary panels fold under their headings; the
+   summary carries the heading text unchanged plus a count the loaders fill */
+.panel{border-top:1px solid var(--line);padding-top:var(--sp-2);margin-top:var(--sp-3)}
+.panel>summary{cursor:pointer;display:flex;gap:var(--sp-2);align-items:baseline;list-style:none}
+.panel>summary::-webkit-details-marker{display:none}
+.panel>summary::before{content:"\25B8";color:var(--dim);font-size:var(--fs-sm)}
+.panel[open]>summary::before{content:"\25BE"}
+.panel>summary .sub{margin:var(--sp-1) 0}
+.count{font:var(--fs-sm)/1.4 var(--font-mono);color:var(--dim)}
+/* P30b 5 (B141): the first-run banner above the board */
+.banner{background:var(--panel);border:1px solid var(--accent);border-radius:var(--r-lg);
+  padding:var(--sp-4);margin-top:var(--sp-4)}
+.banner ol{margin:var(--sp-2) 0 0 var(--sp-4);padding:0}
+.banner li{margin:var(--sp-1) 0}
+.banner .hint{margin:var(--sp-2) 0}

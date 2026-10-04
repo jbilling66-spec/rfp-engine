@@ -47,6 +47,16 @@
           <button id="newPursuitBtn">+ New pursuit</button>
         </div>
       </header>
+      <div id="firstRun" class="banner" hidden>
+        <b>First time here?</b>
+        <ol>
+          <li>Press <b>+ New pursuit</b> and give it a short id.</li>
+          <li>On its screen press <b>upload to inbox</b> and add the RFP workbook (.xlsx).</li>
+          <li>Press <b>Advance</b> — the engine stops at every gate for your decision.</li>
+        </ol>
+        <p class="hint">The <b>Assistant</b> tab answers questions about the process and the library.</p>
+        <button id="firstRunGo" class="ghost">Got it</button>
+      </div>
       <div id="boardRows" class="rows"></div>
     </section>
     <section id="view-detail" class="view">
@@ -69,17 +79,17 @@
       <div class="detail-main">
       <div id="detailFacts" class="facts"></div>
       <div id="detailSections" class="rows"></div>
-      <section id="detailFinish" hidden>
-        <h2 class="sub">Finish</h2>
+      <details class="panel" id="detailFinish" open hidden>
+        <summary><h2 class="sub">Finish</h2> <span class="count" id="finishCount"></span></summary>
         <p class="muted hint">Render the documents, read what may go to
           the buyer, write the buyer's own forms back, and enter the
           values only a person supplies. The buyer copy lists only when
           nothing is owed.</p>
         <div class="actions" id="finishActions"></div>
         <div id="finishDownloads" class="facts"></div>
-      </section>
-      <section id="detailPings" hidden>
-        <h2 class="sub">Gaps and pings</h2>
+      </details>
+      <details class="panel" id="detailPings" hidden>
+        <summary><h2 class="sub">Gaps and pings</h2> <span class="count" id="gapsCount"></span></summary>
         <p class="muted hint">Open gaps can be routed to an expert; the
           pursuit's own inbox is below. To ask something the engine did
           not, open a gap on a section.</p>
@@ -90,24 +100,24 @@
           <button id="gapGo" class="ghost">Open a gap</button>
         </div>
         <div id="pursuitPingRows" class="rows"></div>
-      </section>
-      <section id="detailShares" hidden>
-        <h2 class="sub">Share for review</h2>
+      </details>
+      <details class="panel" id="detailShares" hidden>
+        <summary><h2 class="sub">Share for review</h2> <span class="count" id="sharesCount"></span></summary>
         <p class="muted hint">A guest link opens a read-only page of the
           review with a comment box — no sign-in, no internal panels.
           Hand the link to the person it is for; revoke it the moment it
           should stop working.</p>
         <div class="actions"><button id="shareNewBtn" class="ghost">New share link</button></div>
         <div id="shareRows" class="rows"></div>
-      </section>
-      <section id="detailOutcome">
-        <h2 class="sub">Outcome</h2>
+      </details>
+      <details class="panel" id="detailOutcome" hidden>
+        <summary><h2 class="sub">Outcome</h2> <span class="count" id="outcomeCount"></span></summary>
         <p class="muted hint">When the buyer decides, record it — the win
           and cost metrics compute from this event and nothing else.</p>
         <div class="actions"><button id="outcomeBtn" class="ghost">Record outcome</button></div>
-      </section>
-      <section id="detailRuns">
-        <h2 class="sub">Runs</h2>
+      </details>
+      <details class="panel" id="detailRuns">
+        <summary><h2 class="sub">Runs</h2> <span class="count" id="runsCount"></span></summary>
         <p class="muted hint">What the agents did, from this pursuit's run log —
           every model call, retrieval, gate and error as the engine recorded it.
           Reading only: nothing here is edited or stored.</p>
@@ -117,7 +127,7 @@
           <select id="runKind"></select>
         </div>
         <div id="runRecords" class="rows" hidden></div>
-      </section>
+      </details>
       </div>
       </div>
     </section>
@@ -223,8 +233,8 @@
     <input id="opName" maxlength="60" placeholder="your name">
     <label class="hint" for="opRole">Your role</label>
     <select id="opRole"></select>
-    <p class="hint">Your role sets the rate the effort metrics use — pick
-      the one you are acting in for this session; nothing is preselected.</p>
+    <p class="hint">Pick the role you are acting in this session — the
+      effort figures use its rate. Nothing is chosen for you.</p>
     <div class="modal-foot">
       <button id="opGo">Start session</button>
     </div>
@@ -265,8 +275,8 @@
     <h2 id="gate1Title">Gate 1 — brief &amp; win themes</h2>
     <div id="g1Body"></div>
     <label class="hint"><input type="checkbox" id="g1Collapse">
-      Small deal: collapse Gates 1+2 (auto-approves the plan ONLY if it
-      carries no open gaps — a human decision is never preselected)</label>
+      Small deal: collapse Gates 1+2 — the plan approves itself only if it
+      carries no open gaps; otherwise Gate 2 still asks you.</label>
     <input id="g1Notes" placeholder="notes (required to reject)">
     <label class="hint minutes">Minutes on this gate
       <input id="g1Minutes" type="number" min="0" step="1"
@@ -322,7 +332,7 @@
 <div id="shareOverlay" class="overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
     <h2 id="shareTitle">New share link</h2>
-    <p class="hint">The label is who this link is FOR — it is the record.</p>
+    <p class="hint">Say who this link is for — that name is what the record keeps.</p>
     <input id="shLabel" maxlength="80" placeholder="for whom (e.g. buyer-side counsel)">
     <label class="hint minutes">Days until it expires
       <input id="shDays" type="number" min="1" max="30" value="7"></label>
@@ -336,8 +346,8 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="waiverTitle">
     <h2 id="waiverTitle">Waive a block</h2>
     <p class="hint">A Tier-1 block stops packaging until it is revised or
-      waived. Waiving is recorded under your name with the reason you give
-      here — the reason is the record, so write the real one.</p>
+      waived. Write the real reason — it is kept with the waiver under
+      your name.</p>
     <div id="wvClaim" class="facts"></div>
     <input id="wvReason" maxlength="500" placeholder="why this claim may ship as written (required)">
     <div class="modal-foot">
@@ -367,6 +377,16 @@
     <div id="learnedBody" class="facts"></div>
     <div class="modal-foot">
       <button id="learnedGo" data-close>Close</button>
+    </div>
+  </div>
+</div>
+<div id="confirmOverlay" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <h2 id="confirmTitle"></h2>
+    <p class="hint" id="confirmBody"></p>
+    <div class="modal-foot">
+      <button class="ghost" data-close>Cancel</button>
+      <button id="confirmGo"></button>
     </div>
   </div>
 </div>

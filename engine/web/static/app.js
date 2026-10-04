@@ -98,6 +98,20 @@ function closeDialog(id) {
   DIALOG_RETURN = null;
 }
 
+// P30b 2 (B141): one confirm dialog fronts the irreversible actions —
+// Accept pursuit, Revoke, Dismiss — with the action's own word on the go
+// button, never a bare OK; the pair above gives it Esc, the Tab trap and
+// focus return. `fn` runs only after the dialog has closed.
+function confirmThen(title, body, word, fn, danger = false) {
+  $("confirmTitle").textContent = title;
+  $("confirmBody").textContent = body;
+  const go = $("confirmGo");
+  go.textContent = word;
+  go.classList.toggle("danger", danger);
+  go.onclick = () => { closeDialog("confirmOverlay"); fn(); };
+  openDialog("confirmOverlay");
+}
+
 document.addEventListener("keydown", (e) => {
   const ov = Array.from(document.querySelectorAll(".overlay")).find((o) => !o.hidden);
   if (!ov) return;
@@ -253,7 +267,17 @@ const byId = (a, b) => a.pursuit_id.localeCompare(b.pursuit_id);
 const byStage = (a, b) => (stageRank(b) - stageRank(a)) || byId(a, b);
 const byCost = (a, b) => (cost(b) - cost(a)) || byId(a, b);
 
+// P30b 5 (B141): the first-run banner — the guide's three starting steps,
+// shown while a versioned PER-VIEWER key is absent; Got it sets it. Every
+// storage touch sits inside a try: a browser that blocks storage gets no
+// banner and never a throw. A viewer's first time, not the workspace's.
+const FIRST_RUN_KEY = "rfp.firstrun.v1";
+function firstRunSeen() {
+  try { return localStorage.getItem(FIRST_RUN_KEY) === "1"; } catch (e) { return true; }
+}
+
 async function loadBoard() {
+  $("firstRun").hidden = firstRunSeen();
   BOARD = await api("/api/pursuits");
   renderBoard();
 }
@@ -293,6 +317,17 @@ function renderBoard() {
 }
 
 // -- detail ----------------------------------------------------------------
+
+// P30b 3 (B141): `busy` on the SERVER's word — while the payload names a
+// live job (the same busy() the 409 consults), the pursuit's buttons wait
+// and the strip says what is running. Nothing is hidden: the upload label
+// stays a control; its input waits with the rest.
+function setBusy(job) {
+  const live = Boolean(job);
+  document.querySelectorAll(
+    "#detailActions button, #detailActions input, #finishActions button")
+    .forEach((el) => { el.disabled = live; });
+}
 
 async function loadDetail(pid) {
   const d = await api(`/api/pursuits/${encodeURIComponent(pid)}`);
@@ -346,9 +381,10 @@ async function loadDetail(pid) {
   }
   $("upl").onchange = () => uploadFile(pid);
   await loadFinish(pid, d);
+  setBusy(d.job);
   await loadPursuitPings(pid, d);
   await loadShares(pid);
-  wireOutcome(pid);
+  wireOutcome(pid, d);
   await loadRuns(pid);
   $("detailSections").innerHTML = (d.sections || []).map((s) => `
     <div class="row">
@@ -384,6 +420,7 @@ async function loadFinish(pid, d) {
 
 async function loadDownloads(pid, f) {
   const dl = await api(`/api/pursuits/${encodeURIComponent(pid)}/downloads`);
+  $("finishCount").textContent = `${dl.to_the_buyer.length} to the buyer`;  // P30b 4
   // one whole path literal per line: the door-coverage pin reads them whole
   // P0-22: this helper was ALSO named `dl` — a parse-time SyntaxError
   // that kept the whole workbench script from loading (pilot-2.3 … 2.5)
@@ -579,6 +616,7 @@ async function loadShares(pid) {
     links = await api(`/api/pursuits/${encodeURIComponent(pid)}/share`);
   } catch (e) { $("detailShares").hidden = true; return; }
   $("detailShares").hidden = false;
+  $("sharesCount").textContent = `${links.filter((l) => !l.revoked).length} live`;  // P30b 4
   const url = (l) => `${location.origin}/share/${l.token}`;
   $("shareRows").innerHTML = links.length ? links.map((l) => `
     <div class="gaprow">
@@ -590,7 +628,8 @@ async function loadShares(pid) {
         : `<span class="chip done">live</span>
            <input class="shareUrl" readonly value="${esc(url(l))}">
            <button class="ghost shareCopy" data-url="${esc(url(l))}">Copy link</button>
-           <button class="ghost danger shareRevoke" data-id="${esc(l.link_id)}">Revoke</button>`}
+           <button class="ghost danger shareRevoke" data-id="${esc(l.link_id)}"
+                   data-label="${esc(l.label)}">Revoke</button>`}
     </div>`).join("") : `<div class="meta">no guest links yet</div>`;
   for (const b of document.querySelectorAll(".shareCopy")) {
     b.onclick = () => navigator.clipboard.writeText(b.dataset.url)
@@ -598,15 +637,18 @@ async function loadShares(pid) {
       .catch(() => toast("copy failed — select the link and copy it", true));
   }
   for (const b of document.querySelectorAll(".shareRevoke")) {
-    b.onclick = async () => {
-      try {
-        const id = encodeURIComponent(b.dataset.id);
-        await api(`/api/pursuits/${encodeURIComponent(pid)}/share/${id}/revoke`,
-                  { method: "POST", body: "{}" });
-        toast(`${b.dataset.id} revoked`);
-        loadShares(pid);
-      } catch (e) { toast(e.message, true); }
-    };
+    b.onclick = () => confirmThen(
+      "Revoke this link?",
+      `The link for ${b.dataset.label} stops working at once; the guest sees nothing more.`,
+      "Revoke", async () => {
+        try {
+          const id = encodeURIComponent(b.dataset.id);
+          await api(`/api/pursuits/${encodeURIComponent(pid)}/share/${id}/revoke`,
+                    { method: "POST", body: "{}" });
+          toast(`${b.dataset.id} revoked`);
+          loadShares(pid);
+        } catch (e) { toast(e.message, true); }
+      }, true);
   }
   $("shareNewBtn").onclick = () => { openDialog("shareOverlay"); };
   $("shGo").onclick = async () => {
@@ -694,6 +736,9 @@ async function loadPursuitPings(pid, d) {
       if (g.status === "open") open.push({ ...g, section_id: s.section_id });
     }
   }
+  // P30b 4 (B141): the panel opens by itself while gaps are open
+  $("detailPings").open = open.length > 0;
+  $("gapsCount").textContent = `${open.length} open`;
   $("pursuitGapRows").innerHTML = open.map((g) => `
     <div class="gaprow">
       <b>${esc(g.gap_id)}</b> <span class="meta">${esc(g.section_id)} &middot; ${esc(g.kind || "")}</span>
@@ -744,7 +789,33 @@ async function loadPursuitPings(pid, d) {
 // The result vocabulary is the feedback-event schema's; nothing preselected.
 const OUTCOME_RESULTS = ["won", "lost", "shortlisted", "withdrawn", "no_decision"];
 
-function wireOutcome(pid) {
+// P30b 6 (B141): two glossaries, each pinned to the server enum it renders
+// (tests/contracts/test_ui_glosses.py). Labels are glossed; VALUES are not —
+// the option value and the state word stay the server's.
+const DISPOSITION_LABEL = {
+  answered: "answer",
+  omit_approved: "approve omission",
+  reframed: "reframe",
+  draft_flagged: "flag-draft",
+};
+const STATE_GLOSS = {
+  done: "finished",
+  refused: "the engine declined to run it",
+  error: "it stopped on a fault",
+  cancelled: "stopped at your request",
+  orphaned: "the server stopped while it ran",
+};
+function stateWord(state) {
+  return `${state}${STATE_GLOSS[state] ? ` (${STATE_GLOSS[state]})` : ""}`;
+}
+
+function wireOutcome(pid, d) {
+  // P30b 4 (B141): the panel appears once the pursuit is in review (or
+  // declined); after a record its heading names the last outcome, read
+  // back from the events lane by the server
+  $("detailOutcome").hidden = !["review", "declined"].includes(d.stage);
+  $("outcomeCount").textContent = d.outcome
+    ? `${d.outcome.result} · ${d.outcome.at} · ${d.outcome.by}` : "";
   $("ocResult").innerHTML = `<option value="">— result —</option>`
     + OUTCOME_RESULTS.map((r) => `<option value="${r}">${esc(r.replace(/_/g, " "))}</option>`).join("");
   $("outcomeBtn").onclick = () => { openDialog("outcomeOverlay"); };
@@ -757,6 +828,7 @@ function wireOutcome(pid) {
                 { method: "POST", body: JSON.stringify(body) });
       closeDialog("outcomeOverlay");
       toast(`outcome recorded: ${body.result}`, true);
+      routeFromHash();  // the heading re-reads what the server recorded
     } catch (e) { toast(e.message, true); }
   };
 }
@@ -771,12 +843,13 @@ async function uploadFile(pid) {
 }
 
 async function submitAdvance(pid) {
+  $("advanceBtn").disabled = true;  // P30b 3: waits from the click
   try {
     const job = await api(`/api/pursuits/${encodeURIComponent(pid)}/jobs`, {
       method: "POST", body: JSON.stringify({ kind: "advance" }),
     });
     watchJob(job.id, pid);
-  } catch (e) { toast(e.message); }
+  } catch (e) { $("advanceBtn").disabled = false; toast(e.message); }
 }
 
 // W2a (B134): the strip survives — a failed tick is counted, not fatal
@@ -787,7 +860,7 @@ let JOB_FAILS = 0;
 function renderJobStrip(job) {
   const mins = job.at ? Math.max(0, Math.round((Date.now() - Date.parse(job.at)) / 60000)) : null;
   $("jobMsg").textContent =
-    `${job.kind} · ${job.pursuit} · ${job.state} — ${job.message}`
+    `${job.kind} · ${job.pursuit} · ${stateWord(job.state)} — ${job.message}`
     + (mins === null ? "" : ` (${mins} min)`);
   $("jobCancel").hidden = !job.cancellable;
 }
@@ -826,7 +899,7 @@ function watchJob(jobId, pid) {
     if (!["queued", "running"].includes(job.state)) {
       clearInterval(JOB_TIMER);
       setTimeout(() => { $("jobStrip").hidden = true; }, 3500);
-      toast(`${job.kind}: ${job.state} — ${job.message}`, true); // sticky
+      toast(`${job.kind}: ${stateWord(job.state)} — ${job.message}`, true); // sticky
       routeFromHash();
     }
   }, 2000);
@@ -843,6 +916,10 @@ async function loadReview(pid) {
   $("reviewTitle").textContent = `${m.pursuit_id} — revision ${m.revision_n}`;
   $("reviewBack").href = `#/pursuit/${encodeURIComponent(pid)}`;
   $("reviewBack").textContent = pid;  // P30a 4: the crumb names the pursuit
+  // P30b 3 (B141): the review's two actions wait while the server names a job
+  const busy = Boolean(m.job);
+  $("reviseBtn").disabled = busy;
+  $("acceptBtn").disabled = busy;
   $("reviewFacts").innerHTML =
     `packaging ${m.packaging.blocked
       ? `<span class="chip stop">BLOCKED (${esc(String(
@@ -911,12 +988,15 @@ async function loadReview(pid) {
   // the review-loop doors (P27 wave 1, the owner's call): guest comments
   // reach the revision agent ONLY when included; internal pendings can be
   // withdrawn; an agent revision is accepted or rejected per section
-  const pend = (cls, fn) => {
+  // P30b 2 (B141): a caller may pass `ask` — the confirm fronts the click
+  const pend = (cls, fn, ask) => {
     for (const btn of document.querySelectorAll(cls)) {
-      btn.onclick = async () => {
+      const run = async () => {
         try { await fn(btn.dataset.cid); loadReview(pid); }
         catch (e) { toast(e.message, true); }
       };
+      btn.onclick = ask
+        ? () => confirmThen(ask.title, ask.body, ask.word, run) : run;
     }
   };
   const p = encodeURIComponent(pid);
@@ -925,7 +1005,10 @@ async function loadReview(pid) {
         { method: "POST", body: "{}" }));
   pend(".pendDismiss", (cid) =>
     api(`/api/pursuits/${p}/comments/${encodeURIComponent(cid)}/dismiss`,
-        { method: "POST", body: "{}" }));
+        { method: "POST", body: "{}" }),
+    { title: "Dismiss this guest comment?",
+      body: "It stays on the record and never reaches the revision.",
+      word: "Dismiss" });
   pend(".pendWithdraw", (cid) =>
     api(`/api/pursuits/${p}/comments/${encodeURIComponent(cid)}`,
         { method: "DELETE" }));
@@ -942,24 +1025,30 @@ async function loadReview(pid) {
       };
     }
   }
-  $("acceptBtn").onclick = async () => {
-    flushReviewEffort();
-    try {
-      const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/accept`,
-                            { method: "POST", body: "{}" });
-      toast("accepted — every drafted section is now final", true);
-      location.hash = `#/pursuit/${encodeURIComponent(pid)}`;
-      showLearned(out.flywheel);  // over the pursuit it lands on
-    } catch (e) { toast(e.message, true); }
-  };
+  $("acceptBtn").onclick = () => confirmThen(
+    "Accept this pursuit?",
+    "Every drafted section stamps final and the review closes. It refuses while anything is still blocked.",
+    "Accept pursuit", async () => {
+      flushReviewEffort();
+      try {
+        const out = await api(`/api/pursuits/${encodeURIComponent(pid)}/accept`,
+                              { method: "POST", body: "{}" });
+        toast("accepted — every drafted section is now final", true);
+        location.hash = `#/pursuit/${encodeURIComponent(pid)}`;
+        showLearned(out.flywheel);  // over the pursuit it lands on
+      } catch (e) { toast(e.message, true); }
+    });
+  // P30b 2 (B141): Revise is the solid button only while something pends
+  $("reviseBtn").classList.toggle("ghost", !m.sections.some((s) => (s.pending || []).length));
   $("reviseBtn").onclick = async () => {
     flushReviewEffort();  // the span before the round is its own session
+    $("reviseBtn").disabled = true;  // P30b 3: waits from the click
     try {
       const job = await api(
         `/api/pursuits/${encodeURIComponent(pid)}/revise`,
         { method: "POST", body: JSON.stringify({}) });
       watchJob(job.id, pid);
-    } catch (e) { toast(e.message); }
+    } catch (e) { $("reviseBtn").disabled = false; toast(e.message); }
   };
   wireRounds(pid, m);
 }
@@ -1156,6 +1245,7 @@ async function loadRuns(pid) {
   records.hidden = true; tools.hidden = true;
   records.innerHTML = "";
   const runs = await api(`/api/pursuits/${encodeURIComponent(pid)}/runs`);
+  $("runsCount").textContent = `${runs.length} run(s)`;  // P30b 4
   rows.innerHTML = runs.length ? runs.map((r) => {
     const color = RUN_COLOR[r.status] || (r.status === "completed" ? "done" : "stop");
     const totals = r.totals || {};
@@ -1258,7 +1348,7 @@ function openWaiver(pid, claimId, line) {
       });
       closeDialog("waiverOverlay");
       toast(out.warnings.length
-        ? `waived — ${out.warnings.join("; ")}` : "waived — on the record", true);
+        ? `waived — ${out.warnings.join("; ")}` : "waived — recorded under your name", true);
       loadReview(pid);
     } catch (e) { toast(e.message, true); }
   };
@@ -1392,9 +1482,9 @@ async function openGate2(pid) {
           ${g.status === "open" ? `
           <select class="g2dispose" data-section="${esc(s.section_id)}"
                   data-gap="${esc(g.gap_id)}">
-            <option value="">— the human disposes; nothing preselected —</option>
+            <option value="">— choose a disposition —</option>
             ${g.options.map((o) =>
-              `<option value="${esc(o)}">${esc(o)}</option>`).join("")}
+              `<option value="${esc(o)}">${esc(DISPOSITION_LABEL[o] || o)}</option>`).join("")}
           </select>
           <input class="g2note" data-gap="${esc(g.gap_id)}"
                  placeholder="answer / reframe direction / note">`
@@ -1789,6 +1879,10 @@ function wireNavExtras() {
   if ($("telProd")) $("telProd").onclick = () => loadTelemetry("system");
   if ($("opsSort")) $("opsSort").onchange = () => renderOps();
   if ($("boardSort")) $("boardSort").onchange = () => renderBoard();
+  if ($("firstRunGo")) $("firstRunGo").onclick = () => {
+    try { localStorage.setItem(FIRST_RUN_KEY, "1"); } catch (e) { /* storage blocked: it shows again */ }
+    $("firstRun").hidden = true;
+  };
   if ($("boardFilter")) $("boardFilter").onclick = () => {
     BOARD_WAITING = !BOARD_WAITING; renderBoard();
   };

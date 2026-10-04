@@ -58,8 +58,9 @@ def test_bold_spans_are_on_screen_text(doc):
 
 def test_no_advisor_doc_claims_a_surface_the_workbench_lacks():
     """The sentence that drifted, pinned by its absence: the revision
-    doors exist (GET …/revisions, …/revisions/{n}); the workbench renders
-    no history panel yet (P27 wave 2 owns it)."""
+    doors exist (GET …/revisions, …/revisions/{n}) and, since W2b, the
+    review header's Show rounds renders the history — the doc says so in
+    the shell's own words (P30b 6), never with the phrase that drifted."""
     text = (ADVISOR / "review-and-revision.md").read_text(encoding="utf-8")
     assert "revision history shows" not in text.lower()
     assert "GET /api/pursuits/{pursuit_id}/revisions" in text
