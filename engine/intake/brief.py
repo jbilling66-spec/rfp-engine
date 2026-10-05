@@ -443,7 +443,7 @@ def run_intake(pursuit, caller, log, package: IntakePackage, *,
                 if (doc.extraction_degraded or doc.extraction_flags)
                 else "pass",
             })
-        pursuit.write_json("extraction.json", {
+        pursuit.write_artifact("extraction_record", {  # P32b: contract-gated
             "docs": [
                 {
                     "file": doc.file,
@@ -458,7 +458,7 @@ def run_intake(pursuit, caller, log, package: IntakePackage, *,
                 for doc in docs
             ],
             "two_path": two_path,
-        })
+        }, name="extraction.json")
         pursuit.checkpoint("intake", {
             "docs": [
                 {

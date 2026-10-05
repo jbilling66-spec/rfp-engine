@@ -26,9 +26,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from engine.cli.slice import KB_ROOT, _extras  # the shared digest extras
 from engine.web.fake_script import revision_script
-from engine.intake.brief import IntakeDoc, IntakePackage
 from engine.llm import FakeCaller, TracedCaller
 from engine.pipeline import advance
+from engine.pipeline.inbox import package_from_inbox, resolve_targets
 from engine.runlog import read_run, read_run_report
 from engine.version import engine_version
 from engine.web import state as state_models
@@ -332,79 +332,22 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     # -- jobs --------------------------------------------------------------
 
     def _resolve_targets(root) -> dict:
-        """THE one declared-target resolver (P16/C5): every consumer of
-        "which file(s) is the response vehicle" — the advance job, the
-        gate-collapse job, the cost forecast — goes through here, so a
-        declared DOCX target can never fall to glob order in one site
-        while another honors it. Declared roles are authoritative
-        (targets in filename order, ANY parseable type — parse_target
-        owns the loud refusal for unsupported ones); a missing declared
-        file refuses; an undeclared inbox keeps the legacy
-        first-workbook behavior byte-for-byte."""
-        from engine.contracts import ContractError
-        inbox = root / "inbox"
-        roles_path = inbox / "roles.json"
-        roles = (json.loads(roles_path.read_text(encoding="utf-8"))
-                 if roles_path.exists() else {})
-        if roles:
-            targets = [inbox / n for n in sorted(roles)
-                       if roles[n] == "target"]
-            missing = [t.name for t in targets if not t.is_file()]
-            if missing:
-                raise ContractError(
-                    "declared target(s) missing from inbox/: "
-                    + ", ".join(missing))
-            core = next((inbox / n for n in sorted(roles)
-                         if roles[n] == "core"), None)
-            return {"targets": targets, "core": core, "declared": True}
-        workbooks = sorted(inbox.glob("*.xlsx"))
-        return {"targets": workbooks[:1], "core": None, "declared": False}
+        """THE one declared-target resolver (P16/C5) — since P32c it
+        lives in engine.pipeline.inbox so the replay runner reads the
+        same rule; this is the app's handle on it."""
+        return resolve_targets(root)
 
     def _advance_target(pursuit_id: str, at: str):
         def target(job: dict):
             pursuit = PursuitDir(workspace, pursuit_id)
             inbox = pursuit.root / "inbox"
-            workbooks = sorted(inbox.glob("*.xlsx"))
-            ramble = inbox / "ramble.md"
             pack = inbox / "research-pack.md"
-            roles_path = inbox / "roles.json"
-            roles = (json.loads(roles_path.read_text(encoding="utf-8"))
-                     if roles_path.exists() else {})
             resolved = _resolve_targets(pursuit.root)
 
             def intake_package(_p):
-                from engine.contracts import ContractError
-                if roles:
-                    docs = []
-                    for path in sorted(inbox.iterdir()):
-                        if path.suffix.lower() not in (".pdf", ".docx",
-                                                       ".xlsx"):
-                            continue
-                        role = roles.get(path.name)
-                        docs.append(IntakeDoc(
-                            path=path,
-                            kind=("rfp_main" if role == "core" else "other"),
-                            role=role))
-                    if not docs:
-                        raise ContractError(
-                            "roles.json names no readable documents — "
-                            "upload the RFP package first")
-                    if not any(d.role == "core" for d in docs):
-                        raise ContractError(
-                            "no document declared role=core — the one you "
-                            "would read if you read only one (B67 §3)")
-                    return IntakePackage(
-                        pursuit_id=pursuit_id, docs=docs,
-                        ramble=(ramble.read_text(encoding="utf-8")
-                                if ramble.exists() else ""))
-                if not workbooks:
-                    raise ContractError(
-                        "no .xlsx in inbox/ — upload the RFP package first")
-                return IntakePackage(
-                    pursuit_id=pursuit_id,
-                    docs=[IntakeDoc(path=workbooks[0], kind="rfp_main")],
-                    ramble=(ramble.read_text(encoding="utf-8")
-                            if ramble.exists() else ""))
+                # P32c: the package rule moved to engine.pipeline.inbox
+                # (the replay runner reads it too); messages unchanged
+                return package_from_inbox(pursuit_id, pursuit.root)
 
             adv = advance(
                 pursuit, make_caller=make_caller, mode=mode,
@@ -797,7 +740,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     @app.get("/api/pursuits/{pursuit_id}/addenda")
     def list_addenda(pursuit_id: str):
-        return _addendum_lane(pursuit_id).list()
+        try:
+            return _addendum_lane(pursuit_id).list()
+        except ContractError as exc:  # P32b: a meta that fails its schema
+            raise HTTPException(409, str(exc))
 
     @app.post("/api/pursuits/{pursuit_id}/addenda/{aid}/decide")
     def decide_addendum(pursuit_id: str, aid: str, payload: dict,
@@ -812,7 +758,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                                    decision=payload.get("decision", ""),
                                    note=payload.get("note", ""),
                                    at=at, actor=who)
-            except AddendumError as exc:
+            except (AddendumError, ContractError) as exc:  # P32b: + schema
                 log.run_end(status="failed")
                 raise HTTPException(409, str(exc))
             log.run_end(status="completed")
@@ -1260,8 +1206,13 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
             lane, record = _resolve_share(token, when, "view")
         except ShareDenied as exc:
             raise HTTPException(exc.status, exc.reason)
-        out = state_models.review(workspace, record["pursuit_id"],
-                                  include_internal=False)
+        try:
+            out = state_models.review(workspace, record["pursuit_id"],
+                                      include_internal=False)
+        except ContractError:
+            # P32b: a record that fails its schema is the pursuit team's
+            # problem (named on the board); a guest never learns the cause
+            raise HTTPException(404, "the review is not available")
         if out is None:
             raise HTTPException(400, "nothing to review yet")
         out["share"] = {"link_id": record["link_id"],
@@ -1441,7 +1392,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         # pending internals, red-team findings — is for operators; guests
         # get the stripped surface through /share/{token}
         _pursuit_root(pursuit_id)
-        out = state_models.review(workspace, pursuit_id)
+        try:
+            out = state_models.review(workspace, pursuit_id)
+        except ContractError as exc:  # P32b: a record that fails its schema
+            raise HTTPException(409, str(exc))
         if out is None:
             raise HTTPException(
                 400, "nothing to review yet — the surface renders the "
@@ -1496,9 +1450,15 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.get("/api/pursuits/{pursuit_id}/revisions")
     def revisions(pursuit_id: str):
         root = _pursuit_root(pursuit_id)
-        # round order, never name order (W2b 1a, B136): one sort, state's
-        return [json.loads(p.read_text(encoding="utf-8"))
-                for p in state_models.round_records(root / "revisions")]
+        pursuit = PursuitDir(workspace, pursuit_id)
+        # round order, never name order (W2b 1a, B136): one sort, state's;
+        # P32b: each record validated on the way in, a refusal names it
+        try:
+            return [pursuit.read_artifact(f"revisions/{p.name}",
+                                          kind="revision_round")
+                    for p in state_models.round_records(root / "revisions")]
+        except ContractError as exc:
+            raise HTTPException(409, str(exc))
 
     @app.get("/api/pursuits/{pursuit_id}/revisions/{n}")
     def revision_diff(pursuit_id: str, n: int):
@@ -1509,7 +1469,11 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         record_path = root / "revisions" / f"round_{n}.json"
         if not record_path.exists():
             raise HTTPException(404, f"no round {n}")
-        record = json.loads(record_path.read_text(encoding="utf-8"))
+        try:
+            record = PursuitDir(workspace, pursuit_id).read_artifact(
+                f"revisions/round_{n}.json", kind="revision_round")  # P32b
+        except ContractError as exc:
+            raise HTTPException(409, str(exc))
         before_path = root / "revisions" / f"draft.rev{n - 1}.json"
         after_path = root / "revisions" / f"draft.rev{n}.json"
         if not after_path.exists():

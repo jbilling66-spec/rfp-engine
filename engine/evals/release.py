@@ -101,7 +101,17 @@ def evaluate_gates(suites: dict, blocking_failures: list[str], *,
             continue
         gates.append(_regression_clause(clause, subject, suites, prior,
                                         hold_constant))
-    gates.append({"clause": 4, "status": "not_performed", "closer": "A3"})
+    clause4 = {"clause": 4, "status": "not_performed", "closer": "A3"}
+    if "replay" in suites:
+        # P32c: the offline half is measured and named here; the clause
+        # stays not_performed because quality is not compared yet
+        clause4["detail"] = (
+            f"offline half measured (P32c): suites.replay "
+            f"{suites['replay'].get('status')} — the CI slice replayed "
+            "under FakeCaller with KB self-exclusion proven from the trace; "
+            "the quality comparison (A3's live replay, the v1 adapter, the "
+            "blind panel) is what closes this clause")
+    gates.append(clause4)
     gates.append({"clause": 5, "status": "not_performed", "closer": "A4"})
     gates.append({"clause": 6, "status": "pass",
                   "detail": "this record is the attachment; live-baseline "

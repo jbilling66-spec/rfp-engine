@@ -67,7 +67,7 @@ def _buyer_workspace(tmp_path, source: Path):
 
     from engine.structure import merge_parsed, parse_buyer_docx
     from engine.workspace import PursuitDir
-    from tests.helpers import plant_freeze
+    from tests.helpers import plant_draft, plant_freeze
 
     pursuit = PursuitDir(tmp_path, "pur_hyg")
     inbox = pursuit.root / "inbox"
@@ -83,12 +83,10 @@ def _buyer_workspace(tmp_path, source: Path):
         "sections": [{"section_id": "all",
                       "slot_ids": [s["slot_id"] for s in parsed.slots]}]})
     (pursuit.root / "drafts").mkdir(exist_ok=True)
-    (pursuit.root / "drafts" / "draft.json").write_text(_json.dumps({
-        "plan_sha256": "0" * 64, "revision_n": 1,
-        "sections": [{"section_id": "all", "answers": [
-            {"slot_id": "s-t00-r01", "status": "drafted",
-             "prose": "Founded in 2001, employee-owned."}]}]}),
-        encoding="utf-8")
+    plant_draft(pursuit, [{"section_id": "all", "answers": [
+        {"slot_id": "s-t00-r01", "status": "drafted",
+         "prose": "Founded in 2001, employee-owned."}]}],
+                revision_n=1, plan_sha256="0" * 64)
     return pursuit
 
 

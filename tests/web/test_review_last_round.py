@@ -6,8 +6,10 @@ guest flavour. The outcome select's vocabulary equals the schema's."""
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
+from engine.contracts import ContractError
 from engine.web import state
 from engine.web.server import create_app
 from tests.web.conftest import FIXED_AT, raising_caller
@@ -15,12 +17,21 @@ from tests.validation.fixtures.validations import run_validation_package
 
 
 def _plant_round(pursuit, n, outcomes):
-    rev = pursuit.root / "revisions"
-    rev.mkdir(exist_ok=True)
-    (rev / f"round_{n}.json").write_text(json.dumps({
+    """A round record in the commit's own shape, through the contract door
+    (P32b): the readers validate on the way in."""
+    pursuit.write_artifact("revision_round", {
         "pursuit_id": pursuit.pursuit_id, "round_n": n,
+        "from_revision": n - 1, "to_revision": n, "at": FIXED_AT,
+        "actor": "Robin Reviewer",
+        "consumed_event_ids": {"internal": [], "external": []},
+        "dismissed_external_event_ids": [], "external_screen_flags": [],
         "sections": [{"section_id": s, "outcome": o, "warnings": []}
-                     for s, o in outcomes.items()]}), encoding="utf-8")
+                     for s, o in outcomes.items()],
+        "reval": {"sections_revalidated": [s for s, o in outcomes.items()
+                                           if o == "revised"],
+                  "consistency_run": True, "redteam_dropped": True},
+        "live_gap_digest": "0" * 12,
+    }, name=f"revisions/round_{n}.json")
 
 
 def test_last_round_names_the_revised_sections(tmp_path):
@@ -66,3 +77,24 @@ def test_the_tenth_round_is_the_last_round(tmp_path):
     with TestClient(app, base_url="http://127.0.0.1") as client:
         rounds = client.get(f"/api/pursuits/{pid}/revisions").json()
     assert [r["round_n"] for r in rounds] == list(range(1, 11))
+
+
+def test_a_round_record_that_fails_its_schema_refuses_by_name(tmp_path):
+    """P32b (B145 §3d/§3i): a round record is evidence — one that parses
+    but breaks its contract refuses at the revisions doors (409 naming the
+    file) and in the review model; nothing rebuilds it."""
+    pursuit, report, _ = run_validation_package(tmp_path)
+    assert report.status == "complete"
+    ws, pid = tmp_path, pursuit.pursuit_id
+    sections = [s["section_id"] for s in state.review(ws, pid)["sections"]]
+    _plant_round(pursuit, 1, {sections[0]: "revised"})
+    (pursuit.root / "revisions" / "round_2.json").write_text(
+        json.dumps({"round_n": 2}), encoding="utf-8")
+    app = create_app(ws, make_caller=raising_caller, now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        r = client.get(f"/api/pursuits/{pid}/revisions")
+        assert r.status_code == 409, r.text
+        assert "revisions/round_2.json fails its schema" in r.json()["detail"]
+        assert client.get(f"/api/pursuits/{pid}/revisions/2").status_code == 409
+    with pytest.raises(ContractError, match="round_2.json fails its schema"):
+        state.review(ws, pid)

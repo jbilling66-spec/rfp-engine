@@ -244,20 +244,47 @@ def test_skip_predicates_verify_bindings_not_existence(tmp_path):
     _, sha = plant_freeze(pursuit, "pursuit_plan", plan, validate=True)
     draft = pursuit.root / "drafts" / "draft.json"
     assert draft_is_current(pursuit) is False  # nothing drafted
-    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 0,
+    draft.write_text(json.dumps({"pursuit_id": "pur_pred", "plan_sha256": sha, "revision_n": 0,
                                  "status": "complete", "sections": []}))
     assert draft_is_current(pursuit) is True
-    draft.write_text(json.dumps({"plan_sha256": "0" * 64, "revision_n": 0,
+    draft.write_text(json.dumps({"pursuit_id": "pur_pred", "plan_sha256": "0" * 64, "revision_n": 0,
                                  "status": "complete", "sections": []}))
     assert draft_is_current(pursuit) is False  # exists, bound elsewhere
-    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 0,
+    draft.write_text(json.dumps({"pursuit_id": "pur_pred", "plan_sha256": sha, "revision_n": 0,
                                  "status": "in_progress", "sections": []}))
     assert draft_is_current(pursuit) is False
-    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 0,
+    draft.write_text(json.dumps({"pursuit_id": "pur_pred", "plan_sha256": sha, "revision_n": 0,
                                  "status": "complete", "sections": []}))
     assert validation_is_current(pursuit) is False  # not validated
     plant_annotated(pursuit)
     assert validation_is_current(pursuit) is True
-    draft.write_text(json.dumps({"plan_sha256": sha, "revision_n": 1,
+    draft.write_text(json.dumps({"pursuit_id": "pur_pred", "plan_sha256": sha, "revision_n": 1,
                                  "status": "complete", "sections": []}))
     assert validation_is_current(pursuit) is False  # envelope moved on
+
+
+def test_exclude_reaches_every_retrieval_site_of_the_chain(tmp_path):
+    """P32c (A3's zero-spend half): `advance(exclude=)` is a replay's
+    self-exclusion. The demo chain's most-opened card is excluded: every
+    search line of every stage records it withheld, no line of any stage
+    returns or opens it, and the chain still completes end to end."""
+    pursuit = PursuitDir(tmp_path, "pur_demo")
+    withheld = "kb_88078df15d"  # research's first open, in 7 of 8 plan hits
+
+    def gate2(p):
+        dispositions = _canned_dispositions(p)
+        return {"decision": "approved_with_edits",
+                "edits": {"dispose": dispositions}}
+
+    adv = _advance(pursuit, decide_gate2=gate2,
+                   exclude=frozenset({withheld}))
+    assert adv.status == "ok", adv.problems
+    lines = [r for run in sorted((pursuit.root / "runs").glob("*/run.jsonl"))
+             for r in read_run(run) if r.get("record_type") == "kb_retrieval"]
+    searches = [l for l in lines if l["kb"]["step"] == "card_search"]
+    assert {l["stage"] for l in searches} >= {"research_internal",
+                                              "path_a_map"}
+    assert all(withheld in l["kb"]["excluded"] for l in searches)
+    assert not any(withheld in l["kb"]["cards_returned"]
+                   or withheld in l["kb"]["cards_opened"] for l in lines)
+    assert any(l["kb"]["step"] == "targeted_open" for l in lines)

@@ -40,7 +40,8 @@ def compose_ping(section_title: str, label: str, ask: str,
 
 
 def map_sections(store, sections: list[dict], slots_by_id: dict[str, dict],
-                 *, log, stage: str) -> dict[str, str]:
+                 *, log, stage: str,
+                 exclude: frozenset = frozenset()) -> dict[str, str]:
     """Mutates sections in place: adds kb_hits and gaps (gap items carry
     NO gap_id yet — numbering happens once, over the whole plan, in the
     stage that owns emission order). Returns slot_id -> disposition
@@ -57,7 +58,7 @@ def map_sections(store, sections: list[dict], slots_by_id: dict[str, dict],
                 continue
             result = card_search(
                 store, slot.get("question_text", ""), log=log, stage=stage,
-                agent="kb_mapper",
+                agent="kb_mapper", exclude=exclude,
                 target={k: v for k, v in {
                     "section_id": section["section_id"],
                     "slot_ref_id": slot.get("ref_id"),

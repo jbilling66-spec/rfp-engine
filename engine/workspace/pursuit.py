@@ -108,22 +108,46 @@ class PursuitDir:
         _atomic_write_json(path, obj)
         return path
 
-    def read_artifact(self, name: str) -> dict:
-        return json.loads(self._under_root(name).read_text(encoding="utf-8"))
+    def read_artifact(self, name: str, kind: str | None = None) -> dict:
+        """A bare read when no kind is given (the remaining callers
+        converge on P2-2's funnel at A5); with a kind, the record is
+        validated on the way IN and a refusal names the FILE (P32b /
+        P1-8 narrow, B145 §3j) — the same contract the writer enforced
+        on the way out, so a hand edit on disk cannot pass as a record."""
+        obj = json.loads(self._under_root(name).read_text(encoding="utf-8"))
+        if kind is not None:
+            self._check_kind(name, kind, obj)
+        return obj
 
-    def read_artifact_tolerant(self, name: str) -> tuple[dict | None, str]:
+    @staticmethod
+    def _check_kind(name: str, kind: str, obj) -> None:
+        try:
+            validate(kind, obj)
+        except ContractError as exc:
+            raise ContractError(f"{name} fails its schema ({exc})") from exc
+
+    def read_artifact_tolerant(self, name: str,
+                               kind: str | None = None) -> tuple[dict | None, str]:
         """`(obj, "")`, or `(None, reason)` naming the file when it is
-        absent or unreadable — the read-side pattern (P2-62, P29b b4;
-        `validation/annotate.py`'s "unreadable == absent, honestly"). The
-        caller decides what an unreadable record means for ITS artifact:
-        rebuild a derived one, refuse over one that holds human work."""
+        absent, unreadable or — when a kind is given — fails its schema:
+        the read-side pattern (P2-62, P29b b4; `validation/annotate.py`'s
+        "unreadable == absent, honestly"; P32b generalises it to the
+        contract). The caller decides what a bad record means for ITS
+        artifact: rebuild a derived one, refuse over one that holds
+        human work (B130)."""
         path = self._under_root(name)
         if not path.exists():
             return None, f"{name} is absent"
         try:
-            return json.loads(path.read_text(encoding="utf-8")), ""
+            obj = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
             return None, f"{name} unreadable ({exc.__class__.__name__})"
+        if kind is not None:
+            try:
+                self._check_kind(name, kind, obj)
+            except ContractError as exc:
+                return None, str(exc)
+        return obj, ""
 
     def write_bytes(self, name: str, data: bytes) -> Path:
         """Atomic bytes under the root (P0-6): the research-pack copy and

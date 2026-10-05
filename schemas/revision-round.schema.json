@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/revision-round.schema.json",
+  "title": "RevisionRound",
+  "description": "The record of one committed revise round (revisions/round_<n>.json; D6, the run-log artifact kind `revision`; P32b / P1-8 narrow): which pending items the round consumed and which guest items it dismissed (by the finalized event ids), what the injection screen had flagged on the consumed guest items, each touched section's outcome, the re-validation facts, and a digest of the live plan's gap states at commit. Written once; a replay of a crashed commit keeps the first attempt's record (P1-14). The inputs are gone once consumed, so this record is EVIDENCE — a file that fails this schema is a typed refusal at the revisions doors and is named on the board, never rebuilt (B130; B145 §3d).",
+  "type": "object",
+  "required": ["pursuit_id", "round_n", "from_revision", "to_revision", "at", "actor", "consumed_event_ids", "dismissed_external_event_ids", "external_screen_flags", "sections", "reval", "live_gap_digest"],
+  "additionalProperties": false,
+  "properties": {
+    "pursuit_id": { "type": "string" },
+    "round_n": { "type": "integer", "minimum": 1 },
+    "from_revision": { "type": "integer", "minimum": 0, "description": "The envelope revision the round started from (round_n - 1)." },
+    "to_revision": { "type": "integer", "minimum": 1, "description": "The envelope revision the round produced (round_n)." },
+    "at": { "type": "string", "format": "date-time", "description": "The commit's own clock — kept from the first attempt on a replay." },
+    "actor": { "type": "string" },
+    "consumed_event_ids": {
+      "type": "object",
+      "required": ["internal", "external"],
+      "additionalProperties": false,
+      "properties": {
+        "internal": { "type": "array", "items": { "type": "string" }, "description": "The finalized feedback_event ids of the pursuit team's consumed comments and edits." },
+        "external": { "type": "array", "items": { "type": "string" }, "description": "The finalized event ids of the guest items an operator had included (D16d)." }
+      }
+    },
+    "dismissed_external_event_ids": { "type": "array", "items": { "type": "string" } },
+    "external_screen_flags": {
+      "type": "array",
+      "description": "P1-53 (P29b): what the injection screen found on each consumed guest item, checkpointed before the pending entries were dropped so a resumed commit records the same facts.",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "pattern_id", "excerpt"],
+        "additionalProperties": false,
+        "properties": {
+          "event_id": { "type": "string" },
+          "pattern_id": { "type": "string" },
+          "excerpt": { "type": "string" }
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["section_id", "outcome", "warnings"],
+        "additionalProperties": false,
+        "properties": {
+          "section_id": { "type": "string" },
+          "outcome": { "type": "string", "enum": ["kept", "revised", "pended"], "description": "revised = the prose changed (edits applied verbatim, then the agent's revision); kept = touched but unchanged; pended = the revision refused and the section awaits a human." },
+          "warnings": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "reval": {
+      "type": "object",
+      "required": ["sections_revalidated", "consistency_run", "redteam_dropped"],
+      "additionalProperties": false,
+      "properties": {
+        "sections_revalidated": { "type": "array", "items": { "type": "string" }, "description": "The revised sections, validated again (D11)." },
+        "consistency_run": { "type": "boolean" },
+        "redteam_dropped": { "type": "boolean" }
+      }
+    },
+    "live_gap_digest": { "type": "string", "pattern": "^[0-9a-f]{12}$", "description": "sha256 prefix over the live plan's (gap_id, status) pairs per section at commit — the gap state the round saw." }
+  }
+}

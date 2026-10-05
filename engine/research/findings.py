@@ -144,7 +144,8 @@ def _sorted_findings(findings: list[dict]) -> list[dict]:
 
 
 def run_research(pursuit, caller, log, store, *, mode: str,
-                 pack: Path | None = None) -> ResearchReport:
+                 pack: Path | None = None,
+                 exclude: frozenset = frozenset()) -> ResearchReport:
     report = ResearchReport(pursuit_id=pursuit.pursuit_id)
 
     # Refusal gate BEFORE any spend: research needs a brief to research for.
@@ -183,14 +184,15 @@ def run_research(pursuit, caller, log, store, *, mode: str,
         warnings: list[str] = []
         for topic in topics:
             found = card_search(store, topic, log=log, stage="research_internal",
-                                agent="internal_researcher")
+                                agent="internal_researcher", exclude=exclude)
             top = found.results[0] if found.results else None
             if top is None or top.kb_id in opened:
                 continue
             try:
                 body = targeted_open(store, top.kb_id, log=log,
                                      stage="research_internal",
-                                     agent="internal_researcher", query=topic)
+                                     agent="internal_researcher", query=topic,
+                                     exclude=exclude)
             except UseRestrictedCard:
                 warnings.append(f"{top.kb_id}: use_restriction card skipped (D2)")
                 continue

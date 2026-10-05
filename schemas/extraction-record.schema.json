@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/extraction-record.schema.json",
+  "title": "ExtractionRecord",
+  "description": "The pursuit workspace's extraction artifact (extraction.json; C9/C10, P32b / P1-8 narrow): per intake document, which stack read it and its fingerprint, whether the read degraded, the flags the seam raised, and the code-forced mandatory_review (no payload shape can unset it); plus the two-path cell diff per document where the deterministic and VLM paths were both read. Written inside the intake checkpoint guard, so it is byte-stable across resume and rebuilt only by re-running intake. A file that fails this schema is skipped by the metric reader exactly as an unparseable one is (M-23) and named on the board (B145 §3d).",
+  "type": "object",
+  "required": ["docs", "two_path"],
+  "additionalProperties": false,
+  "properties": {
+    "docs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "extractor", "extraction_fingerprint", "degraded", "flags", "mandatory_review"],
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string", "minLength": 1 },
+          "extractor": { "type": "string", "minLength": 1, "description": "The stack that read the document — every stamp names a real stack (the C12 seam): docling, pypdf, python-docx, openpyxl, text; a fake backend stamps its own name." },
+          "extraction_fingerprint": { "type": "string", "minLength": 1, "description": "The stack's version fingerprint (extraction/fingerprint.py) — resume-stable, no timing." },
+          "degraded": { "type": "boolean", "description": "The stack reported a partial read." },
+          "flags": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["partial_extraction", "multicolumn_layout", "docling_fallback", "legacy_extractor", "two_path_divergence", "two_path_unavailable"] },
+            "description": "The seam's flag vocabulary — code-owned and finite (intake/extract.py, intake/brief.py); a new flag is a schema change by design."
+          },
+          "mandatory_review": { "type": "boolean", "description": "Code-forced from degraded OR any flag (the planning-gate idiom)." }
+        }
+      }
+    },
+    "two_path": {
+      "type": "object",
+      "description": "filename -> the cell-level review of that document's tables against the VLM path (spec §A2.3); only documents the two-path tripwire read appear (P1-33: keyed by FILENAME).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["tables_diffed", "findings"],
+        "additionalProperties": false,
+        "properties": {
+          "tables_diffed": { "type": "integer", "minimum": 0 },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["table", "row", "col", "kind"],
+              "additionalProperties": false,
+              "properties": {
+                "table": { "type": "integer", "minimum": 0 },
+                "row": { "type": "integer", "minimum": 0 },
+                "col": { "type": "integer", "minimum": 0 },
+                "kind": { "type": "string", "enum": ["only_in_a", "only_in_b", "value_differs"] },
+                "a": { "type": "string" },
+                "b": { "type": "string" }
+              }
+            }
+          },
+          "error": { "type": "string", "description": "Present when the VLM path failed: the review is empty and the document carries two_path_unavailable." }
+        }
+      }
+    }
+  }
+}

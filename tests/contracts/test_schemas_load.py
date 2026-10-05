@@ -35,6 +35,10 @@ EXPECTED = {
     "target-slot.schema.json",
     "template-fill-facts.schema.json",
     "writeback-facts.schema.json",
+    "pending-comments.schema.json",
+    "addendum-meta.schema.json",
+    "revision-round.schema.json",
+    "extraction-record.schema.json",
 }
 
 

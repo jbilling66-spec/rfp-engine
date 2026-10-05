@@ -87,7 +87,7 @@ class StageRun:
     does not search."""
 
     def __init__(self, pursuit, make_caller, mode, stage, *, kb_root,
-                 extras=None):
+                 extras=None, replay_of=None):
         self.store = KBStore(kb_root)
         self.log = RunLogger(pursuit.root, pursuit.new_run_id(),
                              pursuit.pursuit_id)
@@ -96,6 +96,10 @@ class StageRun:
         cfg = effective_config(extra=extra or None)
         self.lanes = self.store
         run_fields = {}
+        if replay_of:
+            # P32c (A3): the header names what this run replays, so the
+            # run can never be mistaken for the pursuit's own
+            run_fields["replay_of"] = replay_of
         pursuit_lane = None
         memory_snap = memory_snapshot(pursuit.root)
         if memory_snap and stage in _LANE_STAGES:
@@ -144,7 +148,8 @@ def _read_draft(pursuit) -> dict:
     regenerable, so an unreadable one is a typed refusal naming the file
     and the runbook (P2-62, P29b b4): the job lane records `refused`,
     nothing is rewritten, the bytes stay for the build side."""
-    envelope, reason = pursuit.read_artifact_tolerant("drafts/draft.json")
+    envelope, reason = pursuit.read_artifact_tolerant("drafts/draft.json",
+                                                      kind="draft")  # P32b
     if envelope is None:
         raise ContractError(
             f"{reason} — the draft carries the review rounds' edits and "
@@ -191,7 +196,7 @@ def validation_is_current(pursuit, *, notices: list | None = None) -> bool:
     if not path.exists():
         return False
     annotated, reason = pursuit.read_artifact_tolerant(
-        "drafts/annotated-draft.json")
+        "drafts/annotated-draft.json", kind="annotated_draft")  # P32b
     if annotated is None:
         archived = archive_aside(path)
         if notices is not None:
@@ -212,11 +217,18 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
             workbook=None, targets=None, core_doc=None,
             decide_gate0=None, decide_gate1=None,
             decide_gate2=None,
-            extraction=None, actor: str = "pipeline") -> AdvanceResult:
+            extraction=None, actor: str = "pipeline",
+            exclude: frozenset = frozenset(),
+            replay_of: str | None = None) -> AdvanceResult:
     """Run the pipeline forward from wherever the artifacts say it
     stands. Gate deciders are callables(pursuit) -> kwargs for the
     approve_* contracts; None means "no decision available": the driver
-    stops there with an `awaiting_gate` footer instead of guessing."""
+    stops there with an `awaiting_gate` footer instead of guessing.
+
+    P32c (A3's zero-spend half): `exclude` is a replay's self-exclusion
+    set, threaded to every retrieval site of every stage (search, open,
+    descend record it, never silently drop it); `replay_of` rides every
+    run header the chain opens. Both default to the production shape."""
     result = AdvanceResult()
     root = pursuit.root
 
@@ -246,7 +258,8 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
                                    "advance")
             return result
         stage = StageRun(pursuit, make_caller, mode, "intake",
-                         kb_root=kb_root, extras=extras)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
         report = run_intake(pursuit, stage.caller, stage.log,
                             intake_package(pursuit), extraction=extraction)
         if report.status == "refused":
@@ -280,7 +293,8 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
             result.problems.append("brief awaits the gate_0 decision")
             return result
         stage = StageRun(pursuit, make_caller, mode, "gate_0",
-                         kb_root=kb_root, extras=extras)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
         outcome = approve_gate0(pursuit, stage.log, actor=actor, at=at,
                                 kb_root=kb_root, **decide_gate0(pursuit))
         stage.end()
@@ -292,7 +306,8 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
         # Research runs at most once, strictly pre-gate. Once the freeze
         # exists this whole block is unreachable — B22(9), closed here.
         stage = StageRun(pursuit, make_caller, mode, "research",
-                         kb_root=kb_root, extras=extras)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
         pack_path = None
         if research_pack is not None:
             pack_path = root / "inbox" / research_pack.name
@@ -301,7 +316,7 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
                                     research_pack.read_bytes())
         cfg_mode = effective_config()["research_mode"]
         research = run_research(pursuit, stage.caller, stage.log, stage.lanes,
-                                mode=cfg_mode, pack=pack_path)
+                                mode=cfg_mode, pack=pack_path, exclude=exclude)
         if research.status == "refused":
             # P25 item 1 (P1-12): every stage refusal ends the advance —
             # a dropped return used to let the chain walk past it.
@@ -314,7 +329,8 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
         result.ran_stages.append("research")
 
         stage = StageRun(pursuit, make_caller, mode, "strategy",
-                         kb_root=kb_root, extras=extras)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
         themes = run_win_themes(pursuit, stage.caller, stage.log)
         if themes.status == "refused":
             stage.end()
@@ -335,10 +351,11 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
 
     if not (root / "plan.frozen.json").exists():
         stage = StageRun(pursuit, make_caller, mode, "planning",
-                         kb_root=kb_root, extras=extras)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
         report = run_planning(pursuit, stage.caller, stage.log, stage.lanes,
                               workbook=workbook, targets=targets,
-                              core_doc=core_doc)
+                              core_doc=core_doc, exclude=exclude)
         if report.status != "complete":
             stage.end()
             result.status = "failed"
@@ -358,8 +375,10 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
 
     if not draft_is_current(pursuit):
         stage = StageRun(pursuit, make_caller, mode, "drafting",
-                         kb_root=kb_root, extras=extras)
-        report = run_drafting(pursuit, stage.caller, stage.log, stage.lanes)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
+        report = run_drafting(pursuit, stage.caller, stage.log, stage.lanes,
+                              exclude=exclude)
         if report.status == "refused":
             stage.end()
             result.status = "failed"
@@ -385,7 +404,8 @@ def advance(pursuit, *, make_caller, mode, kb_root, at,
     notices: list[tuple[str, str]] = []
     if not validation_is_current(pursuit, notices=notices):
         stage = StageRun(pursuit, make_caller, mode, "validation",
-                         kb_root=kb_root, extras=extras)
+                         kb_root=kb_root, extras=extras,
+                         replay_of=replay_of)
         for code, message in notices:  # P2-62: the repair is on the record
             stage.log.emit("error", stage="validation", error={
                 "code": code, "message": message, "recoverable": True,

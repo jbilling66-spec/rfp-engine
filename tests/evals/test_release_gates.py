@@ -175,6 +175,22 @@ def test_write_record_lands_under_the_engine_version(tmp_path):
     assert json.loads(path.read_text(encoding="utf-8")) == record
 
 
+def test_clause_4_names_the_measured_offline_half_and_stays_not_performed():
+    """P32c: with a replay suite on the record, clause 4 says what was
+    measured and still reads not_performed with its closer — the quality
+    comparison is A3's; without one the clause is as it was."""
+    bare = next(g for g in evaluate_gates({}, [], prior=None)
+                if g["clause"] == 4)
+    assert bare == {"clause": 4, "status": "not_performed", "closer": "A3"}
+    suites = {"replay": _passing_lane(status="pass")}
+    named = next(g for g in evaluate_gates(suites, [], prior=None)
+                 if g["clause"] == 4)
+    assert named["status"] == "not_performed" and named["closer"] == "A3"
+    assert "suites.replay pass" in named["detail"]
+    assert "quality" in named["detail"]
+    build_record(suites, engine_version="0.1.0+test", at=AT)  # validates
+
+
 def test_first_record_regression_clauses_answer_honestly():
     gates = evaluate_gates({}, [], prior=None)
     for clause in (2, 3):

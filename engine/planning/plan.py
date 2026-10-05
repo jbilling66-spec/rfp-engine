@@ -95,7 +95,8 @@ def run_planning(pursuit, caller, log, store, *, workbook: Path | None = None,
                  targets: list[Path] | None = None,
                  core_doc: Path | None = None,
                  manifest_path: Path = MANIFEST_DEFAULT,
-                 reference_path: Path = REFERENCE_DEFAULT) -> PlanReport:
+                 reference_path: Path = REFERENCE_DEFAULT,
+                 exclude: frozenset = frozenset()) -> PlanReport:
     report = PlanReport(pursuit_id=pursuit.pursuit_id)
     # P16: the target surface is a declared SET; the single `workbook`
     # param folds in as a one-element set for existing callers — but a
@@ -200,7 +201,7 @@ def run_planning(pursuit, caller, log, store, *, workbook: Path | None = None,
         if stage not in pursuit.completed_stages():
             refused = _run_path_a(pursuit, log, store, frozen, manifest,
                                   feedback, targets, core_doc, structure,
-                                  report)
+                                  report, exclude=exclude)
             if refused is not None:
                 return refused
     else:
@@ -209,7 +210,8 @@ def run_planning(pursuit, caller, log, store, *, workbook: Path | None = None,
             from engine.planning.outline import run_path_b
 
             refused = run_path_b(pursuit, caller, log, store, frozen, manifest,
-                                 feedback, reference_path, report)
+                                 feedback, reference_path, report,
+                                 exclude=exclude)
             if refused is not None:
                 return refused
 
@@ -247,7 +249,8 @@ def run_planning(pursuit, caller, log, store, *, workbook: Path | None = None,
 
 def _run_path_a(pursuit, log, store, frozen: dict, manifest, feedback,
                 targets: list[Path], core_doc: Path | None, structure: str,
-                report: PlanReport) -> PlanReport | None:
+                report: PlanReport,
+                exclude: frozenset = frozenset()) -> PlanReport | None:
     """The guarded Path-A stage. Returns a refused report or None."""
     from engine.structure import StructureError, merge_parsed, parse_target
     from engine.structure.targets import scan_core_document
@@ -367,7 +370,7 @@ def _run_path_a(pursuit, log, store, frozen: dict, manifest, feedback,
             section["win_themes"] = list(approved)
 
     dispositions = map_sections(store, sections, slots_by_id,
-                                log=log, stage="path_a_map")
+                                log=log, stage="path_a_map", exclude=exclude)
     assert_zero_silent_misses(container["slots"], sections, dispositions)
 
     texts_by_section = {

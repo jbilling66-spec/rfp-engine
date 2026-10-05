@@ -277,6 +277,25 @@ class RestrictedStore:
             index[path.stem] = sorted(record["identifiers"])
         return index
 
+    def lineage_index(self, *, actor: str = "engine",
+                      purpose: str = "replay") -> dict[str, dict]:
+        """kb_id -> {source_pursuits, derived_from}: the lineage half of
+        every record and nothing else — no identifier string and no
+        client name leaves the store. P32c (A3's zero-spend half): a
+        replay's self-exclusion set is computed from this. One
+        authorized read, one access-log line."""
+        self._authorize(actor, purpose, "lineage_index")
+        index = {}
+        for path in sorted(self.prov_dir.glob("*.json")):
+            record = json.loads(path.read_text(encoding="utf-8"))
+            index[path.stem] = {
+                "source_pursuits": sorted({
+                    s["source_pursuit"] for s in record.get("sources", [])
+                    if s.get("source_pursuit")}),
+                "derived_from": list(record.get("derived_from", [])),
+            }
+        return index
+
     def reverse_index(self, name: str, *, actor: str) -> list[dict]:
         """Right of review (THREAT_MODEL "Data lifecycle"): answer 'where is
         my name used?' across the corpus."""

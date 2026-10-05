@@ -7,6 +7,8 @@ run is the numerically latest, not the lexicographically last."""
 
 import json
 
+import pytest
+
 from engine.web import state
 from engine.workspace import PursuitDir
 from tests.helpers import plant_annotated, plant_freeze
@@ -96,3 +98,34 @@ def test_the_board_row_names_the_buyer_only_when_the_brief_does(tmp_path):
     brief["buyer"] = {"name": "Example Authority"}
     (pursuit.root / "brief.json").write_text(json.dumps(brief))
     assert _row(ws)["buyer_name"] == "Example Authority"
+
+
+@pytest.mark.parametrize("name, body", [
+    ("events/pending.json", {"pending": [{"cid": "x"}], "next_cid": 1}),
+    ("revisions/round_1.json", {"round_n": 1}),
+    ("addenda/addm_01/meta.json", {"addendum_id": "addm_01"}),
+    ("extraction.json", {"docs": "none"}),
+])
+def test_a_record_that_fails_its_schema_names_itself_on_its_row(
+        tmp_path, name, body):
+    """P32b (B145 §3e): the four free-form records have contracts, and
+    the board names one that parses but breaks its contract on the
+    pursuit's own row — the runbook's stop, never a silent read."""
+    ws, pursuit = _pursuit(tmp_path)
+    path = pursuit.root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(body), encoding="utf-8")
+    row = _row(ws)
+    assert row["stage"] == "corrupt"
+    assert any(c.startswith(f"{name}: fails its schema") for c in row["corrupt"]), \
+        row["corrupt"]
+    assert "recovery runbook" in row["next"]
+
+
+def test_a_draft_that_fails_its_schema_names_itself_on_its_row(tmp_path):
+    ws, pursuit = _pursuit(tmp_path)
+    (pursuit.root / "drafts" / "draft.json").write_text(
+        json.dumps({"pursuit_id": "pur_board"}), encoding="utf-8")
+    row = _row(ws)
+    assert row["stage"] == "corrupt"
+    assert any(c.startswith("draft.json: fails its schema") for c in row["corrupt"])

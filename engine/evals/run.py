@@ -244,6 +244,13 @@ def anonymization_lane() -> dict:
 
 INTAKE_BAR = {"weight_recall": 0.95, "target_coverage": 1.0}
 TRAJECTORY_BAR = {"pass_rate": 1.0}
+# P32c (A3's offline half): the exclusion must have FIRED (floor 1 on the
+# lines that withheld a self-excluded card), nothing self-excluded may be
+# surfaced or opened (ceilings 0), and the trace must say what it is —
+# headers, gates, the trajectory verb (booleans graded as floors of 1).
+REPLAY_BAR = {"excluded_lines": 1, "surfaced_excluded_count_max": 0,
+              "opened_excluded_count_max": 0, "headers_ok": 1,
+              "gates_auto_approved": 1, "no_excluded_card_opened": 1}
 STRUCTURE_BAR = {"exact_match": 1.0}
 VOICE_BAR = {"recall": 1.0, "false_positive_count_max": 0}
 
@@ -472,8 +479,51 @@ def mapper_lane() -> dict:
                 "the owner's call, not a quiet tune (closer: P13/A1, B41(1)).")}
 
 
+def replay_lane() -> dict:
+    """P32c — A3's zero-spend half: the CI slice replayed under FakeCaller
+    with the bench pursuit's own (synthetic, planted) KB contribution
+    withheld; the verdict is read off the replay's trace. Deterministic
+    and blocking: self-exclusion hygiene is a release property. A bench
+    whose exclusion set is empty or never fired is a vacuous measure
+    (P2-36), refused by name. Quality is NOT compared here — clause 4
+    stays not_performed until A3's live replay (the owner's call,
+    B143 §1)."""
+    from engine.evals.cases import VacuousMeasure, require_n
+    from engine.evals.replay import replay_bench
+
+    report = replay_bench()
+    try:
+        if report["status"] != "ok":
+            raise VacuousMeasure(
+                "replay: the bench replay ended "
+                f"{report['status']}: {'; '.join(report['problems'])}")
+        require_n(report["self_exclusion_size"], 1, lane="replay",
+                  of="self-excluded cards")
+        require_n(report["excluded_lines"], 1, lane="replay",
+                  of="retrieval lines that withheld a self-excluded card")
+    except VacuousMeasure as refusal:
+        return _vacuous(refusal, basis="deterministic", blocking=True,
+                        bar=REPLAY_BAR)
+    measures = {k: report[k] for k in (
+        "self_exclusion_size", "excluded_lines", "surfaced_excluded_count",
+        "opened_excluded_count", "surfaced_excluded", "opened_excluded",
+        "replay_runs", "headers_ok", "gates_auto_approved",
+        "no_excluded_card_opened", "trajectory_detail")}
+    return {"basis": "deterministic", "blocking": True,
+            "bar": dict(REPLAY_BAR),
+            "measures": measures,
+            "detail": ("A3's offline half (P32c): the CI slice replayed under "
+                       "FakeCaller (mode=replay, replay_of, every gate "
+                       "auto_approved) against a scratch KB carrying two "
+                       "synthetic cards contributed by the bench pursuit; "
+                       "hygiene proven from the trace, quality not compared "
+                       "— the release gate's clause 4 stays not_performed "
+                       "until A3's live replay")}
+
+
 # The registry `engine eval` runs. Grows with c7-c11 (intake,
-# consistency, drafter, red_team, trajectory, extraction).
+# consistency, drafter, red_team, trajectory, extraction); P32c adds
+# replay.
 SUITES = {
     "poison": poison_lane,
     "injection": injection_lane,
@@ -487,4 +537,5 @@ SUITES = {
     "consistency": consistency_lane,
     "drafter": drafter_lane,
     "red_team": red_team_lane,
+    "replay": replay_lane,
 }

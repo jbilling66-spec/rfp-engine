@@ -177,7 +177,7 @@ def compute_fill_facts(pursuit, *, confirmed_by: str, at: str) -> dict:
     server-side every time (S7: the preview and the run compute the
     same facts)."""
     template, ref_sha, frozen, _container = _template_source(pursuit)
-    envelope = pursuit.read_artifact("drafts/draft.json")
+    envelope = pursuit.read_artifact("drafts/draft.json", kind="draft")  # P32b
     prose_by_section = {
         s["section_id"]: s.get("prose", "")
         for s in envelope.get("sections", [])
@@ -540,7 +540,7 @@ def run_template_fill(pursuit, log, *, confirmed_by: str, at: str,
     rendered; the working copy is internal and is not scanned."""
     facts = compute_fill_facts(pursuit, confirmed_by=confirmed_by, at=at)
     template = Path(facts["template_file"])
-    envelope = pursuit.read_artifact("drafts/draft.json")
+    envelope = pursuit.read_artifact("drafts/draft.json", kind="draft")  # P32b
     prose_by_section = {
         s["section_id"]: s.get("prose", "")
         for s in envelope.get("sections", [])

@@ -184,6 +184,22 @@ never repairs it silently. What to do, by record:
   the review rounds' human edits. The next **Advance** refuses by name
   (the job reads `refused`, the file is untouched); the build side restores
   it from `revisions/draft.revN.json`.
+- **A record that parses but fails its schema.** Since 0.12.1 the drafts
+  and the four free-form records — `events/pending.json`,
+  `revisions/round_N.json`, `addenda/<id>/meta.json`, `extraction.json` —
+  have contracts (`schemas/`) and are validated on the way in, so "fails
+  its schema" joins "unreadable" above and is handled the same way: the
+  board's row says `corrupt` and names the file with that phrase.
+  `drafts/annotated-draft.json` is archived aside and rebuilt by the next
+  **Advance** exactly as an unreadable one is. Every other record is human
+  work or evidence and is refused by name at its own door — the next
+  **Advance** over the draft, the comment and revise doors over the pending
+  store, the addendum list and decide doors over a meta, the revision
+  history over a round record — and is never rewritten. Stop; the file is
+  evidence. The build side restores it from its archive where one exists
+  (`revisions/draft.revN.json` for the draft); otherwise the repair is a
+  text edit that satisfies the contract, and the schema file names every
+  field the record must carry.
 - **`brief.json` or `plan.json` unreadable.** The board names the file. If
   a frozen copy exists (`brief.frozen.json`, `plan.frozen.json`) it is the
   authoritative record and the build side restores the live file from it;

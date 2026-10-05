@@ -27,7 +27,7 @@ from engine.llm import effective_config
 from engine.runlog import RunLogger
 from engine.version import engine_version
 from engine.workspace import PursuitDir
-from tests.helpers import plant_freeze
+from tests.helpers import plant_draft, plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 TWIN = FIXTURES / "writeback-twin.xlsx"
@@ -147,12 +147,10 @@ def _pursuit(tmp_path) -> PursuitDir:
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": "all", "slot_ids": ["s_one", "s_two"]}]})
     (pursuit.root / "drafts").mkdir(exist_ok=True)
-    (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": "0" * 64, "revision_n": 1,
-        "sections": [{"section_id": "all", "answers": [
-            {"slot_id": "s_one", "status": "drafted", "prose": PROSE},
-            {"slot_id": "s_two", "status": "awaiting_disposition"}]}]}),
-        encoding="utf-8")
+    plant_draft(pursuit, [{"section_id": "all", "answers": [
+        {"slot_id": "s_one", "status": "drafted", "prose": PROSE},
+        {"slot_id": "s_two", "status": "awaiting_disposition"}]}],
+                revision_n=1, plan_sha256="0" * 64)
     return pursuit
 
 

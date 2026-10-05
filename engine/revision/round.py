@@ -71,7 +71,8 @@ def _prose_of(entry: dict) -> str:
 
 def run_round(pursuit, caller, log, store, *, at: str, actor: str,
               voice_path=VOICE_DEFAULT, anchors_path=ANCHORS_DEFAULT,
-              should_cancel=None) -> RoundReport:
+              should_cancel=None,
+              exclude: frozenset = frozenset()) -> RoundReport:
     """should_cancel: optional callable polled BETWEEN sections (the
     cooperative-cancel contract, D2): finished sections keep their
     checkpointed work, the commit never runs, and the next round resumes
@@ -255,7 +256,7 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
                     body = targeted_open(store, kb_id, log=log, stage=STAGE,
                                          agent=AGENT,
                                          query=f"revise:{section_id}",
-                                         target=target)
+                                         target=target, exclude=exclude)
                 except UseRestrictedCard as exc:
                     warnings.append(f"{kb_id}: withheld at revise time — "
                                     f"{exc}")
@@ -617,7 +618,8 @@ def run_round(pursuit, caller, log, store, *, at: str, actor: str,
         report.warnings.append(
             f"round {round_n}: record kept from the first attempt")
     else:
-        record_path = pursuit.write_json(record_name, record)
+        record_path = pursuit.write_artifact("revision_round", record,
+                                             name=record_name)  # P32b
     log.emit("artifact", stage=STAGE, artifact={
         "kind": "revision", "path": str(record_path),
         "revision_n": round_n,

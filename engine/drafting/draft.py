@@ -71,7 +71,8 @@ def _refuse(log, report: DraftReport, *, code: str, message: str) -> DraftReport
 
 
 def run_drafting(pursuit, caller, log, store, *,
-                 voice_path: Path = VOICE_DEFAULT) -> DraftReport:
+                 voice_path: Path = VOICE_DEFAULT,
+                 exclude: frozenset = frozenset()) -> DraftReport:
     report = DraftReport(pursuit_id=pursuit.pursuit_id)
 
     # --- refusal gates: the fork predicate, zero spend ------------------
@@ -156,7 +157,7 @@ def run_drafting(pursuit, caller, log, store, *,
             pursuit, caller, log, store, section, rp, slots_by_id, path,
             voice_text, frozen_brief,
             frozen_plan.get("effort_allocation", "uniform"),
-            notes_frame=notes_frame)
+            notes_frame=notes_frame, exclude=exclude)
         ckpt["sections"][section_id] = entry
         pursuit.checkpoint(STAGE, ckpt)  # N2: after each completed section
 
@@ -187,7 +188,8 @@ def run_drafting(pursuit, caller, log, store, *,
 
 def _draft_section(pursuit, caller, log, store, section, rp, slots_by_id,
                    path, voice_text, frozen_brief,
-                   effort_allocation="uniform", notes_frame: str = "") -> dict:
+                   effort_allocation="uniform", notes_frame: str = "",
+                   exclude: frozenset = frozenset()) -> dict:
     section_id = section["section_id"]
     section_type = rp["section_type"]
     target = {"section_id": section_id, "section_type": section_type}
@@ -204,7 +206,8 @@ def _draft_section(pursuit, caller, log, store, section, rp, slots_by_id,
     for kb_id in planned_ids:
         try:
             body = targeted_open(store, kb_id, log=log, stage=STAGE,
-                                 agent=AGENT, query=query, target=target)
+                                 agent=AGENT, query=query, target=target,
+                                 exclude=exclude)
         except UseRestrictedCard as exc:
             restricted.append(kb_id)
             # D2, or a steward's deprecation (P26c) — withheld either way

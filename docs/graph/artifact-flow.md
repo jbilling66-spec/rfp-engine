@@ -83,6 +83,10 @@ exactly these files.
 | target_slots | slots.schema.json |
 | template_fill_facts | template-fill-facts.schema.json |
 | writeback_facts | writeback-facts.schema.json |
+| pending_comments | pending-comments.schema.json |
+| addendum_meta | addendum-meta.schema.json |
+| revision_round | revision-round.schema.json |
+| extraction_record | extraction-record.schema.json |
 
 Naming note: `manifest` is the SERVICE-LINE manifest (config-side). The
 per-pursuit deliverable record is `submission_bundle` — never called a manifest.

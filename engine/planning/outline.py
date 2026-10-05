@@ -137,13 +137,13 @@ def parse_wire_outline(text: str, *, reference_ids: set[str],
 
 
 def _map_outline(store, sections: list[dict], purposes: list[str],
-                 *, log) -> None:
+                 *, log, exclude: frozenset = frozenset()) -> None:
     """Per-section grounding: one search on title + purpose. Same
     verdict vocabulary as Path A; empty is decided here."""
     for section, purpose in zip(sections, purposes):
         query = f"{section['title']} {purpose}".strip()
         result = card_search(store, query, log=log, stage="path_b_outline",
-                             agent="kb_mapper",
+                             agent="kb_mapper", exclude=exclude,
                              target={"section_id": section["section_id"]})
         scores = [r.score for r in result.results]
         call = verdict(scores)
@@ -167,7 +167,8 @@ def _map_outline(store, sections: list[dict], purposes: list[str],
 
 
 def run_path_b(pursuit, caller, log, store, frozen: dict, manifest, feedback,
-               reference_path: Path, report):
+               reference_path: Path, report,
+               exclude: frozenset = frozenset()):
     """The guarded Path-B stage. Returns a refused report or None."""
     from engine.planning.plan import _number_and_emit_gaps
 
@@ -227,9 +228,9 @@ def run_path_b(pursuit, caller, log, store, frozen: dict, manifest, feedback,
             if not s["slot_ids"]]
     if slotted:
         map_sections(store, slotted, slots_by_id,
-                     log=log, stage="path_b_outline")
+                     log=log, stage="path_b_outline", exclude=exclude)
     _map_outline(store, [s for s, _ in bare], [p for _, p in bare],
-                 log=log)
+                 log=log, exclude=exclude)
 
     texts_by_section = {
         s["section_id"]: [p] if p else []

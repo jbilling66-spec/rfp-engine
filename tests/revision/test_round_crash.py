@@ -163,14 +163,14 @@ def _crash_at(monkeypatch, pursuit, boundary):
             return real(self, kind, **kw)
         monkeypatch.setattr(EventsLane, "append", append)
     elif boundary == "after_drop_pending":
-        real = pursuit.write_json
+        real = pursuit.write_artifact  # P32b: the record has a contract
 
-        def write_json(name, obj):
-            if name.startswith("revisions/round_") and not state["fired"]:
+        def write_artifact(kind, obj, name=None):
+            if kind == "revision_round" and not state["fired"]:
                 state["fired"] = True
                 raise Boom(boundary)
-            return real(name, obj)
-        monkeypatch.setattr(pursuit, "write_json", write_json)
+            return real(kind, obj, name=name)
+        monkeypatch.setattr(pursuit, "write_artifact", write_artifact)
     elif boundary == "after_record":
         real = pursuit.write_artifact
 

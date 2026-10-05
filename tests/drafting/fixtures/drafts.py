@@ -130,7 +130,8 @@ def default_dispose(pursuit, package_id: str) -> list[dict]:
 
 def run_drafting_package(tmp_root, *, package_id="gapcase", script=None,
                          fake=None, dispose=None, plant_canonical=True,
-                         workbook=None, voice_path=None, ceiling=None):
+                         workbook=None, voice_path=None, ceiling=None,
+                         exclude=frozenset()):
     """Full chain to a drafted pursuit (runs 0001-0005)."""
     pursuit, _ = run_strategy_package(tmp_root, package_id=package_id)
     store = KBStore(tmp_root / "kb")
@@ -166,11 +167,12 @@ def run_drafting_package(tmp_root, *, package_id="gapcase", script=None,
             "card's catalog text, not the acceptance tests")
 
     return run_drafting_run(tmp_root, pursuit, script=script, fake=fake,
-                            voice_path=voice_path, ceiling=ceiling)
+                            voice_path=voice_path, ceiling=ceiling,
+                            exclude=exclude)
 
 
 def run_drafting_run(tmp_root, pursuit, *, script=None, fake=None,
-                     voice_path=None, ceiling=None):
+                     voice_path=None, ceiling=None, exclude=frozenset()):
     """The drafting run alone, over an existing workspace — resume and
     refusal tests re-enter here. No try/except: a scripted kill or a
     fired ceiling propagates to the test, leaving the honest no-footer
@@ -184,6 +186,8 @@ def run_drafting_run(tmp_root, pursuit, *, script=None, fake=None,
                   kb_snapshot=store.snapshot(),
                   research_mode=cfg["research_mode"])
     kwargs = {"voice_path": Path(voice_path)} if voice_path else {}
+    if exclude:
+        kwargs["exclude"] = frozenset(exclude)
     report = run_drafting(pursuit, caller, log, store, **kwargs)
     log.run_end(status="completed")
     return pursuit, report

@@ -39,6 +39,10 @@ _KINDS = {
     "kb_proposal": "kb-proposal.schema.json",
     "canonical_doc": "canonical-doc.schema.json",
     "hand_fill": "hand-fill.schema.json",
+    "pending_comments": "pending-comments.schema.json",
+    "addendum_meta": "addendum-meta.schema.json",
+    "revision_round": "revision-round.schema.json",
+    "extraction_record": "extraction-record.schema.json",
 }
 
 

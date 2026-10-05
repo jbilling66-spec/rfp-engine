@@ -323,6 +323,13 @@ def test_no_bar_value_moved_this_phase():
         "STRUCTURE_BAR": {"exact_match": 1.0},
         "TRAJECTORY_BAR": {"pass_rate": 1.0},
         "VOICE_BAR": {"recall": 1.0, "false_positive_count_max": 0},
+        # P32c: the replay lane's bars — the exclusion fired (floor 1),
+        # nothing self-excluded surfaced or opened (ceilings 0), and the
+        # trace says what it is (booleans graded as floors of 1)
+        "REPLAY_BAR": {"excluded_lines": 1, "surfaced_excluded_count_max": 0,
+                       "opened_excluded_count_max": 0, "headers_ok": 1,
+                       "gates_auto_approved": 1,
+                       "no_excluded_card_opened": 1},
     }
     live = {n for n in dir(run_mod)
             if n.endswith("_BAR") and isinstance(getattr(run_mod, n), dict)}

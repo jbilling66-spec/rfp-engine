@@ -28,6 +28,7 @@ and a resolver cannot outlive its registry entry.
 import json
 from pathlib import Path
 
+from engine.contracts import ContractError, validate
 from engine.metrics.walker import production_only, walk
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -447,7 +448,8 @@ def _r_extraction_fabrication_count(corpus):
             continue
         try:
             payload = json.loads(artifact.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            validate("extraction_record", payload)  # P32b: the same posture
+        except (json.JSONDecodeError, UnicodeDecodeError, ContractError):
             continue  # M-23: one corrupt artifact never takes down the view
         # P1-33: the writer keys two_path by FILENAME (brief.py); the
         # reader used to look for tables_diffed on the outer dict and so

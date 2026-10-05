@@ -30,7 +30,7 @@ from engine.structure import (
 )
 from engine.version import engine_version
 from engine.workspace import PursuitDir
-from tests.helpers import plant_freeze
+from tests.helpers import plant_draft, plant_freeze
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 AT = "2026-08-28T12:00:00Z"
@@ -61,10 +61,8 @@ def _workspace(tmp_path, source_name: str, *, template=False):
     answers = [{"slot_id": "s-t00-r01", "status": "drafted", "prose": PROSE},
                {"slot_id": "s-t01-r01", "status": "awaiting_disposition"}]
     (pursuit.root / "drafts").mkdir(exist_ok=True)
-    (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": "0" * 64, "revision_n": 1,
-        "sections": [{"section_id": "all", "answers": answers}],
-    }), encoding="utf-8")
+    plant_draft(pursuit, [{"section_id": "all", "answers": answers}],
+                revision_n=1, plan_sha256="0" * 64)
     return pursuit
 
 
@@ -194,12 +192,9 @@ def two_docx(tmp_path):
         "sections": [{"section_id": "all", "slot_ids": planned}],
     })
     (pursuit.root / "drafts").mkdir(exist_ok=True)
-    (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": "0" * 64, "revision_n": 1,
-        "sections": [{"section_id": "all", "answers": [
-            {"slot_id": "f00-s-t00-r01", "status": "drafted",
-             "prose": PROSE}]}],
-    }), encoding="utf-8")
+    plant_draft(pursuit, [{"section_id": "all", "answers": [
+        {"slot_id": "f00-s-t00-r01", "status": "drafted",
+         "prose": PROSE}]}], revision_n=1, plan_sha256="0" * 64)
     bindings = declared_deliverables(pursuit,
                                      pursuit.read_artifact("slots.json"))
     return pursuit, bindings

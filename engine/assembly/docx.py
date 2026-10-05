@@ -27,8 +27,11 @@ REVIEW_NAME = "exports/review/annotated-review.docx"
 
 
 def _load(pursuit):
-    envelope = pursuit.read_artifact("drafts/draft.json")
-    annotated = pursuit.read_artifact("drafts/annotated-draft.json")
+    # P32b: validated on the way in — a hand edit that breaks the
+    # contract refuses by file name before any document is built
+    envelope = pursuit.read_artifact("drafts/draft.json", kind="draft")
+    annotated = pursuit.read_artifact("drafts/annotated-draft.json",
+                                      kind="annotated_draft")
     brief = pursuit.read_frozen("bid_brief")  # verified (P0-2)
     return envelope, annotated, brief
 

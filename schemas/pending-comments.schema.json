@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfp-engine.invalid/rfp-engine-v2/pending-comments.schema.json",
+  "title": "PendingComments",
+  "description": "The pending store of the feedback-events lane (events/pending.json; B37/D5, P32b / P1-8 narrow): comments and edits a human has filed against the draft that no revise round has consumed yet. Rewritten atomically as one document; the round that consumes an entry drops it here and appends the finalized feedback_event to events/events.jsonl. This record holds human work — a file that fails this schema is a typed refusal at every door that touches pending, never rewritten or rebuilt by the engine (B130's rule for human-edited records; B145 §3d).",
+  "type": "object",
+  "required": ["pending", "next_cid"],
+  "additionalProperties": false,
+  "properties": {
+    "next_cid": { "type": "integer", "minimum": 1, "description": "The next comment id to mint. MONOTONIC, never derived from the list length: pending shrinks as rounds consume, and a reissued cid once aliased a dismissed guest comment into a consumed internal one." },
+    "pending": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["cid", "kind", "provenance", "section_id", "actor", "actor_role", "at", "revision"],
+        "additionalProperties": false,
+        "properties": {
+          "cid": { "type": "string", "pattern": "^cmt_[0-9]{4,}$", "description": "Minted here from next_cid; carried onto the finalized feedback_event so the append-only record names each consumed item exactly once (P1-14)." },
+          "kind": { "type": "string", "enum": ["comment", "edit"], "description": "Only comments and edits pend — every other feedback kind appends immediately because it is complete the moment it happens." },
+          "provenance": { "type": "string", "enum": ["internal", "external"], "description": "internal = the pursuit team; external = a share-link guest (D16a). An external entry reaches a round only once an operator has included it (included_by)." },
+          "section_id": { "type": "string" },
+          "slot_id": { "type": "string", "description": "Path A: the answer slot the entry addresses; absent for a section-level entry." },
+          "actor": { "type": "string", "description": "The session identity for internal entries; `share:<link_id>:<display name>` for a guest — the prefix IS the structural unverified marker (D16a)." },
+          "actor_role": { "type": "string", "description": "One of feedback-event.schema.json's actor_role vocabulary — that schema is the vocabulary's single home and the door enforces it (events.py reads ACTOR_ROLES from it at import); not duplicated here (B145 §3b)." },
+          "at": { "type": "string", "format": "date-time", "description": "Server clock (P0-11: the client never supplies a clock)." },
+          "revision": { "type": "integer", "minimum": 0, "description": "The envelope revision the entry was filed against." },
+          "text": { "type": "string", "description": "A comment's text (required by the door for kind = comment)." },
+          "before": { "type": "string", "description": "An edit's anchor — the exact text the round replaces, verbatim (required by the door for kind = edit)." },
+          "after": { "type": "string", "description": "An edit's replacement text." },
+          "edit_reason": { "type": "string", "description": "One of feedback-event.schema.json's edit_reason vocabulary (the door enforces it; see actor_role)." },
+          "link_id": { "type": "string", "description": "Guest entries: the public share-link id the comment arrived through." },
+          "display_name": { "type": "string", "description": "Guest entries: the name the guest typed — self-declared, never verified." },
+          "screen_flags": {
+            "type": "array",
+            "description": "Guest entries: what the injection screen found in the text (P26a); carried onto the round record as external_screen_flags when the entry is consumed.",
+            "items": {
+              "type": "object",
+              "required": ["pattern_id", "excerpt"],
+              "additionalProperties": false,
+              "properties": {
+                "pattern_id": { "type": "string" },
+                "excerpt": { "type": "string" }
+              }
+            }
+          },
+          "included_by": { "type": "string", "description": "D16d: the operator who included a guest entry into the next round — the affirmative human act; without it an external entry is never consumed." },
+          "included_at": { "type": "string", "format": "date-time" },
+          "dismissed_by": { "type": "string", "description": "D16d: the operator who dismissed a guest entry; the round records its event id under dismissed_external_event_ids and drops it." },
+          "dismissed_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

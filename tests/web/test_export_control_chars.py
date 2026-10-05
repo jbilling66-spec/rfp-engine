@@ -46,7 +46,11 @@ def test_export_door_refuses_typed_and_closes_the_run(poisoned):
     r = client.post(f"/api/pursuits/{pursuit.pursuit_id}/export",
                     json={})
     assert r.status_code == 409, r.text
-    assert "XML compatible" in r.json()["detail"]
+    # P32b: the render validates the envelope on the way in, and the draft
+    # schema's prose pattern is the same no-control-character rule the
+    # writer enforced — so the contract refuses first, naming the file;
+    # python-docx's "XML compatible" line stays the last line behind it
+    assert "drafts/draft.json fails its schema" in r.json()["detail"]
     footer = _last_run_footer(pursuit)
     assert footer["record_type"] == "run_end"
     assert footer["run"]["status"] == "failed"

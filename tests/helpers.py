@@ -9,6 +9,7 @@ door, `PursuitDir.freeze_artifact`, always validates.
 """
 
 import hashlib
+import json
 
 from engine.workspace.pursuit import (
     ARTIFACT_FILES,
@@ -44,14 +45,40 @@ def plant_freeze(pursuit, kind: str, obj: dict, *, actor: str = "fixture",
     return path, sha
 
 
+def plant_draft(pursuit, sections, *, revision_n: int = 0,
+                plan_sha256: str | None = None, status: str = "complete",
+                **fields):
+    """Test-side envelope through the engine's own door (P32b, B145 §3g).
+    The hand plants omitted `pursuit_id`, `status` and the per-section
+    `section_type` / `status` the draft schema requires, which the
+    assembly readers now validate on the way in. Fills exactly those
+    defaults (a section's own keys win), binds to the live freeze unless
+    told otherwise, and validates at write."""
+    filled = [{"section_type": "other", "status": "drafted", **section}
+              for section in sections]
+    if plan_sha256 is None:
+        plan_sha256 = pursuit.file_sha256("plan.frozen.json") or "0" * 64
+    envelope = {"pursuit_id": pursuit.pursuit_id, "plan_sha256": plan_sha256,
+                "revision_n": revision_n, "status": status,
+                "sections": filled, **fields}
+    return pursuit.write_artifact("draft", envelope, name="drafts/draft.json")
+
+
 def plant_annotated(pursuit, *, blocked: bool = False, **fields):
     """Test-side minimal annotated draft bound to the LIVE envelope and
     freeze, packaging clear unless told — so a door's binding check
-    passes for exactly what the fixture staged. Returns the path."""
+    passes for exactly what the fixture staged. Schema-valid since P32b
+    (`revision_n` from the envelope, `validated_at` the plant clock): the
+    readers validate on the way in. Returns the path."""
+    draft_path = pursuit.root / "drafts" / "draft.json"
+    revision_n = (json.loads(draft_path.read_text(encoding="utf-8"))
+                  .get("revision_n", 0) if draft_path.exists() else 0)
     annotated = {
         "pursuit_id": pursuit.pursuit_id,
         "draft_sha256": pursuit.file_sha256("drafts/draft.json"),
         "plan_sha256": pursuit.file_sha256("plan.frozen.json"),
+        "revision_n": revision_n,
+        "validated_at": PLANT_AT,
         "packaging": {"blocked": blocked,
                       "tier1_blocks": 1 if blocked else 0, "waived": 0},
         "sections": [],

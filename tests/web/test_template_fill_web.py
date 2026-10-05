@@ -21,7 +21,7 @@ from engine.structure import merge_parsed, parse_default_template
 from engine.web.server import create_app
 from engine.workspace import PursuitDir
 from tests.web.conftest import FIXED_AT, sign_in
-from tests.helpers import plant_annotated, plant_freeze
+from tests.helpers import plant_annotated, plant_draft, plant_freeze
 
 PARA = "A synthetic executive summary paragraph."
 PROSE_SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 13, 14]
@@ -53,12 +53,9 @@ def _plant(ws, pursuit_id: str, *, all_prose: bool):
         "slots_ref": "slots.json", "status": "approved",
         "sections": [{"section_id": f"sec-{s}",
                       "slot_ids": [f"{s}-hdr", s]} for s in ids]})
-    (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": pursuit.file_sha256("plan.frozen.json"),
-        "revision_n": 0,
-        "sections": [{"section_id": f"sec-{s}", "status": "drafted",
-                      "prose": PARA if s == "s-h02"
-                      else f"Synthetic prose for {s}."} for s in ids]}))
+    plant_draft(pursuit, [{"section_id": f"sec-{s}", "status": "drafted",
+                           "prose": PARA if s == "s-h02"
+                           else f"Synthetic prose for {s}."} for s in ids])
     plant_annotated(pursuit)
     return pursuit
 

@@ -15,7 +15,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from engine.contracts import ContractError, read_jsonl
+from engine.contracts import ContractError, read_jsonl, validate
 from engine.runlog import read_run
 from engine.workspace.pursuit import latest_run_id_in
 from engine.workspace import PursuitDir
@@ -62,17 +62,63 @@ class _Corrupt(list):
     instead of 500ing the whole board."""
 
 
-def _read_json(path: Path, corrupt: list | None = None) -> dict | None:
+def _read_json(path: Path, corrupt: list | None = None, *,
+               kind: str | None = None) -> dict | None:
+    """P32b (B145 §3e): with a kind, a record that parses but fails its
+    contract is treated exactly as an unreadable one — named on the row
+    when a collector is given, a typed refusal naming the file when not."""
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        obj = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         if corrupt is None:
             raise
         corrupt.append(f"{path.name}: {exc.__class__.__name__} — see the "
                        "recovery runbook")
         return None
+    if kind is not None:
+        try:
+            validate(kind, obj)
+        except ContractError as exc:
+            if corrupt is None:
+                raise ContractError(
+                    f"{path.name} fails its schema ({exc})") from exc
+            corrupt.append(f"{path.name}: fails its schema — see the "
+                           "recovery runbook")
+            return None
+    return obj
+
+
+# The free-form records that gained contracts at P32b (B145 §3a), named on
+# the board row when one fails its schema; the round records and addendum
+# metas are enumerated per pursuit.
+_RECORDS = (("events/pending.json", "pending_comments"),
+            ("extraction.json", "extraction_record"))
+
+
+def _records(root: Path, corrupt: list) -> None:
+    """P32b (B145 §3e): the board names every record that fails its
+    contract on the pursuit's own row — the pending store, the extraction
+    record, every round record and every addendum meta — with the runbook
+    pointer. Nothing is read for content here; the deciding readers do that."""
+    kinds = dict(_RECORDS)
+    for path in round_records(root / "revisions"):
+        kinds[f"revisions/{path.name}"] = "revision_round"
+    for path in sorted((root / "addenda").glob("addm_*/meta.json")):
+        kinds[f"addenda/{path.parent.name}/meta.json"] = "addendum_meta"
+    for name, kind in kinds.items():
+        path = root / name
+        if not path.exists():
+            continue
+        try:
+            validate(kind, json.loads(path.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            corrupt.append(f"{name}: {exc.__class__.__name__} — see the "
+                           "recovery runbook")
+        except ContractError:
+            corrupt.append(f"{name}: fails its schema — see the recovery "
+                           "runbook")
 
 
 _LANES = ("events/events.jsonl", "share/links.jsonl", "pings/pings.jsonl")
@@ -170,12 +216,14 @@ def _stage_and_next(root: Path, brief, plan,
     # P1-35: decided on the HASH BINDINGS the driver decides on (P25 item
     # 8), never on existence — a replanned pursuit's old draft or
     # annotation reads as "draft again" / "validate again", not "review"
-    envelope = _read_json(root / "drafts" / "draft.json", corrupt)
+    envelope = _read_json(root / "drafts" / "draft.json", corrupt,
+                          kind="draft")  # P32b
     if (envelope is None or envelope.get("status") != "complete"
             or envelope.get("plan_sha256")
             != _sha256(root / "plan.frozen.json")):
         return "drafting", "advance: draft sections"
-    annotated = _read_json(root / "drafts" / "annotated-draft.json", corrupt)
+    annotated = _read_json(root / "drafts" / "annotated-draft.json", corrupt,
+                           kind="annotated_draft")  # P32b
     if (annotated is None
             or annotated.get("draft_sha256")
             != _sha256(root / "drafts" / "draft.json")):
@@ -206,16 +254,18 @@ def board(workspace: Path) -> list[dict]:
             row["last_run_status"] = run_status
         if plan is not None:
             row["open_gaps"] = _open_gaps(plan)
-        envelope = _read_json(root / "drafts" / "draft.json", corrupt)
+        envelope = _read_json(root / "drafts" / "draft.json", corrupt,
+                              kind="draft")
         if envelope is not None:
             row["revision_n"] = envelope.get("revision_n")
         annotated = _read_json(root / "drafts" / "annotated-draft.json",
-                               corrupt)
+                               corrupt, kind="annotated_draft")
         if annotated is not None and stage == "review":
             # P1-35: packaging is published only when the annotation is
             # CURRENT (the stage says so); a superseded one says nothing
             row["packaging"] = annotated.get("packaging")
         _lanes(root, row, corrupt)
+        _records(root, corrupt)  # P32b
         if corrupt:
             row["corrupt"] = list(corrupt)
             row["stage"], row["next"] = "corrupt", (
@@ -274,8 +324,9 @@ def review(workspace: Path, pursuit_id: str, *,
     are stripped SERVER-side — a guest never receives what the client
     would merely hide."""
     root = Path(workspace) / pursuit_id
-    annotated = _read_json(root / "drafts" / "annotated-draft.json")
-    envelope = _read_json(root / "drafts" / "draft.json")
+    annotated = _read_json(root / "drafts" / "annotated-draft.json",
+                           kind="annotated_draft")  # P32b: typed refusals
+    envelope = _read_json(root / "drafts" / "draft.json", kind="draft")
     if annotated is None or envelope is None:
         return None
     prose_by_section: dict[str, list[dict]] = {}
@@ -290,8 +341,8 @@ def review(workspace: Path, pursuit_id: str, *,
     pending_by_section: dict[str, list[dict]] = {}
     pending_path = root / "events" / "pending.json"
     if include_internal and pending_path.exists():
-        for item in json.loads(
-                pending_path.read_text(encoding="utf-8"))["pending"]:
+        for item in _read_json(pending_path,
+                               kind="pending_comments")["pending"]:  # P32b
             pending_by_section.setdefault(
                 item["section_id"], []).append(item)
     sections = []
@@ -343,7 +394,7 @@ def _last_round(root: Path) -> dict | None:
     rounds = round_records(root / "revisions")
     if not rounds:
         return None
-    record = _read_json(rounds[-1])
+    record = _read_json(rounds[-1], kind="revision_round")  # P32b: evidence
     if record is None:
         return None
     return {"n": record.get("round_n"),

@@ -89,6 +89,38 @@ def _closure(store: KBStore, client: str, *, actor: str) -> tuple[set[str], list
     return closure, sorted(identifiers)
 
 
+def self_exclusion_set(store: KBStore, pursuit_id: str, *,
+                       actor: str = "engine") -> frozenset[str]:
+    """P32c (A3's zero-spend half): the cards a replay of `pursuit_id`
+    must not see — what the pursuit itself contributed to the firm KB.
+    The purge question asked of a pursuit instead of a client: every
+    card whose provenance names the pursuit as a source, every card an
+    ACCEPTED proposal sourced from the pursuit landed on (a minted card
+    names the pursuit in its own provenance), and the transitive
+    derived_from closure over all of them. Reads the restricted store's
+    lineage index (one authorized, logged read; no identifier leaves)
+    and the proposal store (steward-visible records). An empty set is an
+    honest answer — the replay bench refuses to measure over one."""
+    from engine.flywheel.proposals import ProposalStore
+
+    lineage = store.restricted.lineage_index(actor=actor, purpose="replay")
+    seeds = {kb_id for kb_id, entry in lineage.items()
+             if pursuit_id in entry["source_pursuits"]}
+    for proposal in ProposalStore(store.root).list(status="accepted"):
+        source = proposal.get("source") or {}
+        if source.get("pursuit_id") == pursuit_id and proposal.get("kb_id"):
+            seeds.add(proposal["kb_id"])
+    closure = set(seeds)
+    changed = True
+    while changed:
+        changed = False
+        for kb_id, entry in lineage.items():
+            if kb_id not in closure and set(entry["derived_from"]) & closure:
+                closure.add(kb_id)
+                changed = True
+    return frozenset(closure)
+
+
 def post_purge_sweep(store: KBStore, purged_identifiers: list[str],
                      purged_kb_ids: list[str],
                      extra_stores: list[KBStore] | None = None) -> list:

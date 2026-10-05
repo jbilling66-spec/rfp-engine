@@ -18,7 +18,6 @@ re-freezes, and every existing draft voids by plan_sha256 mismatch, not
 by convention."""
 
 import hashlib
-import json
 import os
 import re
 from pathlib import Path
@@ -101,20 +100,23 @@ class AddendumLane:
         if not text:
             meta["note"] = ("binary upload — no text scan; the human "
                             "reads it directly")
-        self.pursuit.write_json(f"addenda/{aid}/meta.json", meta)
+        self.pursuit.write_artifact("addendum_meta", meta,
+                                    name=f"addenda/{aid}/meta.json")  # P32b
         return meta
 
     def list(self) -> list[dict]:
-        out = []
-        for meta_path in sorted(self.root.glob("addm_*/meta.json")):
-            out.append(json.loads(meta_path.read_text(encoding="utf-8")))
-        return out
+        # P32b: each meta validated on the way in; a refusal names its file
+        return [self.pursuit.read_artifact(
+                    f"addenda/{meta_path.parent.name}/meta.json",
+                    kind="addendum_meta")
+                for meta_path in sorted(self.root.glob("addm_*/meta.json"))]
 
     def _meta(self, aid: str) -> dict:
         meta_path = self.root / aid / "meta.json"
         if not meta_path.exists():
             raise AddendumError(f"unknown addendum {aid!r}")
-        return json.loads(meta_path.read_text(encoding="utf-8"))
+        return self.pursuit.read_artifact(f"addenda/{aid}/meta.json",
+                                          kind="addendum_meta")  # P32b
 
     def decide(self, log, *, aid: str, decision: str, note: str,
                at: str, actor: str) -> dict:
@@ -188,5 +190,6 @@ class AddendumLane:
                 "plan_sha256": ""})
         meta.update({"decision": decision, "decided_by": actor,
                      "decided_at": at, "decision_note": note})
-        self.pursuit.write_json(f"addenda/{aid}/meta.json", meta)
+        self.pursuit.write_artifact("addendum_meta", meta,
+                                    name=f"addenda/{aid}/meta.json")  # P32b
         return meta

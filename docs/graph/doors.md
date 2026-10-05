@@ -200,6 +200,7 @@ terminal.
 | kb provenance | Authorized read of restricted provenance |
 | intake run | Document package + ramble → brief.json, offline |
 | slice | The M1 vertical slice runner (`--ci` or `--live`) |
+| replay | Re-run a pursuit from its inbox under FakeCaller with its own KB contributions withheld — `mode: replay`, `replay_of`, every gate `auto_approved`, zero spend, into a separate replay workspace; the hygiene proof read off the trace, not a quality comparison (P32c, A3's offline half) |
 | serve | The web app on 127.0.0.1 (host is deliberately not an argument) |
 | eval | The eval harness + release gates (`--live` with `--rebaseline`, or with `--suite anonymization` to record the live readers' measure — P28) |
 

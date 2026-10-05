@@ -16,10 +16,12 @@ from engine.kb.purge import (
     purge_client,
     purge_org,
     purge_pursuit_memory,
+    self_exclusion_set,
 )
 from engine.kb.retrieve import (
     SearchResult,
     DeprecatedCard,
+    ReplayExcludedCard,
     UseRestrictedCard,
     card_search,
     descend,
@@ -39,6 +41,7 @@ __all__ = [
     "SearchResult",
     "SourceDoc",
     "DeprecatedCard",
+    "ReplayExcludedCard",
     "UseRestrictedCard",
     "apply_placeholders",
     "card_search",
@@ -53,6 +56,7 @@ __all__ = [
     "render_card",
     "scan",
     "scan_passed",
+    "self_exclusion_set",
     "snapshot_id",
     "targeted_open",
 ]

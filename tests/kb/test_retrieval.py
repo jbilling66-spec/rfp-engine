@@ -313,3 +313,31 @@ def test_targeted_open_refuses_a_deprecated_card(tmp_path):
     line = read_run(store.root / "runs" / "run_0001" / "run.jsonl")[-1]
     assert line["kb"]["excluded"] == ["kb_open000001"]
     assert line["kb"]["cards_opened"] == []
+
+
+def test_targeted_open_refuses_an_excluded_id_on_the_trace(tmp_path):
+    """P32c (A3's zero-spend half): a replay's self-exclusion reaches the
+    open door too. An excluded id refuses typed — a D2 subclass, so every
+    catch site withholds it the way it withholds a restricted card — and
+    the refusal is on the line (excluded, nothing opened). Without
+    `exclude` the open is byte-for-byte what it was."""
+    from engine.kb import ReplayExcludedCard
+
+    store = _tiny_store(tmp_path)
+    log = _log(store, "run_0001")
+    assert issubclass(ReplayExcludedCard, UseRestrictedCard)
+    with pytest.raises(ReplayExcludedCard, match="excluded"):
+        targeted_open(store, "kb_open000001", log=log, stage="drafting",
+                      agent="section_drafter", query="plan:x",
+                      exclude=frozenset({"kb_open000001"}))
+    line = read_run(store.root / "runs" / "run_0001" / "run.jsonl")[-1]
+    assert line["kb"]["step"] == "targeted_open"
+    assert line["kb"]["excluded"] == ["kb_open000001"]
+    assert line["kb"]["cards_opened"] == []
+    assert line["kb"]["empty_result"] is True
+    body = targeted_open(store, "kb_open000001", log=log, stage="drafting",
+                         agent="section_drafter", query="plan:x")
+    assert body == "Payroll parallel testing body."
+    line = read_run(store.root / "runs" / "run_0001" / "run.jsonl")[-1]
+    assert line["kb"]["cards_opened"] == ["kb_open000001"]
+    assert line["kb"]["excluded"] == []

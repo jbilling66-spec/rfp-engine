@@ -180,3 +180,20 @@ def test_stamp_blocks_accept_an_optional_request_sha256(tmp_path):
     with pytest.raises(ContractError):
         pursuit.write_artifact("pursuit_plan", {
             **plan, "gate2": {**plan["gate2"], "request_sha256": "X" * 64}})
+
+
+def test_read_artifact_validates_only_when_told_the_kind(tmp_path):
+    """P32b / P1-8 narrow: a bare read stays bare (the P2-2 funnel
+    converges those callers at A5); a read that names its kind is
+    validated on the way in and the refusal names the FILE."""
+    pursuit = PursuitDir(tmp_path, "pur_t")
+    pursuit.write_artifact("bid_brief", VALID_BRIEF)
+    assert pursuit.read_artifact("brief.json", kind="bid_brief")["status"] == "draft"
+    (pursuit.root / "brief.json").write_text('{"pursuit_id": "pur_t"}',
+                                             encoding="utf-8")
+    assert pursuit.read_artifact("brief.json") == {"pursuit_id": "pur_t"}
+    with pytest.raises(ContractError, match=r"brief.json fails its schema \(bid_brief"):
+        pursuit.read_artifact("brief.json", kind="bid_brief")
+    obj, reason = pursuit.read_artifact_tolerant("brief.json", kind="bid_brief")
+    assert obj is None and reason.startswith("brief.json fails its schema")
+    assert pursuit.read_artifact_tolerant("brief.json") == ({"pursuit_id": "pur_t"}, "")

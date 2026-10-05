@@ -8,6 +8,8 @@ validation re-runs, the run log names the repair. The draft itself
 holds the review rounds' human edits and is NEVER rebuilt: an
 unreadable draft is a typed refusal naming the file and the runbook."""
 
+import json
+
 import pytest
 
 from engine.contracts import ContractError
@@ -87,4 +89,40 @@ def test_an_unreadable_draft_is_a_typed_refusal_never_a_rewrite(tmp_path):
     with pytest.raises(ContractError, match="draft.json unreadable"):
         _advance(ws, pursuit)
     assert draft.read_bytes() == TORN  # untouched, unarchived
+    assert not list((pursuit.root / "drafts").glob("*.corrupt-*"))
+
+
+INVALID = json.dumps({"draft_sha256": "abc"})  # parses; fails the schema
+
+
+def test_a_schema_invalid_annotated_draft_is_archived_aside_like_an_unreadable_one(
+        tmp_path):
+    """P32b (B145 §3d): the B130 rule generalised — a derived record that
+    parses but fails its contract is handled exactly as unreadable bytes
+    are: archived aside, rebuilt, the repair named on the run log."""
+    ws, pursuit = _staged(tmp_path)
+    bad = pursuit.root / "drafts" / "annotated-draft.json"
+    bad.write_text(INVALID, encoding="utf-8")
+    result = _advance(ws, pursuit)
+    assert result.status == "ok" and result.ran_stages == ["validation"], \
+        result
+    assert validation_is_current(pursuit) is True
+    archived = pursuit.root / "drafts" / "annotated-draft.json.corrupt-001"
+    assert archived.read_text(encoding="utf-8") == INVALID
+    run_files = sorted((pursuit.root / "runs").glob("*/run.jsonl"))
+    repair = next(r for r in read_run(run_files[-1])
+                  if r["record_type"] == "error")
+    assert repair["error"]["code"] == "annotated_draft_unreadable"
+    assert "fails its schema" in repair["error"]["message"]
+
+
+def test_a_schema_invalid_draft_is_a_typed_refusal_never_a_rewrite(tmp_path):
+    ws, pursuit = _staged(tmp_path)
+    draft = pursuit.root / "drafts" / "draft.json"
+    envelope = json.loads(draft.read_text(encoding="utf-8"))
+    envelope["sections"][0]["status"] = "mangled"
+    draft.write_text(json.dumps(envelope), encoding="utf-8")
+    with pytest.raises(ContractError, match="draft.json fails its schema"):
+        _advance(ws, pursuit)
+    assert json.loads(draft.read_text(encoding="utf-8")) == envelope
     assert not list((pursuit.root / "drafts").glob("*.corrupt-*"))

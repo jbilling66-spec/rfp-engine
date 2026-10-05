@@ -54,6 +54,15 @@ class DeprecatedCard(UseRestrictedCard):
     same way and says why."""
 
 
+class ReplayExcludedCard(UseRestrictedCard):
+    """targeted_open refused an id in the caller's `exclude` set (P32c,
+    A3's zero-spend half): a replay withholds the pursuit's own
+    knowledge-base contributions, and the open door honours the set the
+    way search does — a frozen plan may still name the card. A
+    UseRestrictedCard subclass, so every D2 catch site withholds it the
+    same way and says why."""
+
+
 @dataclass
 class ScoredCard:
     kb_id: str
@@ -230,13 +239,17 @@ def withheld_reason(card: dict) -> str | None:
 
 
 def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
-            agent, target: dict | None = None) -> SearchResult:
+            agent, target: dict | None = None,
+            exclude: frozenset = frozenset()) -> SearchResult:
     """The within-document move (P13/C11, R9): the anchor card's parent,
     siblings, or children, read from its canonical model's chunk
     backrefs — one file read, never a catalog scan. Results come back in
     DOCUMENT order, scoreless (this is navigation, not ranking — KB10).
     A pre-WP13 card, or one whose model is gone, descends to a recorded
-    empty result (R11). use_restriction is honored exactly as in search.
+    empty result (R11). use_restriction is honored exactly as in search,
+    and so is a replay's `exclude` set (P32c): an excluded anchor
+    descends to a recorded empty result, an excluded neighbour is an
+    excluded row.
     """
     if relation not in ("parent", "siblings", "children"):
         raise ContractError(f"descend: unknown relation {relation!r}")
@@ -249,6 +262,8 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
     path = list(card.get("doc_path") or ())
     result = SearchResult()
     withheld = withheld_reason(card)
+    if kb_id in exclude:
+        withheld = "replay_excluded"  # P32c: the anchor answers to the replay
     if withheld:
         # M-28 (P26b-2): the ANCHOR answers to D2 too — a restricted card
         # used to be a usable navigation handle whose position and
@@ -290,7 +305,8 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
         if not store.card_exists(neighbor_id):
             continue  # absorbed or purged since the model was written
         neighbor, _ = store.read_card(neighbor_id)
-        withheld = withheld_reason(neighbor)
+        withheld = ("replay_excluded" if neighbor_id in exclude
+                    else withheld_reason(neighbor))
         if withheld:
             result.excluded.append({"kb_id": neighbor_id,
                                     "reason": withheld})
@@ -307,10 +323,22 @@ def descend(store: KBStore, kb_id: str, relation: str, *, log, stage,
 
 
 def targeted_open(store: KBStore, kb_id: str, *, log, stage, agent,
-                  query: str, target: dict | None = None) -> str:
+                  query: str, target: dict | None = None,
+                  exclude: frozenset = frozenset()) -> str:
     """Open one card's full body. A use_restriction card refuses loudly and
     the refusal is on the trace (D2). A Lanes bundle opens from the lane
-    that minted the id (prefix dispatch, P17/C3)."""
+    that minted the id (prefix dispatch, P17/C3). An id in `exclude`
+    (P32c, a replay's self-exclusion) refuses typed with the refusal on
+    the trace, before the card is read."""
+    if kb_id in exclude:
+        emit_kb_retrieval(
+            log, stage=stage, agent=agent, query=query, step="targeted_open",
+            cards_returned=[], excluded=[kb_id], empty_result=True,
+            target=target,
+        )
+        raise ReplayExcludedCard(
+            f"{kb_id} is excluded from this replay (the pursuit's own "
+            f"contribution) and may not be opened")
     card, body = as_lanes(store).store_for(kb_id).read_card(kb_id)
     withheld = withheld_reason(card)
     if withheld:

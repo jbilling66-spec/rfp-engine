@@ -22,15 +22,19 @@ def test_action_vocabulary_names_the_source_doors():
     actions = _schema()["properties"]["action"]["enum"]
     assert actions == ["read", "scan_index", "reverse_index", "delete",
                        "sweep", "source_read", "list_sources",
-                       "absorbed_lookup"]
+                       "absorbed_lookup", "lineage_index"]
 
 
 def test_purpose_vocabulary_carries_ingest_and_the_grants_agree():
     purposes = _schema()["properties"]["purpose"]["enum"]
     assert purposes == ["audit", "purge", "right_of_review",
-                        "anonymization_scan", "ingest"]
+                        "anonymization_scan", "ingest", "replay"]
     grants = yaml.safe_load(GRANTS.read_text(encoding="utf-8"))["actors"]
-    assert set(grants["engine"]) == {"anonymization_scan", "purge", "ingest"}
+    # P32c: `replay` is the machine's lineage read for a replay's
+    # self-exclusion — the owner's grants are unchanged
+    assert set(grants["engine"]) == {"anonymization_scan", "purge", "ingest",
+                                     "replay"}
+    assert "replay" not in grants["owner"]
     for actor, granted in grants.items():
         assert set(granted) <= set(purposes), actor
     # The human-only purposes stay human-only.

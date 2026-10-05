@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from engine.structure import merge_parsed, parse_buyer_docx
 from engine.web.server import create_app
 from engine.workspace import PursuitDir
-from tests.helpers import plant_annotated, plant_freeze
+from tests.helpers import plant_annotated, plant_draft, plant_freeze
 from tests.web.conftest import FIXED_AT, raising_caller, sign_in
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -47,12 +47,9 @@ def ragged(tmp_path):
         "sections": [{"section_id": "all", "slot_ids": planned}],
     })
     (pursuit.root / "drafts").mkdir(exist_ok=True)
-    (pursuit.root / "drafts" / "draft.json").write_text(json.dumps({
-        "plan_sha256": pursuit.file_sha256("plan.frozen.json"), "revision_n": 1,
-        "sections": [{"section_id": "all", "answers": [
-            {"slot_id": "s-t00-r01", "status": "drafted", "prose": "Answer."},
-        ]}],
-    }), encoding="utf-8")
+    plant_draft(pursuit, [{"section_id": "all", "answers": [
+        {"slot_id": "s-t00-r01", "status": "drafted", "prose": "Answer."},
+    ]}], revision_n=1)
     plant_annotated(pursuit)
     app = create_app(ws, make_caller=raising_caller, now=lambda: FIXED_AT)
     with TestClient(app, base_url="http://127.0.0.1") as client:

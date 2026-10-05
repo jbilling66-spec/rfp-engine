@@ -210,3 +210,36 @@ def test_deprecated_anchor_and_neighbor_are_withheld(seeded):
         card, body = store.read_card(ids["Tools"])
         card.pop("deprecated")
         store.rewrite_card(card, body)
+
+
+def test_an_excluded_anchor_or_neighbour_is_withheld_like_a_restricted_one(
+        seeded):
+    """P32c: the within-document move honours a replay's self-exclusion
+    exactly as it honours D2 — an excluded anchor descends to a recorded
+    empty result with the anchor on the trace, and an excluded neighbour
+    is an excluded row, never a result."""
+    from engine.runlog import read_run
+
+    store, ids = seeded
+    anchored = descend(store, ids["Method"], "siblings",
+                       log=_log(store, "run_0031"), stage="drafting",
+                       agent="section_drafter",
+                       exclude=frozenset({ids["Method"]}))
+    assert anchored.results == []
+    assert anchored.excluded == [{"kb_id": ids["Method"],
+                                  "reason": "replay_excluded"}]
+    line = read_run(store.root / "runs" / "run_0031" / "run.jsonl")[-1]
+    assert line["kb"]["step"] == "path_descend"
+    assert line["kb"]["excluded"] == [ids["Method"]]
+    assert line["kb"]["empty_result"] is True
+
+    neighbours = descend(store, ids["Approach"], "children",
+                         log=_log(store, "run_0032"), stage="drafting",
+                         agent="section_drafter",
+                         exclude=frozenset({ids["Tools"]}))
+    assert [r.card["title"] for r in neighbours.results] == ["Method"]
+    assert neighbours.excluded == [{"kb_id": ids["Tools"],
+                                    "reason": "replay_excluded"}]
+    line = read_run(store.root / "runs" / "run_0032" / "run.jsonl")[-1]
+    assert line["kb"]["cards_returned"] == [ids["Method"]]
+    assert line["kb"]["excluded"] == [ids["Tools"]]

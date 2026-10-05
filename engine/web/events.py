@@ -135,9 +135,12 @@ class EventsLane:
         path = self.pursuit.root / self.pending_name
         if not path.exists():
             return {"pending": [], "next_cid": 1}
-        data = json.loads(path.read_text(encoding="utf-8"))
-        data.setdefault("next_cid", len(data["pending"]) + 1)
-        return data
+        # P32b (B145 §3c/§3d): validated on the way in — the store holds
+        # human work, so a file that fails its contract is a typed refusal
+        # at every door that touches pending, never defaulted or rewritten
+        # (the pre-monotonic shape without next_cid is refused too)
+        return self.pursuit.read_artifact(self.pending_name,
+                                          kind="pending_comments")
 
     def pending(self) -> list[dict]:
         return self._read_pending()["pending"]
@@ -149,8 +152,11 @@ class EventsLane:
         # dismissed guest comment into a consumed internal one
         if next_cid is None:
             next_cid = self._read_pending()["next_cid"]
-        self.pursuit.write_json(self.pending_name,
-                                {"pending": entries, "next_cid": next_cid})
+        # P32b (B145 §3a): the store has a contract — validated on the
+        # way out, so a key no door wrote can never land here
+        self.pursuit.write_artifact(
+            "pending_comments", {"pending": entries, "next_cid": next_cid},
+            name=self.pending_name)
 
     def drop_pending(self, cids: set) -> None:
         data = self._read_pending()

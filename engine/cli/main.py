@@ -51,11 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
     from engine.cli.evals import register as register_evals
     from engine.cli.intake import register as register_intake
     from engine.cli.kb import register as register_kb
+    from engine.cli.replay import register as register_replay
     from engine.cli.serve import register as register_serve
     from engine.cli.slice import register as register_slice
     register_kb(sub)
     register_intake(sub)
     register_slice(sub)
+    register_replay(sub)
     register_serve(sub)
     register_evals(sub)
 

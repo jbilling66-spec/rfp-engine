@@ -80,13 +80,22 @@ def test_injection_screen_flags_count_flags_and_are_absent_on_empty(tmp_path):
 def test_fabrication_count_reads_the_filename_keyed_record(tmp_path):
     ws = tmp_path / "ws"
     _run(ws, "pur_a", "run_0001", "live", [])
+    finding = {"row": 0, "col": 0, "kind": "value_differs", "a": "1", "b": "2"}
     (ws / "pur_a" / "extraction.json").write_text(json.dumps({
+        "docs": [],  # P32b: the record has a contract; the plant honours it
         "two_path": {"buyer.pdf": {"tables_diffed": 2,
-                                   "findings": [{"table": 0}, {"table": 1}]},
+                                   "findings": [{"table": 0, **finding},
+                                                {"table": 1, **finding}]},
                      "other.pdf": {"tables_diffed": 1, "findings": []}}}))
     row = resolve("extraction_fabrication_count", Corpus(ws))
     assert row["value"] == 2 and row["n"] == 2
     (ws / "pur_a" / "extraction.json").write_text("{not json")
+    assert resolve("extraction_fabrication_count", Corpus(ws))["status"] \
+        == "absent"
+    # P32b: a record that parses but fails its schema is skipped the same way
+    (ws / "pur_a" / "extraction.json").write_text(json.dumps({
+        "two_path": {"buyer.pdf": {"tables_diffed": 2,
+                                   "findings": [{"table": 0}]}}}))
     assert resolve("extraction_fabrication_count", Corpus(ws))["status"] \
         == "absent"
 

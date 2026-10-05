@@ -225,3 +225,26 @@ def test_addendum_ids_mint_from_the_lane_max_not_a_count(tmp_path):
     meta = lane.store(filename="a.md", body=b"# a\n", at=FIXED_AT,
                       actor="t", slots_by_id=None)
     assert meta["addendum_id"] == "addm_04"
+
+
+def test_a_meta_that_fails_its_schema_refuses_the_lane_by_name(tmp_path):
+    """P32b (B145 §3d/§3i): the meta holds a human decision and the
+    attested archive digests — one that breaks its contract refuses the
+    list and the decide doors (409 naming the file), never rewritten."""
+    pursuit, report, _ = run_validation_package(tmp_path)
+    assert report.status == "complete"
+    folder = pursuit.root / "addenda" / "addm_07"
+    folder.mkdir(parents=True)
+    (folder / "meta.json").write_text(json.dumps({"addendum_id": "addm_07"}),
+                                      encoding="utf-8")
+    app = create_app(tmp_path, make_caller=raising_caller, now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Ada Amender")
+        pid = pursuit.pursuit_id
+        r = client.get(f"/api/pursuits/{pid}/addenda")
+        assert r.status_code == 409, r.text
+        assert "addenda/addm_07/meta.json fails its schema" in r.json()["detail"]
+        r = client.post(f"/api/pursuits/{pid}/addenda/addm_07/decide",
+                        json={"decision": "note_only", "note": ""})
+        assert r.status_code == 409 and "fails its schema" in r.json()["detail"]
+    assert json.loads((folder / "meta.json").read_text()) == {"addendum_id": "addm_07"}
