@@ -16,7 +16,8 @@ from engine.runlog import read_run
 from engine.web.server import create_app
 from tests.revision.fixtures.rounds import round_script
 from tests.validation.fixtures.validations import run_validation_package
-from tests.web.conftest import FIXED_AT, sign_in, wait_job
+from tests.web.conftest import (FIXED_AT, raising_caller, sign_in,
+                               wait_job)
 
 EXPIRES = "2026-08-16T09:00:00"
 AFTER_EXPIRY = "2026-08-16T09:00:01"
@@ -304,3 +305,36 @@ def test_revoke_lands_during_a_running_job(shared):
     finally:
         release.set()
     assert wait_job(client, job["id"])["state"] == "done"
+
+
+def test_a_share_link_is_refused_at_mint_over_another_clients_identifier(
+        tmp_path):
+    """P32a (A6's pre-export scan at the share door): the guest page is a
+    genuine egress — draft prose to a non-employee — so the review model
+    a guest would receive is scanned when the link is MINTED; a phrase
+    the restricted index holds for another client refuses the mint with
+    a 409 naming locations and counts, never the phrase, and no link
+    record is written. Zero spend: the share door is local."""
+    from engine.kb import KBStore
+    pursuit, report, _ = run_validation_package(tmp_path)
+    assert report.status == "complete"
+    KBStore(tmp_path / "kb").write_card(
+        {"kb_id": "kb_other000001", "layer": "corpus",
+         "summary": "A section from [CLIENT]."},
+        "Body from [CLIENT].",
+        {"source_pursuit": "pur_other", "source_client": "Zephyrline "
+         "Logistics", "date": "2025-02-02", "ingested_by": "ingestion_agent"},
+        {"rehearsed cutover runbook": "CLIENT"})
+    app = create_app(tmp_path, make_caller=raising_caller,
+                     now=lambda: FIXED_AT)
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        sign_in(client, "Skye Sharer")
+        pid = pursuit.pursuit_id
+        r = client.post(f"/api/pursuits/{pid}/share", json={
+            "label": "buyer-side counsel", "expires_at": EXPIRES})
+        assert r.status_code == 409, r.text
+        detail = r.json()["detail"]
+        assert "share_link: identifier residue at" in detail
+        assert ":slot:" in detail
+        assert "rehearsed" not in detail and "cutover" not in detail
+        assert not (pursuit.root / "share" / "links.jsonl").exists()

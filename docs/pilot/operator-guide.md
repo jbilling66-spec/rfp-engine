@@ -162,6 +162,11 @@ what or what anything cost.
 The guest presses **Send comment** on the page they were sent, and sees
 their own notes under **Your comments**.
 
+A link is refused at creation when the review a guest would see carries
+another client's identifier — the same check the documents pass before
+they are written; the refusal names where, not what. Fix the passage,
+then create the link again.
+
 ## The knowledge base tab
 
 The **Knowledge base** tab is the firm's answer library. You can search
@@ -190,6 +195,14 @@ pursuit screen shows **Finish**, open:
   proof its record carries (it stays withheld, both digests named, until
   you confirm the write-back again; that one also carries a **stale** tag,
   so a stale copy and a refused one read differently at a glance).
+- Before any document is written, the engine reads every string it is
+  about to hand outward against the names, numbers and contact details
+  the knowledge base has ever taken in from other clients. A match
+  refuses the file and names where it sits (the section and slot, or the
+  cell) and how many, never the text itself; fix the passage and run the
+  render or the write-back again. Your own buyer's name and your firm's
+  are never counted. The internal review copy is not scanned, and it
+  opens for a signed-in operator only.
 - Under each buyer file sits one line of what the file itself carries:
   who it names as creator, how many tracked changes and comment parts it
   holds, and whether the firm's identity is configured. The engine's own

@@ -55,6 +55,7 @@ from engine.assembly.hand_fill import (
     hand_slots,
     read_hand_fill,
 )
+from engine.assembly.egress import gate_lane, hand_texts
 from engine.assembly.hygiene import (firm_identity, refuse_marked_template,
                                      stamp_docx)
 from engine.contracts import ContractError, validate
@@ -529,10 +530,14 @@ def _fill_title(pursuit) -> str:
     return f"Response — {buyer}" if buyer else "Response"
 
 
-def run_template_fill(pursuit, log, *, confirmed_by: str, at: str) -> dict:
+def run_template_fill(pursuit, log, *, confirmed_by: str, at: str,
+                      store=None) -> dict:
     """Confirm-and-run (S7): facts re-derived server-side, the working
     copy always, the buyer copy only when nothing remains, each proven
-    by the stream-diff verifier, the facts artifact written and logged."""
+    by the stream-diff verifier, the facts artifact written and logged.
+    P32a: when the buyer copy is due, the egress gate runs over every
+    drafted paragraph and every hand-typed value before either copy is
+    rendered; the working copy is internal and is not scanned."""
     facts = compute_fill_facts(pursuit, confirmed_by=confirmed_by, at=at)
     template = Path(facts["template_file"])
     envelope = pursuit.read_artifact("drafts/draft.json")
@@ -542,6 +547,12 @@ def run_template_fill(pursuit, log, *, confirmed_by: str, at: str) -> dict:
         if s.get("status") == "drafted" and s.get("prose")}
     parsed = parse_default_template(template)
     hand_values = _hand_values(pursuit, facts["template_sha256"])
+    if facts["buyer_copy_produced"]:
+        texts = {f"{sid}:prose": prose
+                 for sid, prose in prose_by_section.items()}
+        texts.update(hand_texts(hand_values))
+        gate_lane("template_fill", texts, pursuit, log, store,
+                  pursuit.root / OUTPUT_NAME)
 
     firm = firm_identity(pursuit.root.parent)
     title = _fill_title(pursuit)

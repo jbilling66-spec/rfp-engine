@@ -119,9 +119,9 @@ terminal.
 
 | method | path | purpose | gate | surface |
 |---|---|---|---|---|
-| POST | `/api/pursuits/{pursuit_id}/export` | Render submission/review DOCX + recompose the bundle | operator; job-lane | ui |
+| POST | `/api/pursuits/{pursuit_id}/export` | Render submission/review DOCX + recompose the bundle; the submission render passes the egress scan first (a residue refuses, recorded in the bundle) | operator; job-lane | ui |
 | GET | `/api/pursuits/{pursuit_id}/downloads` | The two headings — buyer list read from the submission bundle (a withheld firm-template fill lists as refused, its working copy under internal); each buyer file's hygiene line (creator, revision marks summed, comment parts, firm identity); a refused entry's `status` names `drifted` = withheld and stale | open | ui |
-| GET | `/api/pursuits/{pursuit_id}/download/{name:path}` | Serve one file — closed allow-list from the bundle record | open; 403 outside the list; 409 naming what remains for a deliverable the bundle records as refused | ui |
+| GET | `/api/pursuits/{pursuit_id}/download/{name:path}` | Serve one file — closed allow-list from the bundle record | open for the buyer lane; operator for the internal review lane; 403 outside the list; 409 naming what remains for a deliverable the bundle records as refused | ui |
 | GET | `/api/pursuits/{pursuit_id}/writeback/preview` | Per-file facts preview for every declared lane | open (the preview half) | ui |
 | POST | `/api/pursuits/{pursuit_id}/writeback/confirm` | Run every declared write-back lane; facts + bundle written | operator; confirm; job-lane | ui |
 | GET | `/api/pursuits/{pursuit_id}/writeback/hand-fill` | The hand-completion record + what a human still owes (metadata record, pricing grid, case block, inline line) | open | ui |

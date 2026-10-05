@@ -25,6 +25,7 @@ import hashlib
 
 from openpyxl import load_workbook
 
+from engine.assembly.egress import gate_lane
 from engine.assembly.hygiene import firm_identity
 from engine.assembly.xlsx_patch import assert_roundtrip, write_cells
 from engine.contracts import ContractError
@@ -150,17 +151,21 @@ def preview_writeback(pursuit, *, at: str,
 
 
 def run_writeback(pursuit, log, *, at: str, confirmed_by: str,
-                  binding: dict | None = None) -> dict:
+                  binding: dict | None = None, store=None) -> dict:
     """The confirmed write: re-derives the facts server-side, rebuilds the
     buyer file byte-for-byte with ONLY the written cells patched into
     their sheet parts (P1-19 — never through openpyxl's lossy save),
-    proves the round-trip, records everything."""
+    proves the round-trip, records everything. P32a: the egress gate
+    runs over exactly the cells about to be written, before any byte."""
     facts = compute_facts(pursuit, at=at, confirmed_by=confirmed_by,
                           binding=binding)
     source = pursuit.root / facts["source_file"]
     output = pursuit.root / facts["output_file"]
     writes = {(row["sheet"], row["cell"]): row["after"]
               for row in facts["cells"] if row["decision"] == "written"}
+    gate_lane("xlsx_writeback",
+              {f"{sheet}!{cell}": text for (sheet, cell), text in writes.items()},
+              pursuit, log, store, output)
     write_cells(source, output, writes,
                 firm=firm_identity(pursuit.root.parent), at=at)
     try:

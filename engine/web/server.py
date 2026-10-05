@@ -822,7 +822,9 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     from engine.assembly.bundle import compose_bundle, declared_deliverables
     from engine.assembly.bindings import assert_current
-    from engine.assembly.docx import render_review, render_submission
+    from engine.assembly.docx import (SUBMISSION_NAME, render_review,
+                                      render_submission)
+    from engine.assembly.egress import EgressResidue
 
     @app.post("/api/pursuits/{pursuit_id}/export")
     def export(pursuit_id: str, payload: dict,
@@ -842,14 +844,29 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                     "submission" if lane in ("both", "submission")
                     else "review"))
                 if lane in ("both", "submission"):
-                    out["submission"] = render_submission(pursuit, log,
-                                                          at=at)
+                    out["submission"] = render_submission(
+                        pursuit, log, at=at, store=_kb_store())
                 if lane in ("both", "review"):
                     out["review"] = render_review(pursuit, log, at=at)
                 # every exit door recomposes the bundle (P18/C6): the
                 # render just changed the to-the-buyer set's state
                 out["bundle"] = compose_bundle(pursuit, log, at=at,
                                                composed_by=who)
+            except EgressResidue as exc:
+                # P32a: the egress refusal reaches the RECORD — the bundle
+                # names the render lane refused with the reason (locations
+                # and counts, never a value), so the downloads listing
+                # shows it the way it shows every other withheld file
+                try:
+                    out["bundle"] = compose_bundle(
+                        pursuit, log, at=at, composed_by=who,
+                        refusals=[{"lane": "submission_render",
+                                   "file": SUBMISSION_NAME,
+                                   "reason": str(exc)}])
+                except ContractError:
+                    pass  # the 409 below still carries the reason
+                log.run_end(status="failed")
+                raise HTTPException(409, str(exc))
             except (ContractError, FileNotFoundError, ValueError) as exc:
                 # ValueError: python-docx refuses XML-incompatible text
                 # (P2-29a) — a typed 409 with the run closed, never a 500
@@ -914,7 +931,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                 "firm_identity": block.get("firm_identity", "unconfigured")}
 
     @app.get("/api/pursuits/{pursuit_id}/download/{name:path}")
-    def download(pursuit_id: str, name: str):
+    def download(pursuit_id: str, name: str, request: Request):
         root = _pursuit_root(pursuit_id)
         clean = Path(name).name  # traversal defense
         bundle = _bundle_record(root)
@@ -935,6 +952,10 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
                         return FileResponse(path, filename=clean)
         review = root / "exports" / "review" / clean
         if review.is_file():
+            # P32a: the copy labelled "Internal — do not send" is served
+            # to a signed-in operator only — the buyer lane above stays
+            # an open read off the bundle record
+            operator(request)
             return FileResponse(review, filename=clean)
         # a closed allow-list, never a general file server: anything the
         # bundle does not vouch for and the review lane does not hold is
@@ -977,13 +998,15 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
         return preview_writeback(pursuit, at=at, binding=binding)
 
     def _run_one(pursuit, log, binding, at: str, who: str) -> dict:
+        store = _kb_store()  # P32a: the egress gate's identifier universe
         if binding["lane"] == "template_fill":
-            return run_template_fill(pursuit, log, at=at, confirmed_by=who)
+            return run_template_fill(pursuit, log, at=at, confirmed_by=who,
+                                     store=store)
         if binding["lane"] == "docx_writeback":
-            return run_docx_writeback(pursuit, log, at=at,
-                                      confirmed_by=who, binding=binding)
+            return run_docx_writeback(pursuit, log, at=at, confirmed_by=who,
+                                      binding=binding, store=store)
         return run_writeback(pursuit, log, at=at, confirmed_by=who,
-                             binding=binding)
+                             binding=binding, store=store)
 
     @app.get("/api/pursuits/{pursuit_id}/writeback/preview")
     def writeback_preview(pursuit_id: str, at: str | None = None):
@@ -1159,8 +1182,25 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     @app.post("/api/pursuits/{pursuit_id}/share")
     def create_share(pursuit_id: str, payload: dict,
                      who: str = Depends(operator)):
+        from engine.assembly.egress import (egress_identifiers, guest_texts,
+                                            residue_message, scan_egress)
         with _mutate(pursuit_id):  # P25 item 3 (P1-20): serialized
             lane = _share_lane(pursuit_id)
+            # P32a: the guest payload is scanned at MINT, never at view —
+            # a guest never receives a refusal whose cause they must not
+            # learn; the operator sees the typed refusal here. No run is
+            # open at a mint, so the refusal is the 409 and the absent
+            # link (the index read itself is access-logged).
+            model = state_models.review(workspace, pursuit_id,
+                                        include_internal=False)
+            if model is not None:
+                report = scan_egress(
+                    "share_link", guest_texts(model),
+                    egress_identifiers(workspace,
+                                       PursuitDir(workspace, pursuit_id),
+                                       _kb_store()))
+                if not report.passed:
+                    raise HTTPException(409, residue_message(report))
             try:
                 return lane.create(created_by=who,
                                    label=payload.get("label", ""),

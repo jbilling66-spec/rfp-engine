@@ -27,6 +27,7 @@ from pathlib import Path
 
 from docx import Document
 
+from engine.assembly.egress import gate_lane
 from engine.assembly.hygiene import firm_identity, stamp_docx
 from engine.contracts import ContractError
 from engine.structure.docx_buyer import question_cell_map
@@ -217,14 +218,20 @@ def _assert_roundtrip(source: Path, output: Path,
 
 
 def run_docx_writeback(pursuit, log, *, at: str, confirmed_by: str,
-                       binding: dict | None = None) -> dict:
+                       binding: dict | None = None, store=None) -> dict:
     """The confirmed write: re-derives the facts server-side, copies the
     buyer file, assigns ONLY the written cells, proves the round-trip,
-    records everything."""
+    records everything. P32a: the egress gate runs over exactly the
+    cells about to be written, before the copy is made."""
     facts = compute_docx_facts(pursuit, at=at, confirmed_by=confirmed_by,
                                binding=binding)
     source = pursuit.root / facts["source_file"]
     output = pursuit.root / facts["output_file"]
+    gate_lane("docx_writeback",
+              {f"table{row['table_index']}:row{row['row']}:col{row['column']}":
+               row["after"] for row in facts["cells"]
+               if row["decision"] == "written"},
+              pursuit, log, store, output)
     output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, output)
     document = Document(str(output))

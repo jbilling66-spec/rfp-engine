@@ -107,6 +107,23 @@ honest record. Start (or fix) the answering session and press **Advance**
 in the UI again: the engine re-issues new requests and resumes; pairs are
 never deleted, so the audit trail survives the stall.
 
+## When an exit refuses over another client's identifier
+
+Every exit — the rendered submission, each write-back into the buyer's
+own forms, the firm-template fill, and a share link at creation — scans
+the exact text it is about to hand outward against the identifiers the
+knowledge base has ever taken in, less this pursuit's buyer and the
+firm. A match is a typed refusal: the downloads list names the file
+under what is withheld with the reason, the reason names the locations
+(section and slot, or sheet and cell) and a count per location, and the
+run carries a `pre_export_leakage` line reading `block`. The matched
+text is never in the record; an operator who needs it reads the section
+the location names. Fix the passage, run the exit again, and the line
+reads `pass`. Contact details, web addresses, street addresses, tax ids
+and reference numbers are counted in the report but do not refuse on
+their own in this release — the owner's call, so a firm e-mail in a
+real proposal does not train anyone to override the refusal.
+
 ## Recovery: torn and corrupt files
 
 Every durable record is written atomically or appended with an fsync per

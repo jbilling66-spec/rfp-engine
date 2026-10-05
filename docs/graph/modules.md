@@ -98,6 +98,7 @@ graph LR
   revision --> web
   assembly --> structure
   assembly --> planning
+  assembly --> kb
   kb --> extraction
   kb --> flywheel
   kb --> evals
@@ -125,8 +126,8 @@ is the pursuit-memory store. Both are drawn because the rule draws them.)*
 |---|---|
 | contracts | assembly, drafting, extraction, flywheel, intake, kb, metrics, pipeline, planning, research, revision, runlog, strategy, structure, validation, workspace |
 | llm | drafting, intake, kb, pipeline, planning, research, revision, strategy |
-| runlog | kb, llm, pipeline |
-| workspace | intake, kb, pipeline, revision |
+| runlog | assembly, kb, llm, pipeline |
+| workspace | assembly, intake, kb, pipeline, revision |
 
 ## The caller seam
 
