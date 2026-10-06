@@ -177,7 +177,6 @@ def test_append_revised_keeps_the_id_and_refuses_an_unknown_one(tmp_path):
     the same id; the lane reads last-wins; an id the lane never minted
     is refused — a revision revises a record."""
     from engine.web.events import EventsError
-    from engine.workspace import PursuitDir
 
     lane = EventsLane(PursuitDir(tmp_path, "pur_rev"))
     event = lane.append("edit", at=FIXED_AT, actor="Pat",
@@ -232,7 +231,6 @@ def test_event_ids_mint_from_the_lane_max_under_concurrency(tmp_path):
     import threading
 
     from engine.web.events import EventsLane
-    from engine.workspace import PursuitDir
     pursuit = PursuitDir(tmp_path, "pur_ev")
     lane = EventsLane(pursuit)
     lane.events_path.parent.mkdir(parents=True, exist_ok=True)

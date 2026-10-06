@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rfp-engine-v2"
-version = "0.13.0"
+version = "0.14.1"
 description = "RFP Response Engine v2 — sales engine: draft boldly, verify at the boundary, learn from every review"
 readme = "README.md"
 license = "Apache-2.0"
@@ -35,7 +35,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.2,<9", "playwright>=1.47,<2"]
+# P32d (B149): ruff runs INSIDE the suite (tests/contracts/test_lint.py) over
+# engine/, tests/ and tools/ — no make target of its own, so `make check` and
+# CI are unchanged. Minor-pinned: rule behaviour moves between ruff minors, so
+# a bump is a deliberate edit of this constraint + `make lock`, reviewed as a diff.
+dev = ["pytest>=8.2,<9", "playwright>=1.47,<2", "ruff>=0.16,<0.17"]
 # Container-only (B51): installed inside docker/extraction-gate.Dockerfile,
 # never into .venv — the offline suite must stay torch-free, and this
 # host's only native docling path is an abandoned torch pin (mac_intel).
@@ -49,3 +53,29 @@ testpaths = ["tests"]
 markers = [
     "extraction: exercises docling — collected only where it is installed (the gate container); deselected by tests/extraction/conftest.py elsewhere, never skipped",
 ]
+
+# P32d (B149): ruff runs INSIDE the suite — tests/contracts/test_lint.py runs
+# `ruff check engine tests tools` with this configuration and pins it, so a
+# change here is a deliberate, reviewed change. Lint only: no formatter, no
+# mypy (trigger unchanged: the first contributor).
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "BLE", "RUF100"]
+# Ignored DELIBERATELY at adoption (B149 §3c), each with its measured count on
+# the 2026-10-05 tree and the trigger that reopens it — the lint pass at the
+# contributors trigger (with mypy and the formatter) — never silently:
+#   E501 line-too-long (191): line length is the formatter's decision
+#   E741 ambiguous-variable-name (76, all `l`, 38 files): a rename pass is
+#        formatting-grade churn under a pending UAT
+#   B904 raise-without-from-inside-except (84, 58 in web/server.py): rewrites
+#        the exception chain at 84 raises for traceback shape alone
+#   B905 zip-without-explicit-strict (21): `strict=` is a per-site behaviour
+#        decision — reopened by that pass or by a ragged-input incident
+ignore = ["E501", "E741", "B904", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+# A package __init__ import is a re-export by construction — declared once
+# here, not as a `noqa` on every line (B149 §3d).
+"__init__.py" = ["F401"]

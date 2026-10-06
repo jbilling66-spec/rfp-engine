@@ -1,4 +1,4 @@
-from engine.runlog.writer import (  # noqa: F401
+from engine.runlog.writer import (
     RunLogger,
     assert_seq_gapless,
     config_digest,

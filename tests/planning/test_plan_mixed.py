@@ -90,7 +90,7 @@ def test_pdf_core_limitation_is_recorded_never_faked(tmp_path):
                            core_doc=FIXTURES / "pdf-twin.pdf")
     assert report.status == "complete"
     assert any("not scannable offline" in w for w in report.warnings)
-    plan = json.loads((pursuit.root / "plan.json").read_text(encoding="utf-8"))
+    json.loads((pursuit.root / "plan.json").read_text(encoding="utf-8"))  # parses
     container = json.loads(
         (pursuit.root / "slots.json").read_text(encoding="utf-8"))
     assert "sources" not in container  # single parsed target, single shape

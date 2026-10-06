@@ -10,11 +10,11 @@ injection twin test depends on the rendered-prompt diff being exactly
 the planted sentence."""
 
 from dataclasses import dataclass, field
+from pathlib import Path as _Path
 
 from engine.assistant.docs import corpus_toc
 from engine.assistant.session import SESSION_CEILING_USD, AssistantSession
 from engine.assistant.tools import (
-    TOOLS,
     ToolContext,
     ToolRefused,
     execute_tool,
@@ -33,8 +33,6 @@ MAX_TOOL_ACTIONS = 8
 MAX_CALLS = 12
 RESULT_CHAR_CAP = 8000
 RENDER_CHAR_CAP = 60000
-
-from pathlib import Path as _Path
 
 _PROMPT = _Path(__file__).resolve().parents[2] / "prompts" / "assistant" / "prompt.md"
 

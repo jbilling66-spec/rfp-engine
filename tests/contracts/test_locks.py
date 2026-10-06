@@ -2,7 +2,6 @@
 resolved path, process-wide, shared by every layer that names the path."""
 
 import threading
-from pathlib import Path
 
 from engine.contracts import path_lock
 

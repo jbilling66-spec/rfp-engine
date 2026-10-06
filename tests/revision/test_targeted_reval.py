@@ -4,7 +4,6 @@ once globally, and never calls the red team — with the absence-rule twin
 proving the swept-for calls DO occur under full validation (an absence
 test that could never fire proves nothing)."""
 
-import json
 
 from engine.runlog import read_run
 from tests.revision.fixtures.rounds import (

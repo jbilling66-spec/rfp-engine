@@ -20,7 +20,6 @@ Vocabularies are read FROM the schema at import — one copy per rule
 
 import json
 import threading
-from pathlib import Path
 
 from engine.contracts import (append_fsync, check_prose, read_jsonl,
                               validate)

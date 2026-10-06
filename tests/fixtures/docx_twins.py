@@ -154,7 +154,7 @@ def build_template_twin(path: Path) -> Path:
 
 def build_outline_twin(path: Path) -> Path:
     doc = Document()
-    doc.add_paragraph(f"Request for Proposal — ERP Implementation Services")
+    doc.add_paragraph("Request for Proposal — ERP Implementation Services")
     doc.add_paragraph(f"Issued by {BUYER}.")
     doc.add_heading("Proposal Response Format", level=1)
     doc.add_paragraph(

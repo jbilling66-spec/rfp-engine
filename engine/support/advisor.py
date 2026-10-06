@@ -21,7 +21,6 @@ FakeCaller default like everything else: conversational quality is
 claimed at live milestones/UAT, never before (B36(2))."""
 
 import json
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

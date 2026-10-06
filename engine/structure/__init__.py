@@ -19,7 +19,7 @@ PARSER_VERSION = "2.1.0"
 # other's pinned bytes.
 DOCX_PARSER_VERSION = "1.0.0"
 
-from engine.structure.docx_parts import header_footer_text, text_box_text  # noqa: F401  (P2-27)
+from engine.structure.docx_parts import header_footer_text, text_box_text  # noqa: E402  (P2-27)
 from engine.structure.parse import ParsedWorkbook, StructureError, parse_workbook  # noqa: E402
 from engine.structure.docx_default import parse_default_template  # noqa: E402
 from engine.structure.docx_buyer import parse_buyer_docx  # noqa: E402

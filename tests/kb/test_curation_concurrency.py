@@ -8,10 +8,8 @@ event the test releases only after both threads are in flight, so the
 interleaving that used to lie is the one exercised. Run against the
 pre-lock tree this test is red (two log lines, zero refusals)."""
 
-import json
 import threading
 
-import pytest
 
 from engine.kb.curation import CurationRefused, merge_batch, propose_edit
 from engine.kb.store import KBStore

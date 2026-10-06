@@ -41,7 +41,8 @@ def test_files_fingerprint_tracks_bytes_and_order(tmp_path):
     assert ordered != files_fingerprint(one, two)
     # M-19 (P26b-3): the roster is framed, so a boundary shift between
     # two files ("ab"+"c" vs "a"+"bc") is a different digest.
-    one.write_text("ab", encoding="utf-8"); two.write_text("c", encoding="utf-8")
+    one.write_text("ab", encoding="utf-8")
+    two.write_text("c", encoding="utf-8")
     shifted_one, shifted_two = tmp_path / "x.md", tmp_path / "y.md"
     shifted_one.write_text("a", encoding="utf-8")
     shifted_two.write_text("bc", encoding="utf-8")

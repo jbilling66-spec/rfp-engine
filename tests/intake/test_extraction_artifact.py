@@ -4,7 +4,7 @@ resume (it is written inside the checkpoint guard)."""
 
 import json
 
-from tests.extraction.fakes import FakeExtractionBackend, simple_view
+from tests.extraction.fakes import FakeExtractionBackend
 from tests.intake.fixtures.packages import run_package
 from tests.intake.test_brief_backend import _pdf_twin_view
 

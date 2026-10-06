@@ -45,7 +45,6 @@ def derive_revision_wire(prompt: str) -> str:
                     for slot_id, content in gap_answers
                     if slot_id not in drafted]
         return json.dumps({"answers": answers, "replies": replies})
-    prose = (block.strip().splitlines() or [""])[-1] if not slots else ""
     return json.dumps({"prose": (block.strip() or "prose") + suffix,
                        "kb_ids": [], "replies": replies})
 

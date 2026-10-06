@@ -12,7 +12,6 @@ import json
 import pytest
 
 from engine.llm import FakeCaller
-from engine.web import events as events_mod
 from engine.web.events import EventsLane
 from tests.revision.fixtures.rounds import (
     ROUND_AT,

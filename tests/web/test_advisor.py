@@ -13,10 +13,8 @@ from fastapi.testclient import TestClient
 from engine.llm import FakeCaller
 from engine.support import advisor as advisor_mod
 from engine.support.advisor import (
-    CITATION_VOCAB,
     DOC_SOURCES,
     compose_corpus,
-    parse_reply,
     system_prompt,
 )
 from engine.web.server import create_app

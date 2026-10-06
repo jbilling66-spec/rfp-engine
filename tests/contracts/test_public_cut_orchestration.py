@@ -110,7 +110,6 @@ def test_deny_listed_file_in_staging_refuses(cut):
     mod, repo, staging, verified = cut
     staging.mkdir()  # a stray file already in the staging tree
     (staging / "SECRET.md").write_text("leaked\n")
-    monkeypatch_env = os.environ.copy()
     with pytest.raises(SystemExit, match="deny-listed"):
         mod._build_and_verify(staging, mod.RESIDUE + mod.machine_patterns())
     assert verified == []
@@ -219,8 +218,6 @@ def test_a_tracked_symlink_refuses_the_cut_before_any_export(cut, capsys):
     """A symlink's blob is its link text — a machine-local path the
     residue scan never reads (it follows or skips the link). The cut
     refuses the tree by name before staging exists."""
-    import os
-
     mod, repo, staging, verified = cut
     # link text built by concatenation so this file carries no literal
     # the scanner could flag (test_public_cut.py's rule)

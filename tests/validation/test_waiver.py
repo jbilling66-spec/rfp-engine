@@ -4,7 +4,7 @@ the registered alert condition."""
 
 import pytest
 
-from engine.runlog import RunLogger, read_run
+from engine.runlog import read_run
 from engine.validation import VALIDATION_NAME, approve_waiver
 from tests.validation.fixtures.validations import (
     AT,

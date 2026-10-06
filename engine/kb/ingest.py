@@ -117,6 +117,10 @@ class SourceDoc:
     # only (behind the access log) — never in a card, a proposal, a run
     # log or a reconciliation record.
     source_name: str | None = None
+    # P33b (B153 §3a): the card kind the reader says — a completed
+    # response workbook is a past_response. The default keeps every
+    # existing caller and the committed store byte-identical.
+    doc_kind: str = "section_exemplar"
 
 
 @dataclass
@@ -400,7 +404,7 @@ def _candidates(doc: SourceDoc, model: CanonicalDoc, wire: dict,
             kb_id = kb_id_for(body)
             title = (chunk.doc_path[-1] if chunk.doc_path else "Figure")
             card = _card_shell(
-                doc, kb_id, title, _clip_summary(body), "section_exemplar",
+                doc, kb_id, title, _clip_summary(body), doc.doc_kind,
                 model.doc_id,
                 identity_block(body, chunk.doc_path, i, model.source_hash),
                 title, body)
@@ -417,7 +421,7 @@ def _candidates(doc: SourceDoc, model: CanonicalDoc, wire: dict,
         summary = _clip_summary(_anon(annotation["summary"]) or title)
         kb_id = kb_id_for(body)
         card = _card_shell(
-            doc, kb_id, title, summary, "section_exemplar", model.doc_id,
+            doc, kb_id, title, summary, doc.doc_kind, model.doc_id,
             identity_block(body, chunk.doc_path, i, model.source_hash),
             title, body, summary)
         card["type_tags"] = annotation["type_tags"]
@@ -865,7 +869,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
         from engine.flywheel.proposals import ProposalStore
 
         proposals = ProposalStore(store.root)
-        for (i, j), claim_text in sorted(claim_texts.items()):
+        for (i, _j), claim_text in sorted(claim_texts.items()):
             source_card = next(
                 (c["card"]["kb_id"] for c in candidates
                  if c.get("chunk_index") == i), None)

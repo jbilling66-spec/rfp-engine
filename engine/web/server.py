@@ -118,7 +118,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     app.state.clock = now  # the injectable clock (tests move it here)
 
-    def now() -> str:  # noqa: F811 — shadows the parameter on purpose
+    def now() -> str:  # shadows the parameter on purpose
         return app.state.clock()
 
     def _at(payload: dict | None) -> str:
@@ -1507,7 +1507,6 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
 
     # -- gates on the web (D25; c10) ---------------------------------------
 
-    from engine.contracts import ContractError
     from engine.kb import KBStore
     from engine.llm import effective_config
     from engine.planning import approve_gate2
@@ -1693,7 +1692,7 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     def gate1_decide(pursuit_id: str, payload: dict,
                      who: str = Depends(operator),
                      role: str = Depends(actor_role)):
-        root = _pursuit_root(pursuit_id)
+        _pursuit_root(pursuit_id)  # the existence check; the path is unused here
         pursuit = PursuitDir(workspace, pursuit_id)
         at = _at(payload)
         effort = _effort_payload(payload, "gate_1")
@@ -2107,7 +2106,6 @@ def create_app(workspace: Path, *, make_caller=_default_make_caller,
     )
     from engine.assistant.session import MAX_MESSAGE_CHARS
     from engine.llm.caller import CostCeilingExceeded
-    from engine.llm.config import effective_config
 
     assistant_fake = FakeCaller({})  # zero-spend default; tests inject
     app.state.assistant_caller = None

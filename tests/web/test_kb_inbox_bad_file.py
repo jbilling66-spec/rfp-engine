@@ -3,7 +3,6 @@
 record is evidence — and every other proposal is still there once it is
 dealt with."""
 
-import json
 
 import pytest
 from fastapi.testclient import TestClient

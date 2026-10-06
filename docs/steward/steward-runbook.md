@@ -39,6 +39,35 @@ claim gate never writes facts: claim-like statements found in the text
 become **proposals** for fact-sheet atoms, and each one waits for a
 steward to accept it with an owner and a verified date.
 
+## Bringing a completed response workbook in
+
+Most delivered responses are the buyer's own questionnaire workbook
+with the firm's answers typed into the response column. `python -m
+engine kb ingest --file <xlsx> --client <the buyer> --pursuit <id>
+--date <YYYY-MM-DD> --live` reads one directly, exactly as it would a
+Word document: one card per answered question, titled by the buyer's
+question, bodied by the firm's answer, the buyer's own name
+placeholdered wherever it appears (the owner's call), the card's kind
+`past_response`. What the read leaves out, it names on the terminal by
+sheet and row, never by the cell's text: an unanswered question, an
+answer with no question beside it, an answer that is only a number, a
+fee or a yes/no (a figure never rides into the corpus), a formula cell
+with no cached value, a hidden sheet, row or column, a sheet with no
+question and response columns, and a pricing sheet. Hidden or uncached
+content that was skipped marks the document's cards `degraded` —
+ingested, flagged, like any imperfect parse. A workbook with nothing to
+pair, a damaged file, or a format the knowledge base has no reader for
+(a PDF, say) is refused by name and nothing is written, not even a run
+record. To read and correct the text before the two readers are paid
+to read it, `python -m engine kb pair --file <xlsx> --out <md>` writes
+the same pairing as markdown — zero spend, yours to edit — and `kb
+ingest --file <md>` then takes it in as the same kind; that preview
+path refuses an answer whose line would read as markdown structure (a
+line starting `# `, a `| … |` row), which the direct path does not.
+Only workbooks whose answer sits beside its question on the same row
+pair today; an answer beneath its question is a shape the build side
+has not seen yet — send one, with the names stripped.
+
 ## Re-ingesting and the reconciliation report
 
 Ingesting a newer version of a document you ingested before is safe by

@@ -43,6 +43,13 @@ class SheetFacts:
     index: int  # physical tab position (0-based)
     cells: dict[str, CellFact] = field(default_factory=dict)
     merged_ranges: list[str] = field(default_factory=list)
+    # P3-25 (P33a): hidden state is RECORDED here, never filtered —
+    # hidden cells stay in `cells` (Layer 1 says what is in the file);
+    # a reader decides what hidden means. The vacancy parser
+    # (classify.py) does not read these, so its pinned output stands.
+    hidden: bool = False
+    hidden_rows: set[int] = field(default_factory=set)
+    hidden_cols: set[int] = field(default_factory=set)
 
     def rows(self) -> dict[int, list[CellFact]]:
         """Facts grouped by row, columns ordered."""
@@ -91,10 +98,19 @@ def collect_workbook_facts(path: Path) -> WorkbookFacts:
     wb = load_workbook(path, data_only=False, read_only=False)
     facts = WorkbookFacts(file=path.name)
     for index, ws in enumerate(wb.worksheets):
+        hidden_cols: set[int] = set()
+        for dim in ws.column_dimensions.values():
+            if dim.hidden:  # a hidden column dimension covers min..max
+                hidden_cols.update(range(dim.min, dim.max + 1))
         sheet = SheetFacts(
             name=ws.title,
             index=index,
             merged_ranges=sorted(str(r) for r in ws.merged_cells.ranges),
+            hidden=ws.sheet_state != "visible",
+            # .items(), never [r]: indexing a BoundDictionary creates
+            # the entry it is asked for
+            hidden_rows={r for r, dim in ws.row_dimensions.items() if dim.hidden},
+            hidden_cols=hidden_cols,
         )
         by_cell_range: dict[str, str] = {}
         for rng in ws.merged_cells.ranges:

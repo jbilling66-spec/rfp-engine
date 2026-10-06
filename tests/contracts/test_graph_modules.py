@@ -44,7 +44,7 @@ def _import_edges() -> set[tuple[str, str]]:
 
 
 def _table_with_header(header0: str) -> list[list[str]]:
-    tables, current = [], []
+    tables = []
     text = DOC.read_text().splitlines()
     for i, line in enumerate(text):
         if line.startswith("|") and [c.strip() for c in line.strip("|").split("|")][0] == header0:

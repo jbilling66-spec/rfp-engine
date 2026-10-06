@@ -93,7 +93,7 @@ def consume_annotated(pursuit, records: list[dict]) -> tuple[bool, list[str]]:
                        f"no receipts"]
     try:
         annotated = pursuit.read_artifact(VALIDATION_NAME)
-    except Exception as exc:  # unreadable == absent, honestly
+    except Exception as exc:  # noqa: BLE001 — unreadable == absent, honestly
         return False, [f"{VALIDATION_NAME} unreadable: {exc}"]
 
     drafted = [s for s in annotated["sections"]

@@ -16,9 +16,8 @@ from engine.cli.main import main
 from engine.kb import KBStore, SourceDoc, ingest_document
 from engine.kb.canonical import Element
 from engine.llm import FakeCaller, TracedCaller
-from engine.runlog import RunLogger, read_run
+from engine.runlog import RunLogger
 
-from tests.kb.fixtures.corpus import REVIEWER_NONE
 
 CLIENT = "Foxfire Municipal Utilities"
 STEM_TOKEN = "Foxfire"  # the client's distinctive token, in the filename

@@ -6,7 +6,6 @@ section without half-applying anything."""
 
 import json
 
-import pytest
 
 from engine.runlog import read_run
 from engine.web.events import EventsLane

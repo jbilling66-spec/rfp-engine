@@ -44,6 +44,10 @@ install from the lock, run `make check`. The suite is offline and
 spends nothing; it must be green before and after any change you
 propose. `make check` is also exactly what CI runs.
 
+Ruff runs inside that suite (`tests/contracts/test_lint.py`; the rules live
+in `pyproject.toml` under `[tool.ruff]`). Fix a finding, or ignore its rule
+there deliberately with the reason beside it — never by weakening the test.
+
 One extra, once per machine: the workbench smoke test drives the shell in
 headless chromium, which is not a Python wheel — run
 `.venv/bin/playwright install chromium` after installing from the lock.

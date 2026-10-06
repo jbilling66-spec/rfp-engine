@@ -8,7 +8,6 @@ survive the owner not being in the room).
 """
 
 import json
-from pathlib import Path
 
 import pytest
 

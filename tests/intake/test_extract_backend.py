@@ -2,9 +2,8 @@
 markers preserved, sidecar and grids carried, per-document failure degrades
 to legacy without refusing, and the un-backed path is honest about itself."""
 
-import pytest
 
-from engine.intake.extract import ExtractedDoc, extract
+from engine.intake.extract import extract
 from tests.extraction.fakes import FakeExtractionBackend, simple_view
 from tests.fixtures.intake_twins import build_minimal_pdf
 

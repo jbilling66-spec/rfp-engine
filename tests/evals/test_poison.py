@@ -14,7 +14,6 @@ from engine.runlog import RunLogger
 from engine.evals.cases import write_lock
 from engine.validation.poison import (
     BaselineMismatch,
-    CASES_PATH,
     ROOT,
     cases_fingerprint,
     check_baseline,

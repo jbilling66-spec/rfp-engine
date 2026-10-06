@@ -48,7 +48,7 @@ def test_every_request_keyword_is_a_create_parameter(caller):
     sent = {}
 
     class Recorder:
-        class messages:  # noqa: N801 — mirrors the SDK attribute
+        class messages:  # mirrors the SDK attribute
             @staticmethod
             def create(**kwargs):
                 sent.update(kwargs)

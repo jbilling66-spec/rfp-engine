@@ -70,7 +70,12 @@ proposal or a run log.
 spends nothing until all three hold; `--budget-usd` (default 5) bounds
 the one document's two reads. Offline the same door takes `--wire` and
 `--reviewer-wire`, scripted replies for the two readers — the suite's
-path, never the production one.
+path, never the production one. A completed response workbook (the buyer's questionnaire with the firm's
+answers beside the questions) goes through this same door directly —
+`--file <xlsx>`, one card per answered question, kind `past_response` —
+or first through `python -m engine kb pair` as editable markdown; the
+steward runbook's "Bringing a completed response workbook in" section
+says what the read skips and when it refuses.
 
 The taxonomy above is the domain's as of P28 (the owner's call); A1's
 real-material review may add a class — that review is the closer named

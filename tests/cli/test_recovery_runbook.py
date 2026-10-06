@@ -4,7 +4,6 @@ not a control. The doc's section names are pinned here; the mechanisms
 are pinned by the torn-tail, job-lane, and board tests, and the
 diagnosis command is exercised end to end below."""
 
-import json
 import subprocess
 import sys
 from pathlib import Path

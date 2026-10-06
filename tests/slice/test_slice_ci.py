@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from engine.cli.main import main
-from engine.cli.slice import DEFAULT_AT, run_slice, verify_slice
+from engine.cli.slice import run_slice, verify_slice
 from engine.cli.slice_script import ci_script
 from engine.runlog import read_run
 from engine.workspace import PursuitDir

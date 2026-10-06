@@ -100,7 +100,7 @@ def neutral_doc_handle(path: Path) -> str:
 
 def _cmd_kb_ingest(args) -> int:
     from engine.kb import SourceDoc, ingest_document
-    from engine.kb.read import read_source
+    from engine.kb.read import UnreadableSource, read_source
 
     if args.live:
         if args.reviewer_wire:
@@ -116,10 +116,21 @@ def _cmd_kb_ingest(args) -> int:
         make_caller = _scripted_ingest_caller(args)
         if make_caller is None:
             return 1
+    # The read comes BEFORE the store and the log: a refused source
+    # mints nothing, not even a run id (P3-24, P33b).
+    try:
+        # python-docx primary here (B57); a response workbook in-engine (P33b)
+        source = read_source(Path(args.file))
+    except UnreadableSource as exc:
+        print(f"ingest refused: {exc}", file=sys.stderr)
+        for line in exc.warnings:  # addresses only, never cell text
+            print(f"  warning: {line}", file=sys.stderr)
+        return 1
+    for line in source.warnings:  # the pairing's skips, by address
+        print(f"warning: {line}", file=sys.stderr)
     store = _store(args)
     log = _new_log(store)
     caller = make_caller(log)
-    source = read_source(Path(args.file))  # python-docx primary here (B57)
     doc = SourceDoc(
         # P29a (P1-47): a filename is, in practice, the client's name. The
         # firm store never records it — the handle is a digest of the stem
@@ -132,9 +143,11 @@ def _cmd_kb_ingest(args) -> int:
         outcome=args.outcome, date=args.date, authored_by=args.authored_by,
         extractor=source.extractor,
         extraction_fingerprint=source.fingerprint,
+        extraction_degraded=source.degraded,  # P33b: content lost -> flagged
         media=source.media,
         elements=source.elements,
         source_bytes=Path(args.file).read_bytes(),
+        doc_kind=source.doc_kind,  # P33b: a workbook is a past_response
     )
     report = ingest_document(store, caller, log, doc)
     print(f"{report.doc_id}: {report.status}, +{len(report.cards_written)} cards")
@@ -251,6 +264,51 @@ def _cmd_kb_provenance(args) -> int:
     return 0
 
 
+def _cmd_kb_pair(args) -> int:
+    """P33a (B151 §3d): a completed response workbook -> the markdown the
+    ingest reads. Zero spend; a preview of exactly the text the two readers
+    will be paid to read. Refuses a non-xlsx suffix before opening it,
+    refuses to overwrite, and prints counts on stdout and the warnings —
+    addresses only, never cell text — on stderr."""
+    from engine.contracts import write_text_atomic
+    from engine.kb.response_workbook import (
+        ResponseWorkbookError,
+        pair_response_workbook,
+        render_markdown,
+    )
+
+    src, out = Path(args.file), Path(args.out)
+    if src.suffix.lower() != ".xlsx":
+        print(f"REFUSED: kb pair reads a .xlsx response workbook, not {src.suffix!r}",
+              file=sys.stderr)
+        return 1
+    if out.exists():
+        print(f"REFUSED: {out} exists — kb pair never overwrites", file=sys.stderr)
+        return 1
+    try:
+        book = pair_response_workbook(src)
+    except ResponseWorkbookError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 1
+    rendered = render_markdown(book)
+    for line in book.warnings + rendered.warnings:
+        print(f"warning: {line}", file=sys.stderr)
+    skipped = dict(book.skipped)
+    if rendered.warnings:
+        skipped["markdown-structural answers"] = len(rendered.warnings)
+    summary = "; ".join(f"{k} {v}" for k, v in sorted(skipped.items()))
+    print(f"{rendered.rendered} pairs across {len(book.sheets)} sheets"
+          + (f"; skipped: {summary}" if summary else ""))
+    if rendered.rendered == 0:
+        print("REFUSED: nothing to ingest — no question/answer pair rendered",
+              file=sys.stderr)
+        return 1
+    out.parent.mkdir(parents=True, exist_ok=True)
+    write_text_atomic(out, rendered.text)
+    print(f"wrote {out}")
+    return 0
+
+
 def register(sub) -> None:
     kb = sub.add_parser("kb", help="knowledge base: seed, search, purge, audit")
     kbsub = kb.add_subparsers(dest="kb_command", required=True)
@@ -283,6 +341,13 @@ def register(sub) -> None:
     ingest.add_argument("--outcome", default="unknown")
     ingest.add_argument("--date", required=True)
     ingest.add_argument("--authored-by", default="firm")
+
+    # P33a: no --kb — the door needs no store (registered outside _p on purpose)
+    pair = kbsub.add_parser("pair", help="render a completed response workbook "
+                                         "(.xlsx) as the markdown `kb ingest` reads")
+    pair.add_argument("--file", required=True, help="the filled buyer questionnaire")
+    pair.add_argument("--out", required=True, help="the markdown to write (never overwritten)")
+    pair.set_defaults(fn=_cmd_kb_pair)
 
     search = _p("search", _cmd_kb_search, "card search with full retrieval trace")
     search.add_argument("query")

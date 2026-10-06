@@ -12,7 +12,6 @@ parameter at all — is recorded in B43 as P10-F13. This fingerprint is the
 part of that work that survives, and it stands on its own merits.
 """
 
-import pytest
 import yaml
 
 import json
@@ -106,7 +105,6 @@ def test_scoring_code_changes_move_no_existing_fingerprint():
     from pathlib import Path
 
     from engine.evals import claim_extraction as ext
-    from engine.evals.cases import code_fingerprint
     from engine.kb import KBStore
     from engine.llm import FakeCaller, TracedCaller
     from engine.runlog import RunLogger

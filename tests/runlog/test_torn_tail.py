@@ -5,7 +5,6 @@ complete records — while a torn line anywhere EARLIER is corruption and
 refuses by name. Staged at the boundary: the bytes of a real record cut
 mid-way, never a whole-run deletion."""
 
-import json
 
 import pytest
 

@@ -124,8 +124,6 @@ def test_gate2_model_shows_the_plan_and_decision_freezes(walked):
                  for s in model["sections"] for g in s["gaps"]
                  if g["status"] == "open"]
     assert open_gaps
-    for _, g in [g for g in open_gaps]:
-        pass
     assert all(g["options"] == ["answered", "omit_approved", "reframed",
                                 "draft_flagged"]
                for s in model["sections"] for g in s["gaps"]

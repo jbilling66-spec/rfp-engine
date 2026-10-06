@@ -7,7 +7,7 @@ record-only deferral, deliberately flipped here with its readers."""
 import dataclasses
 import json
 
-from engine.kb import KBStore, SourceDoc, ingest_document
+from engine.kb import KBStore, ingest_document
 from engine.llm import FakeCaller, TracedCaller
 from engine.runlog import RunLogger
 from tests.kb.fixtures.corpus import SCRIPT, SOURCE_DOCS

@@ -39,7 +39,7 @@ _WAIVED_SUFFIX = re.compile(r"by (?P<actor>.+) at (?P<at>\S+)$")
 # P29a (P1-49): the index and the brief reader live in the workspace
 # layer now, so Gate 0 and the ping lane build the same index this route
 # does; the names stay importable from here.
-from engine.workspace.buyer import buyer_identifiers, read_brief as _brief  # noqa: E402,F401
+from engine.workspace.buyer import buyer_identifiers, read_brief as _brief  # noqa: E402
 
 
 def cited_by_section(records: list[dict], pursuit_id: str) -> dict[str, list[str]]:

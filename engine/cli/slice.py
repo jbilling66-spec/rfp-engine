@@ -118,7 +118,7 @@ def run_slice(workspace: Path, *, live: bool = False, handoff: bool = False,
         load_env_file(ROOT / ".env")  # the one sanctioned .env read (B34(22))
         try:
             live_caller = LiveCaller()  # refusals are named, spend nothing
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — the refusal is the message
             result.status = "refused"
             result.problems.append(str(exc))
             out(f"slice --live refused: {exc}")
@@ -242,7 +242,7 @@ def verify_slice(pursuit) -> tuple[bool, list[str]]:
         records = read_run(run_file)
         try:
             assert_seq_gapless(records)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — recorded as a problem, never swallowed
             problems.append(f"{run_file.parent.name}: {exc}")
         if not any(r.get("record_type") == "run_end" for r in records):
             # A footerless HISTORICAL run is the honest record of a kill

@@ -7,7 +7,6 @@ and 409-with-no-bundle only when every lane refuses.
 """
 
 import hashlib
-import json
 import shutil
 from pathlib import Path
 

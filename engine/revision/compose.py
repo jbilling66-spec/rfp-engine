@@ -18,7 +18,7 @@ directive line. Both frames ride the prompt inline, outside
 config_digest (B22(5) precedent).
 """
 
-from engine.drafting.compose import question_frame  # noqa: F401 (reused)
+from engine.drafting.compose import question_frame
 from engine.drafting.compose import build_draft_prompt  # noqa: F401
 from engine.llm.frames import (
     wrap_brief_context,

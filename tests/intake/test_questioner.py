@@ -5,7 +5,6 @@ skippable, absent-safe, and consumed by NO gate (E5/A4)."""
 
 import json
 
-import pytest
 
 from engine.contracts import validate
 from engine.intake.brief import QUESTION_CHAR_CAP, _brevity_violation

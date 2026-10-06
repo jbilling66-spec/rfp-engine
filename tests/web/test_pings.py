@@ -105,7 +105,7 @@ def test_ping_escalates_at_24h(gapped):
 
 def test_answer_never_escalates_and_completes_next_round(gapped):
     client, ws, (sid, gap_id, slot_id) = gapped
-    inbox = client.get(f"/api/pursuits/pur_ping/pings").json()
+    inbox = client.get("/api/pursuits/pur_ping/pings").json()
     ping = next(p for p in inbox if p["gap_id"] == gap_id)
     r = client.post(
         f"/api/pursuits/pur_ping/pings/{ping['ping_id']}/answer",

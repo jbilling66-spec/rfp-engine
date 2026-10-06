@@ -7,9 +7,7 @@ never clobbered; and the two bar asymmetries the sweep found (P2-32,
 P2-33) are closed."""
 
 import json
-from pathlib import Path
 
-import pytest
 
 from engine.cli.main import main
 from engine.evals.release import (

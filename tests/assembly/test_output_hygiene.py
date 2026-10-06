@@ -63,7 +63,6 @@ def _buyer_workspace(tmp_path, source: Path):
     """A client_provided pursuit over THIS buyer file (the
     test_docx_writeback idiom, parameterised on the source bytes so a
     modified twin is the file the slots were parsed from)."""
-    import json as _json
 
     from engine.structure import merge_parsed, parse_buyer_docx
     from engine.workspace import PursuitDir

@@ -401,8 +401,8 @@ def _fill_document(doc, facts, prose_by_section, hand_values, parsed,
             hit = inline_by_text.get(text)
             if hit is not None:
                 _slot, value = hit
-                new_text = _BRACKET_SPAN.sub(lambda _m: value,
-                                             para.text, count=1)
+                new_text = _BRACKET_SPAN.sub(
+                    lambda _m, _value=value: _value, para.text, count=1)
                 para.text = new_text
                 intended[k] = ("p_text", new_text)
             continue

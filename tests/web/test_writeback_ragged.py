@@ -6,7 +6,6 @@ digest re-bound to it, so the binding check passes and the re-derivation
 (`question_cell_map`) is what refuses."""
 
 import hashlib
-import json
 import shutil
 from pathlib import Path
 

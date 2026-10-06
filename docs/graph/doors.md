@@ -190,7 +190,8 @@ terminal.
 | version | Print the engine version |
 | check-run | Validate a run.jsonl: schemas, payload discipline, gapless seq |
 | kb seed | Build the committed store from the fixture corpus |
-| kb ingest | Ingest one firm-authored document through two readers — `--live` (RFP_LIVE-gated by construction, P28) or, offline, `--wire` + `--reviewer-wire` |
+| kb ingest | Ingest one firm-authored document through two readers — `--live` (RFP_LIVE-gated by construction, P28) or, offline, `--wire` + `--reviewer-wire`; reads `.docx`, markdown/text and, in-engine, a completed response workbook (`.xlsx`, stamped `openpyxl`, one `past_response` card per answered question, warnings by address — P33b); any other binary is a typed refusal that mints nothing (P3-24) |
+| kb pair | Render a completed response workbook (the buyer's questionnaire with the firm's answers beside the questions) as the markdown `kb ingest` reads — one chunk per answered question, zero spend; non-prose answers, pricing-shaped sheets and hidden content skipped by name (P33a) |
 | kb search | Card search with full retrieval trace |
 | kb open | Open one card body |
 | kb snapshot | Print the KB content snapshot id |

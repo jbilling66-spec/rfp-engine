@@ -4,7 +4,6 @@ outcomes, planted defects block/flag honestly, and the cancel asymmetry
 holds — a killed validation leaves checkpoints but NO artifact, and
 resume completes byte-identically to a never-killed chain."""
 
-import json
 
 import pytest
 

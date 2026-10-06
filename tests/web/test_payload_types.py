@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from engine.web.payload import field
-from tests.web.conftest import FIXED_AT, sign_in
+from tests.web.conftest import sign_in
 
 
 def test_field_reads_types_defaults_required_and_choices():

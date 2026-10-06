@@ -120,7 +120,6 @@ def test_the_cli_live_flavor_refuses_without_the_flag(capsys, monkeypatch):
 def _one_case_corpus(tmp_path, case_id="anon_001"):
     """A one-case copy of the corpus with the floor lifted for the unit."""
     import shutil
-    import engine.kb.evalset as evalset
     corpus = tmp_path / "anonymization"
     (corpus / "docs").mkdir(parents=True)
     cases = [c for c in json.loads(CASES_PATH.read_text(encoding="utf-8"))

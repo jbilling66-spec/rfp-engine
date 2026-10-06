@@ -322,7 +322,6 @@ def test_deciding_twice_is_refused(client):
 
 def test_every_mutating_curation_route_needs_an_operator(tmp_path):
     """Reads are open on a localhost bind; writes are not."""
-    from engine.web.auth import AuthSeam
 
     workspace = tmp_path / "ws"
     KBStore(workspace / "kb").write_card(

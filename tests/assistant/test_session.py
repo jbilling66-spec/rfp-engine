@@ -1,6 +1,5 @@
 """Sessions: the unmixable lane, the traversal guard, derived spend."""
 
-import json
 
 import pytest
 

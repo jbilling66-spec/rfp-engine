@@ -11,7 +11,6 @@ from engine.version import engine_version
 from engine.web.events import EventsLane
 from engine.web.fake_script import derive_revision_wire
 from tests.validation.fixtures.validations import (
-    AT,
     make_validation_script,
     run_validation_package,
     validation_extras,

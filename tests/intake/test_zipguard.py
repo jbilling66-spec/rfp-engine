@@ -2,7 +2,6 @@
 any parser inflates it; the committed twins pass; and defusedxml is live
 in openpyxl, so an internal-entity bomb is a typed refusal too."""
 
-import io
 import zipfile
 from pathlib import Path
 

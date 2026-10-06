@@ -21,7 +21,6 @@ run is genuinely waiting on humans, and "completed" would lie.
 
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from engine.contracts import ContractError, archive_aside
 from engine.drafting import run_drafting

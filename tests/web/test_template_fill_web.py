@@ -10,7 +10,6 @@ still REFUSES firm_default with the pointer (B75§1d)."""
 
 import hashlib
 import io
-import json
 
 import pytest
 from docx import Document

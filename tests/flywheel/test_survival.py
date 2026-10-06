@@ -7,7 +7,6 @@ which is what turns "this section got rewritten" into "these cards
 produced content that did not survive".
 """
 
-import pytest
 
 from engine.flywheel.attribution import cards_by_section, edits_by_section, join
 from engine.flywheel.survival import (card_survival, section_survival,

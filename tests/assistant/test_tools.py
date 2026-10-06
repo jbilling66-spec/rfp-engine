@@ -7,7 +7,7 @@ import pytest
 
 from engine.assistant.tools import TOOLS, ToolRefused, execute_tool
 from engine.kb.store import snapshot_id
-from tests.assistant.conftest import FIXED_AT, make_pursuit
+from tests.assistant.conftest import make_pursuit
 
 
 def _read_lines(log):

@@ -533,7 +533,6 @@ def _merge_batch_locked(store, proposal_ids: list[str], *, operator: str,
     record IS the note (engine/kb/notes.py reads it) — and if it dies
     mid-way the curation-log line is still written naming what applied
     and why it stopped."""
-    import json
 
     from engine.contracts import validate
 
@@ -606,7 +605,7 @@ def _merge_batch_locked(store, proposal_ids: list[str], *, operator: str,
                                 operator)
             proposals.decide(pid, decision="accepted", by=operator, at=at)
             accepted.append(pid)
-    except BaseException as exc:  # noqa: BLE001 — logged, then re-raised
+    except BaseException as exc:  # logged, then re-raised
         aborted = f"{type(exc).__name__}: {exc}"
         raise
     finally:

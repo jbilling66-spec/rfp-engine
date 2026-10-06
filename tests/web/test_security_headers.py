@@ -1,7 +1,6 @@
 """P25 item 4 (P0-7): host validation, the baseline security headers on
 EVERY response, no-store on the API, and the cross-site write guard."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from engine.web.headers import SECURITY_HEADERS

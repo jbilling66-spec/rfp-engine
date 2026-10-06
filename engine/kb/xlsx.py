@@ -194,7 +194,7 @@ def read_workbook(path: Path) -> tuple[list[dict], list[tuple], list[str]]:
         except ZipGuardError as exc:
             raise WorkbookError(str(exc)) from exc
         book = load_workbook(Path(path), data_only=False)
-    except Exception as exc:  # noqa: BLE001 — any openpyxl failure
+    except Exception as exc:  # any openpyxl failure, re-raised typed
         raise WorkbookError(
             f"could not read the workbook ({type(exc).__name__}) — is it a "
             f"KB export?") from exc

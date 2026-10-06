@@ -30,7 +30,6 @@ def test_the_suite_is_labeled_data_not_generated_output():
     committed corpus, and every labeled card really exists in it — a
     label naming a card the store lacks would make recall unmeasurable
     while still printing a number."""
-    from pathlib import Path
 
     from engine.evals.cases import load_cases
     from engine.evals.mapper import ROOT

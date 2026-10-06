@@ -18,7 +18,6 @@ Three disciplines, each answering a real trap:
   new_run_id TOCTOU cannot bite it.
 """
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 

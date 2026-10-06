@@ -3,7 +3,8 @@ addressed ids, byte-determinism across directories (the model file joins
 the byte-golden seed store at C8, so any nondeterminism here flakes that
 golden), refusal of shape drift, and the same-shape twin proof: three
 input routes (runtime-built DOCX, markdown, scripted ExtractionView)
-resolve to ONE element shape (WP13 R1).
+resolve to ONE element shape (WP13 R1); P33b adds the fourth — the
+response workbook read in-engine — pinned against its own markdown.
 
 Evidence limit, stated at B59: the ExtractionView route is proven over a
 SCRIPTED view here — the real docling conversion evidence rides the A1
@@ -197,3 +198,32 @@ def test_markdown_reader_route_carries_elements(tmp_path):
     assert source.text == _TWIN_MARKDOWN  # flat text stays byte-unchanged
     assert _shape(source.elements) == \
         _shape(elements_from_markdown(_TWIN_MARKDOWN))
+
+
+def test_fourth_route_workbook_matches_the_markdown_shape(tmp_path):
+    """P33b (B153 §3f): the in-engine workbook route and the converter's
+    markdown route resolve to one shape wherever the markdown route does
+    not refuse — the fourth producer into the same model. The P13 twin
+    carries table rows no workbook produces, so this pin has its own
+    workbook."""
+    from openpyxl import Workbook
+
+    from engine.kb.response_workbook import pair_response_workbook, render_markdown
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "2. Delivery"
+    ws.append(["Ref", "Question", "Response"])
+    ws.append(["1", "Company background", None])
+    ws.append(["1.1", "Describe your company history.",
+               "Founded in 1998 and privately held.\n\nOffices in four regions."])
+    ws.append(["1.2", "Describe your methodology.", "Phased delivery with gates."])
+    path = tmp_path / "resp.xlsx"
+    wb.save(path)
+    direct = read_source(path).elements
+    via_markdown = elements_from_markdown(
+        render_markdown(pair_response_workbook(path)).text)
+    assert _shape(direct) == _shape(via_markdown)
+    assert [e.kind for e in direct] == ["heading", "heading", "heading", "paragraph",
+                                        "paragraph", "heading", "paragraph"]
+    assert [e.level for e in direct if e.kind == "heading"] == [1, 2, 3, 3]

@@ -14,7 +14,7 @@ stored fingerprints against recomputed ones).
 from engine.evals.cases import (VacuousMeasure, lock_path,
                                 measures_fingerprint, rate, require_n,
                                 verify_lock, write_lock)
-from engine.evals.cases import (  # noqa: F401
+from engine.evals.cases import (
     files_fingerprint,
     load_cases,
     object_fingerprint,

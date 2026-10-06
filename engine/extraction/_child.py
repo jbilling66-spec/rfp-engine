@@ -68,7 +68,7 @@ def main() -> int:
         func = getattr(importlib.import_module(mod_name), func_name)
         result = func(spec["payload"])
         record = {"ok": True, "result": result}
-    except BaseException as exc:  # a jailed parser may die any way it likes
+    except BaseException as exc:  # noqa: BLE001 — a jailed parser may die any way it likes; the record says how
         record = {"ok": False, "error": f"{exc.__class__.__name__}: {exc}"}
     record["peak_rss"] = _peak_rss_bytes()
     record["mem_ceiling_applied"] = ceiling_applied

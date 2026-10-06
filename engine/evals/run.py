@@ -11,7 +11,6 @@ their subjects (B34(18)) and some of them import engine.evals.cases —
 importing them at module level here would cycle.
 """
 
-import json
 import tempfile
 from pathlib import Path
 

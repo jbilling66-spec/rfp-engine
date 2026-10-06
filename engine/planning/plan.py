@@ -34,7 +34,6 @@ from engine.planning.sections import (
     assert_zero_silent_misses,
     is_answerable,
 )
-from engine.structure import parse_workbook
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_DEFAULT = ROOT / "config" / "manifests" / "erp-implementation.yaml"

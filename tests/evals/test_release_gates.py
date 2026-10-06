@@ -7,7 +7,6 @@ carried by test_unmet_blocking_bar_exits_nonzero_and_is_named."""
 
 import json
 
-import pytest
 
 from engine.cli.main import main
 from engine.evals.release import (build_record, evaluate_gates,

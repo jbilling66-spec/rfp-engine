@@ -58,7 +58,7 @@ def run_rebaseline_cli(args) -> int:
     load_env_file(root / ".env")  # the one sanctioned .env read (B34(22))
     try:
         live_caller = LiveCaller()  # refusals are named, and spend nothing
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — the refusal is the message
         print(f"rebaseline --live refused: {exc}")
         return 1
 

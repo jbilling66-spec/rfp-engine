@@ -8,7 +8,6 @@ reason (P2-43); and requirement_coverage resolves from coverage lines
 at section grain (P0-15)."""
 
 import json
-from pathlib import Path
 
 from engine.metrics.resolver import Corpus, resolve
 from engine.metrics.walker import production_only
