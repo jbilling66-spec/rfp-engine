@@ -50,7 +50,7 @@ def test_hidden_sheets_and_rows_are_recorded_at_layer_1():
 # ---------------------------------------------------------------------------
 
 _ROW_LINE = re.compile(r"^.+!row \d+: [a-z][a-z -]*[a-z]( \(.+\))?$")
-_SHEET_LINE = re.compile(r"^.+: [a-z][a-z/, -]*[a-z]$")
+_SHEET_LINE = re.compile(r"^.+: [a-z][a-z/, -]*[a-z]( \([A-Z]+\))?$")
 
 
 def _shaped(line: str) -> bool:
@@ -63,7 +63,7 @@ def test_fully_filled_demo_twin_pairs_every_answer(tmp_path):
     book = pair_response_workbook(fill_demo_twin(tmp_path / "filled.xlsx"))
     assert isinstance(book, ResponseWorkbook)
     assert book.file == "filled.xlsx"
-    assert book.parser_version == RESPONSE_PARSER_VERSION == "1.1.0"
+    assert book.parser_version == RESPONSE_PARSER_VERSION == "1.2.0"
     assert book.warnings == []
     assert book.skipped == {"instructions sheets": 1}
     assert len(book.sheets) == 8
@@ -96,18 +96,21 @@ def test_short_question_short_answer_rows_pair_despite_being_label_rows(tmp_path
     # Four demo questions are <= 60 chars (3.0.1, 3.0.2, 5.0.2, 8.0.1). A short
     # answer beside them makes the row a LABEL ROW to Layer 2 (two short
     # lettered texts, nothing longer) — the pairer must not skip them.
-    short = {"3.0.1", "3.0.2", "5.0.2", "8.0.1"}
+    # distinct per ref since 1.2.0 (P34b): one short answer in four rows
+    # would be a repeated value, which is its own test
+    short = {"3.0.1": "Yes, via HL7 adapters.", "3.0.2": "Yes, via FHIR services.",
+             "5.0.2": "Yes, via SFTP batches.", "8.0.1": "Yes, via REST hooks."}
     path = fill_demo_twin(
         tmp_path / "short.xlsx",
-        answers=lambda ref, q: "Yes, via HL7 adapters." if ref in short
-        else default_answer(ref, q))
+        answers=lambda ref, q: short.get(ref) or default_answer(ref, q))
     sc = learn_conventions(collect_workbook_facts(path)).sheets["3. Integration"]
     assert {2, 3} <= set(sc.label_rows)  # the trap exists
     book = pair_response_workbook(path)
     assert len(book.pairs()) == 19
     assert book.warnings == []
     integration = next(s for s in book.sheets if s.name == "3. Integration")
-    assert [p.answer for p in integration.pairs()] == ["Yes, via HL7 adapters."] * 2
+    assert [p.answer for p in integration.pairs()] == [
+        "Yes, via HL7 adapters.", "Yes, via FHIR services."]
 
 
 def test_refless_two_column_sheet_pairs_by_header_not_kind(tmp_path):

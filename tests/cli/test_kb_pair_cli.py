@@ -79,3 +79,28 @@ def test_kb_pair_takes_no_kb_root():
     flags = {opt for action in pair._actions for opt in action.option_strings}
     assert "--kb" not in flags
     assert {"--file", "--out"} <= flags
+
+
+def test_kb_pair_names_the_coded_column_and_the_repeats(tmp_path, capsys):
+    """P34b (B157): the door's summary carries the residue kinds and its
+    stderr the addresses — a column by letter, a row by number, no text."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Matrix"
+    ws.append(["Ref", "Requirement", "Compliance Response", "Vendor Response"])
+    for i in range(1, 25):
+        ws.append([f"1.{i}", f"Requirement {i}: describe the control.",
+                   ["Comply", "Partial", "Exception"][i % 3],
+                   "Refer to the attached narrative." if i <= 3
+                   else f"Our team meets requirement {i} through a documented control."])
+    src = tmp_path / "matrix.xlsx"
+    wb.save(src)
+    out = tmp_path / "matrix.md"
+    assert main(["kb", "pair", "--file", str(src), "--out", str(out)]) == 0
+    captured = capsys.readouterr()
+    assert "21 pairs across 1 sheets" in captured.out
+    assert "coded answer columns 1" in captured.out
+    assert "repeated answer values 3" in captured.out
+    assert "warning: Matrix: coded answer column skipped (C)" in captured.err
+    assert "warning: Matrix!row 2: repeated answer value skipped" in captured.err
+    assert "Comply" not in out.read_text(encoding="utf-8")

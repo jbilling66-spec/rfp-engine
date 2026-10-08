@@ -138,6 +138,7 @@ class IngestReport:
     #                              cannot see — surfaced, never blocking (C11)
     reconciliation: dict | None = None  # C9: four-bucket summary on re-ingest
     proposals: list[str] = field(default_factory=list)  # C15: claim promotions
+    dry_run: bool = False  # P34a: computed in full, nothing written to the store
     chunk_sizes: list[int] = field(default_factory=list)  # C19: R5 diagnostic
     # P28: the two readers' agreement, as COUNTS only (never values — the
     # run-log rule): first, reviewer, reviewer_only, first_only, structured.
@@ -476,9 +477,87 @@ def _survivor_is_candidate(candidate_card: dict, existing_card: dict) -> bool:
     return rank(candidate_card) < rank(existing_card)
 
 
+class _StoreWriter:
+    """P34a (B155 §2): every store write of an ingest, behind one object.
+    The real run delegates each call to the store; the dry run's twin
+    below answers each with nothing — so both runs share ONE control flow
+    and the dry report IS the real report, computed without the writes."""
+
+    def __init__(self, store: KBStore):
+        self.store = store
+
+    def source(self, doc_id: str, raw: bytes, meta: dict) -> None:
+        self.store.restricted.write_source(doc_id, raw, meta)
+
+    def model(self, model) -> None:
+        write_model(self.store.root, model)
+
+    def report(self, recon) -> None:
+        write_report(self.store.root, recon)
+
+    def card(self, card: dict, body: str, provenance: dict,
+             identifiers: dict) -> None:
+        self.store.write_card(card, body, provenance, identifiers)
+
+    def rewrite(self, card: dict, body: str) -> None:
+        self.store.rewrite_card(card, body)
+
+    def append(self, kb_id: str, provenance: dict, identifiers: dict, *,
+               absorbed: str | None = None) -> None:
+        self.store.restricted.append_source(kb_id, provenance, identifiers,
+                                            absorbed=absorbed)
+
+    def merge(self, src_kb_id: str, dst_kb_id: str) -> None:
+        self.store.restricted.merge_into(src_kb_id, dst_kb_id)
+
+    def delete(self, kb_id: str) -> None:
+        self.store.delete_card(kb_id)
+
+    def proposal(self, **kw) -> str:
+        from engine.flywheel.proposals import ProposalStore
+        return ProposalStore(self.store.root).open(**kw)["proposal_id"]
+
+
+class _DryWriter:
+    """The dry run's writer: nothing reaches disk. A proposal's id is the
+    deterministic one the real run would mint — same content, same id."""
+
+    def source(self, doc_id: str, raw: bytes, meta: dict) -> None:
+        return None
+
+    def model(self, model) -> None:
+        return None
+
+    def report(self, recon) -> None:
+        return None
+
+    def card(self, card: dict, body: str, provenance: dict,
+             identifiers: dict) -> None:
+        return None
+
+    def rewrite(self, card: dict, body: str) -> None:
+        return None
+
+    def append(self, kb_id: str, provenance: dict, identifiers: dict, *,
+               absorbed: str | None = None) -> None:
+        return None
+
+    def merge(self, src_kb_id: str, dst_kb_id: str) -> None:
+        return None
+
+    def delete(self, kb_id: str) -> None:
+        return None
+
+    def proposal(self, **kw) -> str:
+        from engine.flywheel.proposals import proposal_id
+        return proposal_id(kw["source"], kw["kind"], kw.get("kb_id"),
+                           kw.get("diff") or {})
+
+
 def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
                     *, actor: str = "engine",
-                    describer=None, questioner=None) -> IngestReport:
+                    describer=None, questioner=None,
+                    dry_run: bool = False) -> IngestReport:
     """describer (C13, optional): callable(model) -> {chunk_index: text}
     for figure chunks — the vision-caption seam. Pre-A1 there is no live
     vision call (FakeCaller-only), so production passes None and no
@@ -494,7 +573,20 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     passes None pre-A1, so the committed corpus stays unenriched and
     the mapper eval's pinned rates hold (B75§4a); live generation lands
     at the combined UAT/A1 session with the funded re-measure."""
-    report = IngestReport(doc_id=doc.doc_id, status="ingested")
+    report = IngestReport(doc_id=doc.doc_id, status="ingested",
+                          dry_run=dry_run)
+    # P34a (B155 §2): one writer, chosen once; every write below goes
+    # through it, so the dry run and the real run share one control flow.
+    writer = _DryWriter() if dry_run else _StoreWriter(store)
+    written_now: set[str] = set()  # ids this call wrote (or would have)
+    deleted_now: set[str] = set()  # ids this call deleted (or would have)
+
+    def exists(kb_id: str) -> bool:
+        # The real run: exactly store.card_exists. The dry run: the same
+        # answer, mirroring the writes the store never saw — two
+        # candidates with one body collide (kb_id_for hashes the body).
+        return ((store.card_exists(kb_id) and kb_id not in deleted_now)
+                or kb_id in written_now)
     source_bytes = (doc.source_bytes if doc.source_bytes is not None
                     else doc.text.encode("utf-8"))
     # P29a (P1-47): every persisted line names the document by its
@@ -556,7 +648,7 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
         doc_id, actor=actor, purpose="ingest")
     # The merge fold, read once per ingest (P2-46): absorbed id -> owner.
     absorbed = store.restricted.absorbed_owners(actor=actor, purpose="ingest")
-    store.restricted.write_source(doc_id, source_bytes, {
+    writer.source(doc_id, source_bytes, {
         "doc_id": doc.doc_id, "source_hash": source_hash,
         **({"original_name": doc.source_name} if doc.source_name else {}),
         # C16: the client linkage lives in the RESTRICTED meta so a
@@ -733,12 +825,12 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
 
     # 6b. Persist the L1 model with its kb_id backrefs (the descent
     # index) and the reconciliation report — only after the gate passed.
-    write_model(store.root, model)
+    writer.model(model)
     # C19 (R5): size is RECORDED, never enforced — the distribution is a
     # diagnostic for extraction findings, and this is where it surfaces.
     report.chunk_sizes = [c.chars for c in model.chunks]
     if recon is not None:
-        write_report(store.root, recon)
+        writer.report(recon)
         # R6 in the trace (C11, enum from C10): drift or orphans flag;
         # an all-matched/created re-ingest passes.
         log.emit("validation", stage="ingestion", validation={
@@ -766,12 +858,11 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
         # its content is replaced in place, its restricted record gains
         # this source, and dedup never sees it (it is already homed).
         if cand.get("drifted"):
-            store.rewrite_card(card, body)
-            store.restricted.append_source(card["kb_id"], provenance,
-                                           identifiers)
+            writer.rewrite(card, body)
+            writer.append(card["kb_id"], provenance, identifiers)
             continue
 
-        if store.card_exists(card["kb_id"]):
+        if exists(card["kb_id"]):
             report.skipped.append(card["kb_id"])
             continue
 
@@ -780,8 +871,8 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
         # survivor's derived_from fold and append this source rather than
         # re-fighting the merge (idempotent re-ingest, R6).
         owner = absorbed.get(card["kb_id"])
-        if owner is not None and store.card_exists(owner):
-            store.restricted.append_source(owner, provenance, identifiers)
+        if owner is not None and exists(owner):
+            writer.append(owner, provenance, identifiers)
             report.merged.append({"survivor": owner,
                                   "absorbed": card["kb_id"],
                                   "prior": True})
@@ -833,28 +924,30 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
                 if ("edit_survival" not in card
                         and "edit_survival" in top_card):
                     card["edit_survival"] = top_card["edit_survival"]
-                store.write_card(card, body, provenance, identifiers)
-                store.restricted.merge_into(top_card["kb_id"], card["kb_id"])
+                writer.card(card, body, provenance, identifiers)
+                writer.merge(top_card["kb_id"], card["kb_id"])
                 absorbed[top_card["kb_id"]] = card["kb_id"]
-                store.delete_card(top_card["kb_id"])
+                writer.delete(top_card["kb_id"])
+                written_now.add(card["kb_id"])
+                deleted_now.add(top_card["kb_id"])
                 existing = [(c, t) for c, t in existing
                             if c["kb_id"] != top_card["kb_id"]]
                 existing.append((card, query))
                 report.cards_written.append(card["kb_id"])
                 report.merged.append({"survivor": card["kb_id"],
                                       "absorbed": top_card["kb_id"],
-                                      "score": top_score})
+                                      "score": top_score, "kept": "new"})
             else:
-                store.restricted.append_source(top_card["kb_id"], provenance,
-                                               identifiers,
-                                               absorbed=card["kb_id"])
+                writer.append(top_card["kb_id"], provenance, identifiers,
+                              absorbed=card["kb_id"])
                 absorbed[card["kb_id"]] = top_card["kb_id"]
                 report.merged.append({"survivor": top_card["kb_id"],
                                       "absorbed": card["kb_id"],
-                                      "score": top_score})
+                                      "score": top_score, "kept": "existing"})
             continue
 
-        store.write_card(card, body, provenance, identifiers)
+        writer.card(card, body, provenance, identifiers)
+        written_now.add(card["kb_id"])
         existing.append((card, query))
         report.cards_written.append(card["kb_id"])
 
@@ -866,9 +959,6 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
     # owner + verified_date at acceptance (S4). Proposal ids are
     # content-deterministic, so a re-ingest re-proposes as a no-op.
     if claim_texts:
-        from engine.flywheel.proposals import ProposalStore
-
-        proposals = ProposalStore(store.root)
         for (i, _j), claim_text in sorted(claim_texts.items()):
             source_card = next(
                 (c["card"]["kb_id"] for c in candidates
@@ -882,14 +972,14 @@ def ingest_document(store: KBStore, caller, log, doc: SourceDoc,
             }
             if source_card:
                 diff["derived_from"] = {"after": [source_card]}
-            proposal = proposals.open(
+            pid = writer.proposal(
                 source={"door": "ingestion",
                         "pursuit_id": doc.source_pursuit},
                 target="fact_sheet", kind="new_card",
                 at=f"{doc.date}T00:00:00Z", diff=diff,
                 note=_proposal_note(model.doc_id, i))  # scanned at step 6
-            if proposal["proposal_id"] not in report.proposals:
-                report.proposals.append(proposal["proposal_id"])
+            if pid not in report.proposals:
+                report.proposals.append(pid)
 
     log.emit("stage_end", stage="ingestion")
     return report

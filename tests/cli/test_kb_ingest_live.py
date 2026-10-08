@@ -106,3 +106,37 @@ def test_live_runs_both_readers_through_the_traced_caller(tmp_path, capsys,
     cards = " ".join(p.read_text(encoding="utf-8")
                      for p in (tmp_path / "kb" / "cards").glob("*.md"))
     assert "[CLIENT]" in cards and "Foxfire" not in cards
+
+
+# -- P34a (B155 §3a): a dry run runs BOTH readers — under --live it spends ---
+
+def test_live_dry_run_pays_the_readers_and_writes_no_card(tmp_path, capsys,
+                                                         monkeypatch):
+    """The merge preview must score the text the real run scores, so a
+    dry run pays the two readers like the real run would: it says so on
+    stderr, both calls land on its run record, and no card is written."""
+    from engine.llm.live import LiveCaller as RealLiveCaller
+    from engine.runlog import read_run
+    from tests.llm.test_live_caller import KEY, StubClient, _response
+
+    monkeypatch.setenv("RFP_LIVE", "1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", KEY)
+    stub = StubClient([_response(WIRE), _response(REVIEW)])
+    import engine.llm as llm_pkg
+    monkeypatch.setattr(
+        llm_pkg, "LiveCaller",
+        lambda **kw: RealLiveCaller(client=stub, sleep=lambda s: None, **kw))
+    assert main(_args(tmp_path, "--live", "--budget-usd", "1",
+                      "--dry-run")) == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("dry run — nothing written: ")
+    assert "would be ingested, +1 cards" in captured.out
+    assert "a live dry run pays the two readers" in captured.err
+    assert len(stub.requests) == 2
+    runs = list((tmp_path / "kb" / "runs").glob("*/run.jsonl"))
+    assert len(runs) == 1
+    calls = [r for r in read_run(runs[0]) if r["record_type"] == "agent_call"]
+    assert [c["agent"] for c in calls] == ["ingestion_agent",
+                                          "anonymization_reviewer"]
+    assert not list((tmp_path / "kb" / "cards").glob("*.md"))
+    assert not list((tmp_path / "kb").glob("canonical/*.json"))

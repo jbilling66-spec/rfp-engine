@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from zipfile import BadZipFile
 
+from openpyxl.utils import get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
 
 from engine.structure.classify import _field_type
@@ -44,9 +45,18 @@ from engine.structure.zipguard import ZipGuardError
 
 # Bumped whenever the pairing rules change. Independent of PARSER_VERSION
 # (the vacancy parser's pinned bytes never move for this module).
-RESPONSE_PARSER_VERSION = "1.1.0"  # 1.1.0 (P33b): nothing answered -> every question row unanswered
+RESPONSE_PARSER_VERSION = "1.2.0"  # 1.2.0 (P34b): template residue — coded columns, repeated values, directives
 
 HEADER_SCAN_ROWS = 10  # the header is found in the first rows, not voted
+
+# P34b (B157): template residue. A response-vocabulary column whose filled
+# cells are a handful of distinct values over many rows is the buyer's
+# compliance-code column, never the answer column; an answer value repeated
+# across rows is a placeholder, a code or a cross-reference; a cell still
+# holding the buyer's own directive was never answered.
+CODE_COLUMN_MIN_ROWS = 20
+CODE_COLUMN_MAX_DISTINCT = 8
+REPEATED_ANSWER_MIN_ROWS = 3
 
 _QUESTION_LABEL = re.compile(
     r"\b(question|requirement|criteri\w*|description|item)\b", re.IGNORECASE)
@@ -63,6 +73,13 @@ _NON_PROSE = re.compile(
     r"^[\s$€£]*[-+]?[\d][\d.,]*\s*(%|k|mm|m|bn)?[\s$€£]*$", re.IGNORECASE)
 _BARE_ANSWERS = frozenset({"yes", "no", "y", "n", "n/a", "na", "none", "tbd",
                            "not applicable", "see attached", "see appendix"})
+# A response cell still holding the buyer's instruction (P34b): an imperative
+# opener ("Provide…", "Please describe…") or the vacancy parser's standing
+# phrase. Word-bounded, so "Listed below…" and "Enterprise…" pass.
+_DIRECTIVE_OPENER = re.compile(
+    r"^\s*(?:please\s+)?(?:provide|describe|insert|enter|list|attach|indicate|"
+    r"identify|explain|include|specify|submit|outline|respond)\b", re.IGNORECASE)
+_DIRECTIVE_PHRASE = re.compile(r"do not insert here", re.IGNORECASE)
 
 
 class ResponseWorkbookError(ValueError):
@@ -150,6 +167,7 @@ def pair_response_workbook(path: Path) -> ResponseWorkbook:
                              sc.first_label_row, book)
         if parsed is not None and parsed.pairs():
             book.sheets.append(parsed)
+    _drop_repeated_answers(book)  # P34b: a workbook-wide rule, so it runs last
     return book
 
 
@@ -166,7 +184,14 @@ def _pair_sheet(sheet: SheetFacts, ref_col: int | None, fallback_q: int | None,
                 book: ResponseWorkbook) -> ResponseSheet | None:
     name = sheet.name.strip()
     rows = sheet.rows()
-    header_row, q_col, a_col, a_label = _find_header(rows, ref_col)
+    header_row, q_col, a_col, a_label, coded = _find_header(rows, ref_col)
+    for col in coded:  # P34b: a code column is named by letter, then never read
+        _skip(book, "coded answer columns",
+              f"{name}: coded answer column skipped ({get_column_letter(col)})")
+    if header_row is not None and a_col is None:
+        _skip(book, "sheets without columns",
+              f"{name}: every answer column coded, sheet skipped")
+        return None
     if header_row is None:
         q_col, a_col = fallback_q, fallback_a
         if q_col is None or a_col is None or q_col == a_col:
@@ -245,6 +270,10 @@ def _pair_sheet(sheet: SheetFacts, ref_col: int | None, fallback_q: int | None,
                 _skip(book, "non-prose answers",
                       f"{name}!row {row_num}: non-prose answer skipped")
                 continue
+            if _directive(answer):
+                _skip(book, "directive answers",
+                      f"{name}!row {row_num}: directive answer skipped")
+                continue
             out.sections[-1].pairs.append(
                 Pair(row=row_num, ref=ref, question=question, answer=answer))
             continue
@@ -266,11 +295,15 @@ def _pair_sheet(sheet: SheetFacts, ref_col: int | None, fallback_q: int | None,
 # ---- the small rules -------------------------------------------------------------
 
 def _find_header(rows: dict[int, list[CellFact]], ref_col: int | None
-                 ) -> tuple[int | None, int | None, int | None, str]:
+                 ) -> tuple[int | None, int | None, int | None, str, list[int]]:
     """The first row (before the first ref-carrying row, within the top
     HEADER_SCAN_ROWS) holding one cell that names the question column and a
     DIFFERENT cell that names the answer column. No length cap — a real
-    header reads "Vendor Response (max 200 words; do not alter formatting)"."""
+    header reads "Vendor Response (max 200 words; do not alter formatting)".
+    Several answer-naming cells (P34b, B157): the choice is by CONTENT, not
+    position — code columns are set aside (the fifth value lists them) and
+    the longest-median text column among the rest wins; none left means the
+    sheet has a header and no answer column (`a_col` None)."""
     for row_num, row_facts in sorted(rows.items())[:HEADER_SCAN_ROWS]:
         if row_ref(row_facts, ref_col) is not None:
             break
@@ -285,15 +318,19 @@ def _find_header(rows: dict[int, list[CellFact]], ref_col: int | None
             q_only = [c for c, t in labels if _QUESTION_LABEL.search(t)]
             a_only = [(c, t) for c, t in labels if _ANSWER_LABEL.search(t)]
             if len(q_only) >= 1 and len(a_only) >= 1:
-                a_col, a_label = next(
-                    ((c, t) for c, t in a_only if c not in q_only), a_only[-1])
+                pool = [(c, t) for c, t in a_only if c not in q_only] or [a_only[-1]]
+                a_col, a_label, coded = _choose_answer_col(pool, rows, row_num)
+                if a_col is None:
+                    return row_num, None, None, "", coded
                 q_col = next((c for c in q_only if c != a_col), None)
                 if q_col is not None:
-                    return row_num, q_col, a_col, a_label
+                    return row_num, q_col, a_col, a_label, coded
             continue
-        a_col, a_label = a_cols[0]
-        return row_num, q_cols[0], a_col, a_label
-    return None, None, None, ""
+        a_col, a_label, coded = _choose_answer_col(a_cols, rows, row_num)
+        if a_col is None:
+            return row_num, None, None, "", coded
+        return row_num, q_cols[0], a_col, a_label, coded
+    return None, None, None, "", []
 
 
 def _is_repeated_header(row_facts: list[CellFact], ref_col: int | None) -> bool:
@@ -327,3 +364,80 @@ def _answer_text(fact: CellFact) -> str | None:
 def _non_prose(answer: str) -> bool:
     stripped = answer.strip().strip(".").strip().lower()
     return bool(_NON_PROSE.match(answer)) or stripped in _BARE_ANSWERS
+
+
+# ---- template residue (P34b, B157) ----------------------------------------------
+
+def _normalized(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def _directive(answer: str) -> bool:
+    return bool(_DIRECTIVE_OPENER.match(answer) or _DIRECTIVE_PHRASE.search(answer))
+
+
+def _column_profile(rows: dict[int, list[CellFact]], header_row: int, col: int
+                    ) -> tuple[int, int, int]:
+    """(filled cells, distinct values, median length) of one column below the
+    header — whitespace-collapsed, case-folded, and nothing is kept."""
+    values: list[str] = []
+    for row_num, row_facts in rows.items():
+        if row_num <= header_row:
+            continue
+        fact = next((f for f in row_facts if f.col == col), None)
+        text = _answer_text(fact) if fact is not None else None
+        if text is not None:
+            values.append(_normalized(text))
+    if not values:
+        return 0, 0, 0
+    lengths = sorted(len(v) for v in values)
+    return len(values), len(set(values)), lengths[len(lengths) // 2]
+
+
+def _choose_answer_col(candidates: list[tuple[int, str]],
+                       rows: dict[int, list[CellFact]], header_row: int
+                       ) -> tuple[int | None, str, list[int]]:
+    """Among the answer-naming columns, one whose filled cells are at most
+    CODE_COLUMN_MAX_DISTINCT distinct values over at least CODE_COLUMN_MIN_ROWS
+    rows is the buyer's code column — set aside, returned by number. Of the
+    rest the longest median text wins; a tie keeps the leftmost (1.1.0's
+    order, so a workbook with one answer column reads exactly as before)."""
+    coded: list[int] = []
+    kept: list[tuple[int, int, str]] = []
+    for col, label in candidates:
+        filled, distinct, median = _column_profile(rows, header_row, col)
+        if filled >= CODE_COLUMN_MIN_ROWS and distinct <= CODE_COLUMN_MAX_DISTINCT:
+            coded.append(col)
+        else:
+            kept.append((median, col, label))
+    if not kept:
+        return None, "", coded
+    _median, col, label = max(kept, key=lambda k: (k[0], -k[1]))
+    return col, label, coded
+
+
+def _drop_repeated_answers(book: ResponseWorkbook) -> None:
+    """An answer value that stands in REPEATED_ANSWER_MIN_ROWS or more rows
+    of the workbook is a placeholder, a code or a cross-reference, never the
+    firm's prose — skipped by address. Workbook-wide, so it runs after every
+    sheet is paired; its warnings follow the per-sheet ones."""
+    counts = Counter(_normalized(p.answer) for p in book.pairs())
+    repeated = {k for k, n in counts.items() if n >= REPEATED_ANSWER_MIN_ROWS}
+    if not repeated:
+        return
+    kept_sheets: list[ResponseSheet] = []
+    for sheet in book.sheets:
+        name = sheet.name.strip()
+        for section in sheet.sections:
+            kept: list[Pair] = []
+            for pair in section.pairs:
+                if _normalized(pair.answer) in repeated:
+                    _skip(book, "repeated answer values",
+                          f"{name}!row {pair.row}: repeated answer value skipped")
+                else:
+                    kept.append(pair)
+            section.pairs = kept
+        sheet.sections = [s for s in sheet.sections if s.pairs]
+        if sheet.sections:
+            kept_sheets.append(sheet)
+    book.sheets = kept_sheets

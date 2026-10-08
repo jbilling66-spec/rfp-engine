@@ -98,6 +98,48 @@ def neutral_doc_handle(path: Path) -> str:
     return f"doc_{digest[:12]}"
 
 
+def _print_ingest_report(report, *, run_dir, images: int = 0) -> None:
+    """P34a (P3-26, B155 §2): the door says what it wrote, merged, skipped
+    and flagged — ids only, never text or a filename (P1-47). A dry run
+    says the same in the conditional and names the one trace it left."""
+    dry = report.dry_run
+    parts = [f"+{len(report.cards_written)} cards"]
+    if report.merged:
+        parts.append(f"{len(report.merged)} merged")
+    if report.skipped:
+        parts.append(f"{len(report.skipped)} skipped")
+    if report.proposals:
+        n = len(report.proposals)
+        parts.append(f"{n} proposal{'s' if n != 1 else ''}")
+    status = f"would be {report.status}" if dry else report.status
+    head = f"{report.doc_id}: {status}, {', '.join(parts)}"
+    print(f"dry run — nothing written: {head}" if dry else head)
+    merge_word = "would merge" if dry else "merged"
+    skip_word = "would skip" if dry else "skipped"
+    for m in report.merged:
+        if m.get("prior"):
+            why = "absorbed in an earlier ingest"
+        else:
+            side = "new" if m.get("kept") == "new" else "existing"
+            why = f"score {m['score']:.2f}; the {side} card survives"
+        print(f"  {merge_word}: {m['absorbed']} -> {m['survivor']} ({why})")
+    for kb_id in report.skipped:
+        print(f"  {skip_word}: {kb_id} (identical content already in the store)")
+    if report.extraction_flagged:
+        print("  flagged: degraded extraction — content was lost at read; "
+              "these cards carry extraction_status degraded")
+    if report.media_flagged:
+        what = (f"{images} embedded image{'s' if images != 1 else ''}"
+                if images else "embedded identity figure(s)")
+        print(f"  flagged: {what} — identity the text scan cannot see")
+    if report.reconciliation is not None:
+        r = report.reconciliation
+        print(f"  reconciliation: {r['matched']} matched, {r['drifted']} drifted, "
+              f"{r['created']} created, {r['orphaned']} orphaned")
+    if dry:
+        print(f"  run record: {run_dir}")
+
+
 def _cmd_kb_ingest(args) -> int:
     from engine.kb import SourceDoc, ingest_document
     from engine.kb.read import UnreadableSource, read_source
@@ -131,6 +173,11 @@ def _cmd_kb_ingest(args) -> int:
     store = _store(args)
     log = _new_log(store)
     caller = make_caller(log)
+    if args.live and args.dry_run:
+        # B155 §3a: the merge preview must score the text the real run
+        # scores, so both readers run — and under --live that is spend.
+        print("note: a live dry run pays the two readers; the real run "
+              "pays them again", file=sys.stderr)
     doc = SourceDoc(
         # P29a (P1-47): a filename is, in practice, the client's name. The
         # firm store never records it — the handle is a digest of the stem
@@ -149,8 +196,9 @@ def _cmd_kb_ingest(args) -> int:
         source_bytes=Path(args.file).read_bytes(),
         doc_kind=source.doc_kind,  # P33b: a workbook is a past_response
     )
-    report = ingest_document(store, caller, log, doc)
-    print(f"{report.doc_id}: {report.status}, +{len(report.cards_written)} cards")
+    report = ingest_document(store, caller, log, doc, dry_run=args.dry_run)
+    _print_ingest_report(report, run_dir=log.run_dir,
+                         images=(source.media or {}).get("images", 0))
     if report.status == "blocked":
         print(f"anonymization findings route to: {report.route_to}",
               file=sys.stderr)
@@ -341,6 +389,11 @@ def register(sub) -> None:
     ingest.add_argument("--outcome", default="unknown")
     ingest.add_argument("--date", required=True)
     ingest.add_argument("--authored-by", default="firm")
+    ingest.add_argument("--dry-run", action="store_true",
+                        help="P34a: run the whole read — both readers, the "
+                             "gate, the dedup — and write nothing to the "
+                             "store but the run record; prints what WOULD "
+                             "be written, merged and skipped")
 
     # P33a: no --kb — the door needs no store (registered outside _p on purpose)
     pair = kbsub.add_parser("pair", help="render a completed response workbook "

@@ -77,6 +77,18 @@ or first through `python -m engine kb pair` as editable markdown; the
 steward runbook's "Bringing a completed response workbook in" section
 says what the read skips and when it refuses.
 
+Nothing is minted twice. A card's id is a hash of its body, so a body
+the store already holds is skipped and the terminal names the id; a
+near duplicate — vocabulary overlap at or above the dedup floor in
+`engine/kb/rank.py` — merges: when one text's vocabulary wholly
+contains the other's the fuller one survives, otherwise measured edit
+survival, then outcome, then id decide, and the absorbed card's sources
+fold into the survivor. The terminal prints `absorbed -> survivor` with
+the score and which side survived. The floor was set on the synthetic
+seed corpus; its first measure on real answers is A1's, read off the
+merges the steward sees at the first real bulk ingest — `--dry-run`
+prints that list before anything is written (P34a).
+
 The taxonomy above is the domain's as of P28 (the owner's call); A1's
 real-material review may add a class — that review is the closer named
 at the `TODO(spec-gap)` in `engine/kb/anonymize.py`, and the register

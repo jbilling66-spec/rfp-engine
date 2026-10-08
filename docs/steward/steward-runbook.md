@@ -39,6 +39,26 @@ claim gate never writes facts: claim-like statements found in the text
 become **proposals** for fact-sheet atoms, and each one waits for a
 steward to accept it with an owner and a verified date.
 
+What the terminal tells you. The command ends with one line — `<doc>:
+ingested, +N cards`, then `N merged`, `N skipped` and `N proposals`
+when there are any — and one line per event beneath it, ids only,
+never text: `merged: <absorbed> -> <survivor>` with the overlap score
+and which side survived (a body already in the store under another
+card is folded into it; a fuller new text absorbs the older card), or
+`absorbed in an earlier ingest` when the fold already existed;
+`skipped: <id>` for a body the store already holds verbatim; `flagged:
+degraded extraction` when the read lost content and `flagged: N
+embedded images` when the file carries pictures the text scan cannot
+see; and on a re-ingest the reconciliation buckets. `python -m engine
+kb open <id>` reads any card named. Before a bulk ingest, run the same
+command with `--dry-run`: both readers and the gate run exactly as they
+would (under `--live` that is paid for, and paid again by the real
+run), the terminal prints the same lines in the conditional — `would
+be ingested`, `would merge`, `would skip` — and nothing is written to
+the store: no card, no model, no source copy, no proposal. The dry run
+leaves its run record (named on its last line) and the access-log
+lines of its reads, and nothing else (P34a).
+
 ## Bringing a completed response workbook in
 
 Most delivered responses are the buyer's own questionnaire workbook
@@ -64,6 +84,20 @@ the same pairing as markdown — zero spend, yours to edit — and `kb
 ingest --file <md>` then takes it in as the same kind; that preview
 path refuses an answer whose line would read as markdown structure (a
 line starting `# `, a `| … |` row), which the direct path does not.
+The read leaves the buyer's own residue out by rule and names it: a
+response-vocabulary column whose cells are a handful of codes over
+many rows (a compliance matrix's Comply / Partial / Exception column)
+is never the answer column — the longest text column beside it is,
+and the code column is named by letter; an answer value that stands
+in three or more rows of the workbook (a placeholder, a code, a
+cross-reference) is skipped by sheet and row; a cell still holding
+the buyer's instruction ("Provide…", "Please describe…", "Do not
+insert here…") is skipped by sheet and row. A blank template therefore
+pairs to nothing but short label text left in the response column,
+and a firm answer pasted verbatim into three rows is skipped, not
+minted once — both show by address. Run a workbook with `--dry-run`
+first anyway: the skips and the would-merge list print before
+anything is written.
 Only workbooks whose answer sits beside its question on the same row
 pair today; an answer beneath its question is a shape the build side
 has not seen yet — send one, with the names stripped.
